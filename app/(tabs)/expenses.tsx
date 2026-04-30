@@ -586,7 +586,7 @@ export default function TabTwoScreen() {
         onPress={() => setShowAddVariable(!showAddVariable)}
       >
         <Text style={styles.smallTextWhite}>
-          {showAddVariable ? "Cerrar" : "Añadir gasto"}
+          {showAddVariable ? "Cerrar" : "+"}
         </Text>
       </Pressable>
 
@@ -699,14 +699,15 @@ const styles = StyleSheet.create({
     textDecorationLine: "line-through",
   },
   smallButtonBlue: {
-    backgroundColor: "#0EA5E9",
+    backgroundColor: "#085175",
     paddingVertical: 6,
     paddingHorizontal: 10,
     borderRadius: 6,
     alignSelf: "flex-start",
+    fontSize: 10,
   },
-  smallText: { color: "#fff", fontSize: 12 },
-  smallTextWhite: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  smallText: { color: "#fff", fontSize: 8 },
+  smallTextWhite: { color: "#fff", fontSize: 8, fontWeight: "600" },
   total: { fontSize: 20, fontWeight: "800", marginTop: 20 },
   available: {
     fontSize: 18,
