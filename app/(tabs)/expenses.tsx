@@ -35,6 +35,10 @@ export default function TabTwoScreen() {
   );
   const [editingDay, setEditingDay] = useState<{ [key: string]: string }>({});
   const [editingVar, setEditingVar] = useState<{ [key: string]: string }>({});
+  const [varDay, setVarDay] = useState("");
+  const [editingVarDay, setEditingVarDay] = useState<{ [key: string]: string }>(
+    {},
+  );
 
   const [showAddFixed, setShowAddFixed] = useState(false);
   const [showAddVariable, setShowAddVariable] = useState(false);
@@ -48,13 +52,37 @@ export default function TabTwoScreen() {
       data: { user },
     } = await supabase.auth.getUser();
 
+    if (!user) return; // sesión aún no cargada
+
     const { data } = await supabase
       .from("profiles")
       .select("*")
-      .eq("id", user?.id)
+      .eq("id", user.id)
       .single();
 
-    if (data) setSalary(Number(data.salary));
+    // SI NO EXISTE PERFIL → CREARLO
+    if (!data) {
+      await supabase.from("profiles").insert({
+        id: user.id,
+        salary: 0,
+      });
+      setSalary(0);
+      return;
+    }
+
+    setSalary(Number(data.salary));
+  };
+
+  const updateVariableDay = async (id: string) => {
+    const day = editingVarDay[id];
+    if (!day) return;
+
+    await supabase
+      .from("transactions")
+      .update({ day_of_month: Number(day) })
+      .eq("id", id);
+
+    loadExpenses();
   };
 
   const loadExpenses = async () => {
@@ -88,7 +116,18 @@ export default function TabTwoScreen() {
   };
 
   useEffect(() => {
-    loadProfile();
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          console.log("SESION LISTA:", session.user.id);
+          loadProfile();
+          loadFixedExpenses();
+          loadExpenses();
+        }
+      },
+    );
+
+    return () => subscription.subscription.unsubscribe();
   }, []);
 
   // -------------------------
@@ -106,7 +145,7 @@ export default function TabTwoScreen() {
       .eq("user_id", user?.id)
       .eq("month", selectedMonth);
 
-    if (currentTemplates?.length > 0) return;
+    if (Array.isArray(currentTemplates) && currentTemplates.length > 0) return;
 
     const prev = new Date(selectedMonth + "-01");
     prev.setMonth(prev.getMonth() - 1);
@@ -193,7 +232,9 @@ export default function TabTwoScreen() {
     } = await supabase.auth.getUser();
 
     const value = Number(salaryInput);
-    if (!value) return;
+
+    // CORRECCIÓN IMPORTANTE
+    if (isNaN(value)) return;
 
     await supabase.from("profiles").upsert({
       id: user?.id,
@@ -223,11 +264,13 @@ export default function TabTwoScreen() {
         user_id: user?.id,
         created_at: new Date().toISOString(),
         month: selectedMonth,
+        day_of_month: Number(varDay),
       },
     ]);
 
     setTitle("");
     setAmount("");
+    setVarDay("");
     loadExpenses();
   };
 
@@ -318,7 +361,23 @@ export default function TabTwoScreen() {
 
     loadFixedExpenses();
   };
+  const updateDayOther = async (id: string) => {
+    const value = editingDay[id];
+    if (!value) return;
 
+    await supabase
+      .from("transactions")
+      .update({ day_of_month: Number(value) })
+      .eq("id", id);
+
+    setEditingDay((prev) => {
+      const c = { ...prev };
+      delete c[id];
+      return c;
+    });
+
+    loadFixedExpenses();
+  };
   const togglePaid = async (item: any) => {
     await supabase
       .from("fixed_expenses")
@@ -339,7 +398,7 @@ export default function TabTwoScreen() {
       .from("fixed_templates")
       .delete()
       .eq("title", item.title)
-      .eq("user_id", user.id)
+      .eq("user_id", user?.id)
       .eq("month", selectedMonth);
 
     loadFixedExpenses();
@@ -419,30 +478,29 @@ export default function TabTwoScreen() {
       </View>
 
       {/* RESUMEN */}
-      <Text>Fijos pagados: {fixedPaidTotal} €</Text>
-      <Text>Variables: {totalExpenses} €</Text>
+      <Text style={styles.sectionInfo}>Gastos fijos: {fixedPaidTotal} €</Text>
+      <Text style={styles.sectionInfo}>Otros Gastos: {totalExpenses} €</Text>
       <Text style={styles.available}>Disponible: {available} €</Text>
 
       {/* GASTOS FIJOS */}
       <Text style={styles.sectionTitle}>Gastos fijos</Text>
-
+      {/* BOTÓN DESPLEGABLE FIJO */}
+      <Pressable
+        style={styles.smallButtonBlue}
+        onPress={() => setShowAddFixed(!showAddFixed)}
+      >
+        <Text style={styles.smallTextWhite}>
+          {showAddFixed ? "Cerrar" : "Añadir fijo"}
+        </Text>
+      </Pressable>
       {fixedExpenses.map((item: any) => (
-        <View
-          key={item.id}
-          style={[
-            styles.expenseItem,
-            item.is_paid && { backgroundColor: "#E5E7EB" },
-          ]}
-        >
-          <Text style={[styles.expenseTitle, item.is_paid && styles.paidText]}>
-            {item.title}
-          </Text>
+        <View key={item.id} style={styles.fixedRow}>
+          <Text style={styles.fixedTitle}>{item.title}</Text>
 
-          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-            <Text>Precio:</Text>
+          <View style={styles.fixedInputs}>
             <TextInput
               style={styles.inlineInput}
-              value={editingValues[item.id] ?? String(item.amount)}
+              value={editingValues[item.id] ?? String(item.amount) + " €"}
               keyboardType="numeric"
               onChangeText={(v) =>
                 setEditingValues((prev) => ({ ...prev, [item.id]: v }))
@@ -454,8 +512,7 @@ export default function TabTwoScreen() {
             >
               <Text style={styles.smallText}>💾</Text>
             </Pressable>
-
-            <Text>Día:</Text>
+            <Text style={styles.label}>Día:</Text>
             <TextInput
               style={styles.inlineInput}
               value={editingDay[item.id] ?? String(item.day_of_month)}
@@ -464,6 +521,7 @@ export default function TabTwoScreen() {
                 setEditingDay((prev) => ({ ...prev, [item.id]: v }))
               }
             />
+
             <Pressable
               onPress={() => updateDay(item.id)}
               style={styles.smallButton}
@@ -490,16 +548,6 @@ export default function TabTwoScreen() {
           </View>
         </View>
       ))}
-
-      {/* BOTÓN DESPLEGABLE FIJO */}
-      <Pressable
-        style={styles.smallButtonBlue}
-        onPress={() => setShowAddFixed(!showAddFixed)}
-      >
-        <Text style={styles.smallTextWhite}>
-          {showAddFixed ? "Cerrar" : "Añadir fijo"}
-        </Text>
-      </Pressable>
 
       {showAddFixed && (
         <>
@@ -531,7 +579,7 @@ export default function TabTwoScreen() {
       )}
 
       {/* VARIABLES */}
-      <Text style={styles.title}>Gastos</Text>
+      <Text style={styles.sectionTitle}>Otros Gastos</Text>
 
       <Pressable
         style={styles.smallButtonBlue}
@@ -564,27 +612,40 @@ export default function TabTwoScreen() {
         </>
       )}
 
-      <Text style={styles.total}>Total: {totalExpenses} €</Text>
-
       {expenses.map((item: any) => (
-        <View key={item.id} style={styles.expenseItem}>
-          <Text>{item.title}</Text>
+        <View key={item.id} style={styles.fixedRow}>
+          <Text style={styles.fixedTitle}>{item.title}</Text>
 
-          <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+          <View style={styles.fixedInputs}>
             <TextInput
               style={styles.inlineInput}
-              value={editingVar[item.id] ?? String(item.amount)}
+              value={editingVar[item.id] ?? String(item.amount) + " €"}
               keyboardType="numeric"
               onChangeText={(v) =>
                 setEditingVar((prev) => ({ ...prev, [item.id]: v }))
               }
             />
-
             <Pressable
               onPress={() => updateVariable(item.id)}
               style={styles.smallButton}
             >
               <Text style={styles.smallText}>💾</Text>
+            </Pressable>
+
+            <Text style={styles.label}>Día:</Text>
+            <TextInput
+              style={styles.inlineInput}
+              value={editingVarDay[item.id] ?? String(item.day_of_month)}
+              keyboardType="numeric"
+              onChangeText={(v) =>
+                setEditingVarDay((prev) => ({ ...prev, [item.id]: v }))
+              }
+            />
+            <Pressable
+              onPress={() => updateVariableDay(item.id)}
+              style={styles.smallButton}
+            >
+              <Text style={styles.smallText}>📅</Text>
             </Pressable>
 
             <Pressable
@@ -616,15 +677,6 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 10,
   },
-  inlineInput: {
-    width: 60,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 6,
-    padding: 4,
-    textAlign: "center",
-    backgroundColor: "#fff",
-  },
   button: {
     backgroundColor: "#16A34A",
     padding: 14,
@@ -646,20 +698,6 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
     textDecorationLine: "line-through",
   },
-  deleteButton: {
-    backgroundColor: "#DC2626",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-  },
-  smallButton: {
-    backgroundColor: "#2563EB",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-  },
   smallButtonBlue: {
     backgroundColor: "#0EA5E9",
     paddingVertical: 6,
@@ -670,7 +708,12 @@ const styles = StyleSheet.create({
   smallText: { color: "#fff", fontSize: 12 },
   smallTextWhite: { color: "#fff", fontSize: 14, fontWeight: "600" },
   total: { fontSize: 20, fontWeight: "800", marginTop: 20 },
-  available: { fontSize: 22, fontWeight: "800", marginTop: 10 },
+  available: {
+    fontSize: 18,
+    fontWeight: "800",
+    marginTop: 10,
+    textAlign: "right",
+  },
   monthBar: {
     flexDirection: "row",
     justifyContent: "center",
@@ -678,4 +721,52 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   monthText: { fontSize: 16, fontWeight: "700" },
+  fixedRow: {
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  fixedTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 6,
+  },
+  fixedInputs: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+  },
+  label: {
+    fontSize: 14,
+  },
+  inlineInput: {
+    width: 55,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 6,
+    padding: 6,
+    textAlign: "center",
+    backgroundColor: "#fff",
+  },
+  smallButton: {
+    backgroundColor: "#2563EB",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+
+  deleteButton: {
+    backgroundColor: "#DC2626",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  sectionInfo: {
+    fontSize: 14,
+    color: "#374151",
+    marginTop: 4,
+    textAlign: "right",
+  },
 });
