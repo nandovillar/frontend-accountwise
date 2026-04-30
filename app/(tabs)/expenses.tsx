@@ -10,10 +10,6 @@ import {
 } from "react-native";
 
 export default function TabTwoScreen() {
-  // -------------------------
-  // ESTADOS
-  // -------------------------
-
   const getCurrentMonth = () => {
     const now = new Date();
     return now.toISOString().slice(0, 7);
@@ -23,6 +19,7 @@ export default function TabTwoScreen() {
 
   const [salary, setSalary] = useState(0);
   const [salaryInput, setSalaryInput] = useState("");
+  const [editingSalary, setEditingSalary] = useState(false);
 
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
@@ -36,6 +33,11 @@ export default function TabTwoScreen() {
   const [editingValues, setEditingValues] = useState<{ [key: string]: string }>(
     {},
   );
+  const [editingDay, setEditingDay] = useState<{ [key: string]: string }>({});
+  const [editingVar, setEditingVar] = useState<{ [key: string]: string }>({});
+
+  const [showAddFixed, setShowAddFixed] = useState(false);
+  const [showAddVariable, setShowAddVariable] = useState(false);
 
   // -------------------------
   // LOAD DATA
@@ -89,13 +91,100 @@ export default function TabTwoScreen() {
     loadProfile();
   }, []);
 
+  // -------------------------
+  // GENERAR PLANTILLAS DEL MES
+  // -------------------------
+
+  const ensureTemplatesForMonth = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { data: currentTemplates } = await supabase
+      .from("fixed_templates")
+      .select("*")
+      .eq("user_id", user?.id)
+      .eq("month", selectedMonth);
+
+    if (currentTemplates?.length > 0) return;
+
+    const prev = new Date(selectedMonth + "-01");
+    prev.setMonth(prev.getMonth() - 1);
+    const prevMonth = prev.toISOString().slice(0, 7);
+
+    const { data: prevTemplates } = await supabase
+      .from("fixed_templates")
+      .select("*")
+      .eq("user_id", user?.id)
+      .eq("month", prevMonth);
+
+    if (!prevTemplates?.length) return;
+
+    const toInsert = prevTemplates.map((t) => ({
+      title: t.title,
+      amount: t.amount,
+      day_of_month: t.day_of_month,
+      user_id: user?.id,
+      month: selectedMonth,
+    }));
+
+    await supabase.from("fixed_templates").insert(toInsert);
+  };
+
+  const generateFixedForMonth = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    await ensureTemplatesForMonth();
+
+    const { data: templates } = await supabase
+      .from("fixed_templates")
+      .select("*")
+      .eq("user_id", user?.id)
+      .eq("month", selectedMonth);
+
+    if (!templates?.length) return;
+
+    const { data: existing } = await supabase
+      .from("fixed_expenses")
+      .select("title")
+      .eq("user_id", user?.id)
+      .eq("month", selectedMonth);
+
+    const existingTitles = existing?.map((e) => e.title) || [];
+
+    const toInsert = templates
+      .filter((t) => !existingTitles.includes(t.title))
+      .map((t) => ({
+        title: t.title,
+        amount: t.amount,
+        day_of_month: t.day_of_month,
+        user_id: user?.id,
+        month: selectedMonth,
+        is_paid: false,
+      }));
+
+    if (toInsert.length > 0) {
+      await supabase.from("fixed_expenses").insert(toInsert);
+    }
+  };
+
   useEffect(() => {
-    loadExpenses();
-    loadFixedExpenses();
+    const init = async () => {
+      setFixedExpenses([]);
+      setExpenses([]);
+
+      await generateFixedForMonth();
+      await loadFixedExpenses();
+      await loadExpenses();
+    };
+
+    init();
   }, [selectedMonth]);
 
   // -------------------------
-  // GUARDAR SUELDO
+  // SUELDO
   // -------------------------
 
   const saveSalary = async () => {
@@ -111,8 +200,8 @@ export default function TabTwoScreen() {
       salary: value,
     });
 
-    setSalary(value);
-    setSalaryInput("");
+    await loadProfile();
+    setEditingSalary(false);
   };
 
   // -------------------------
@@ -142,6 +231,29 @@ export default function TabTwoScreen() {
     loadExpenses();
   };
 
+  const updateVariable = async (id: string) => {
+    const value = editingVar[id];
+    if (!value) return;
+
+    await supabase
+      .from("transactions")
+      .update({ amount: Number(value) })
+      .eq("id", id);
+
+    setEditingVar((prev) => {
+      const c = { ...prev };
+      delete c[id];
+      return c;
+    });
+
+    loadExpenses();
+  };
+
+  const deleteVariable = async (id: string) => {
+    await supabase.from("transactions").delete().eq("id", id);
+    loadExpenses();
+  };
+
   // -------------------------
   // GASTOS FIJOS
   // -------------------------
@@ -166,112 +278,73 @@ export default function TabTwoScreen() {
     setFixedTitle("");
     setFixedAmount("");
     setFixedDay("");
+
+    await generateFixedForMonth();
     loadFixedExpenses();
   };
 
   const updateAmount = async (id: string) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
     const value = editingValues[id];
     if (!value) return;
 
     await supabase
       .from("fixed_expenses")
       .update({ amount: Number(value) })
-      .eq("id", id)
-      .eq("user_id", user?.id);
+      .eq("id", id);
 
     setEditingValues((prev) => {
-      const copy = { ...prev };
-      delete copy[id];
-      return copy;
+      const c = { ...prev };
+      delete c[id];
+      return c;
+    });
+
+    loadFixedExpenses();
+  };
+
+  const updateDay = async (id: string) => {
+    const value = editingDay[id];
+    if (!value) return;
+
+    await supabase
+      .from("fixed_expenses")
+      .update({ day_of_month: Number(value) })
+      .eq("id", id);
+
+    setEditingDay((prev) => {
+      const c = { ...prev };
+      delete c[id];
+      return c;
     });
 
     loadFixedExpenses();
   };
 
   const togglePaid = async (item: any) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
     await supabase
       .from("fixed_expenses")
       .update({ is_paid: !item.is_paid })
-      .eq("id", item.id)
-      .eq("user_id", user?.id);
+      .eq("id", item.id);
 
     loadFixedExpenses();
   };
 
-  const deleteFixed = async (id: string) => {
+  const deleteFixed = async (item: any) => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
+    await supabase.from("fixed_expenses").delete().eq("id", item.id);
 
     await supabase
-      .from("fixed_expenses")
+      .from("fixed_templates")
       .delete()
-      .eq("id", id)
-      .eq("user_id", user?.id);
+      .eq("title", item.title)
+      .eq("user_id", user.id)
+      .eq("month", selectedMonth);
 
     loadFixedExpenses();
   };
 
-  const generateFixedForMonth = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { data: templates } = await supabase
-      .from("fixed_templates")
-      .select("*")
-      .eq("user_id", user?.id);
-
-    if (!templates?.length) return;
-
-    const { data: existing } = await supabase
-      .from("fixed_expenses")
-      .select("title")
-      .eq("user_id", user?.id)
-      .eq("month", selectedMonth);
-
-    const existingTitles = existing?.map((e) => e.title) || [];
-
-    const toInsert = templates
-      .filter((t) => !existingTitles.includes(t.title))
-      .map((t) => ({
-        title: t.title,
-        amount: t.amount,
-        day_of_month: t.day_of_month,
-        user_id: user?.id,
-        month: selectedMonth,
-        is_paid: false,
-      }));
-
-    if (toInsert.length > 0) {
-      await supabase.from("fixed_expenses").insert(toInsert);
-    }
-  };
-  // 🔥 ESTE ES EL ARREGLO CLAVE
-  useEffect(() => {
-    const init = async () => {
-      setFixedExpenses([]);
-      setExpenses([]);
-
-      await generateFixedForMonth(); // 1º crear
-      await loadFixedExpenses(); // 2º cargar
-      await loadExpenses(); // 3º cargar
-    };
-
-    init();
-  }, [selectedMonth]);
-
-  useEffect(() => {
-    generateFixedForMonth();
-  }, [selectedMonth]);
   // -------------------------
   // CALCULOS
   // -------------------------
@@ -316,19 +389,33 @@ export default function TabTwoScreen() {
       </View>
 
       {/* SUELDO */}
-      <Text>Sueldo actual : {salary} €</Text>
-
-      <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
-        <TextInput
-          style={[styles.inlineInput, { flexDirection: "row", width: 100 }]}
-          placeholder="Nuevo sueldo"
-          keyboardType="numeric"
-          value={salaryInput}
-          onChangeText={setSalaryInput}
-        />
-        <Pressable onPress={saveSalary} style={styles.saveButton}>
-          <Text style={styles.smallText}>Guardar</Text>
-        </Pressable>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        {!editingSalary ? (
+          <>
+            <Text>Sueldo actual: {salary} €</Text>
+            <Pressable
+              style={styles.smallButtonBlue}
+              onPress={() => {
+                setSalaryInput(String(salary));
+                setEditingSalary(true);
+              }}
+            >
+              <Text style={styles.smallTextWhite}>✏️</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <TextInput
+              style={[styles.inlineInput, { width: 100 }]}
+              value={salaryInput}
+              keyboardType="numeric"
+              onChangeText={setSalaryInput}
+            />
+            <Pressable onPress={saveSalary} style={styles.smallButton}>
+              <Text style={styles.smallText}>💾</Text>
+            </Pressable>
+          </>
+        )}
       </View>
 
       {/* RESUMEN */}
@@ -351,7 +438,8 @@ export default function TabTwoScreen() {
             {item.title}
           </Text>
 
-          <View style={{ flexDirection: "row", gap: 6 }}>
+          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+            <Text>Precio:</Text>
             <TextInput
               style={styles.inlineInput}
               value={editingValues[item.id] ?? String(item.amount)}
@@ -360,18 +448,33 @@ export default function TabTwoScreen() {
                 setEditingValues((prev) => ({ ...prev, [item.id]: v }))
               }
             />
-
             <Pressable
               onPress={() => updateAmount(item.id)}
-              style={styles.saveButton}
+              style={styles.smallButton}
             >
               <Text style={styles.smallText}>💾</Text>
+            </Pressable>
+
+            <Text>Día:</Text>
+            <TextInput
+              style={styles.inlineInput}
+              value={editingDay[item.id] ?? String(item.day_of_month)}
+              keyboardType="numeric"
+              onChangeText={(v) =>
+                setEditingDay((prev) => ({ ...prev, [item.id]: v }))
+              }
+            />
+            <Pressable
+              onPress={() => updateDay(item.id)}
+              style={styles.smallButton}
+            >
+              <Text style={styles.smallText}>📅</Text>
             </Pressable>
 
             <Pressable
               onPress={() => togglePaid(item)}
               style={[
-                styles.payButton,
+                styles.smallButton,
                 { backgroundColor: item.is_paid ? "#6B7280" : "#16A34A" },
               ]}
             >
@@ -379,7 +482,7 @@ export default function TabTwoScreen() {
             </Pressable>
 
             <Pressable
-              onPress={() => deleteFixed(item.id)}
+              onPress={() => deleteFixed(item)}
               style={styles.deleteButton}
             >
               <Text style={styles.smallText}>🗑</Text>
@@ -388,76 +491,121 @@ export default function TabTwoScreen() {
         </View>
       ))}
 
-      {/* AÑADIR FIJO */}
-      <Text style={styles.sectionTitle}>Añadir fijo</Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Concepto"
-        value={fixedTitle}
-        onChangeText={setFixedTitle}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Cantidad"
-        value={fixedAmount}
-        keyboardType="numeric"
-        onChangeText={setFixedAmount}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Día del mes"
-        value={fixedDay}
-        keyboardType="numeric"
-        onChangeText={setFixedDay}
-      />
-
-      <Pressable style={styles.button} onPress={handleAddFixedExpense}>
-        <Text style={styles.buttonText}>Añadir fijo</Text>
+      {/* BOTÓN DESPLEGABLE FIJO */}
+      <Pressable
+        style={styles.smallButtonBlue}
+        onPress={() => setShowAddFixed(!showAddFixed)}
+      >
+        <Text style={styles.smallTextWhite}>
+          {showAddFixed ? "Cerrar" : "Añadir fijo"}
+        </Text>
       </Pressable>
+
+      {showAddFixed && (
+        <>
+          <TextInput
+            style={styles.input}
+            placeholder="Concepto"
+            value={fixedTitle}
+            onChangeText={setFixedTitle}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Cantidad"
+            value={fixedAmount}
+            keyboardType="numeric"
+            onChangeText={setFixedAmount}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Día del mes"
+            value={fixedDay}
+            keyboardType="numeric"
+            onChangeText={setFixedDay}
+          />
+
+          <Pressable style={styles.button} onPress={handleAddFixedExpense}>
+            <Text style={styles.buttonText}>Guardar fijo</Text>
+          </Pressable>
+        </>
+      )}
 
       {/* VARIABLES */}
       <Text style={styles.title}>Gastos</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Concepto"
-        value={title}
-        onChangeText={setTitle}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Cantidad"
-        value={amount}
-        keyboardType="numeric"
-        onChangeText={setAmount}
-      />
-
-      <Pressable style={styles.button} onPress={handleAddExpense}>
-        <Text style={styles.buttonText}>Guardar gasto</Text>
+      <Pressable
+        style={styles.smallButtonBlue}
+        onPress={() => setShowAddVariable(!showAddVariable)}
+      >
+        <Text style={styles.smallTextWhite}>
+          {showAddVariable ? "Cerrar" : "Añadir gasto"}
+        </Text>
       </Pressable>
+
+      {showAddVariable && (
+        <>
+          <TextInput
+            style={styles.input}
+            placeholder="Concepto"
+            value={title}
+            onChangeText={setTitle}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Cantidad"
+            value={amount}
+            keyboardType="numeric"
+            onChangeText={setAmount}
+          />
+
+          <Pressable style={styles.button} onPress={handleAddExpense}>
+            <Text style={styles.buttonText}>Guardar gasto</Text>
+          </Pressable>
+        </>
+      )}
 
       <Text style={styles.total}>Total: {totalExpenses} €</Text>
 
       {expenses.map((item: any) => (
         <View key={item.id} style={styles.expenseItem}>
           <Text>{item.title}</Text>
-          <Text style={styles.expenseAmount}>{item.amount} €</Text>
+
+          <View style={{ flexDirection: "row", gap: 6, alignItems: "center" }}>
+            <TextInput
+              style={styles.inlineInput}
+              value={editingVar[item.id] ?? String(item.amount)}
+              keyboardType="numeric"
+              onChangeText={(v) =>
+                setEditingVar((prev) => ({ ...prev, [item.id]: v }))
+              }
+            />
+
+            <Pressable
+              onPress={() => updateVariable(item.id)}
+              style={styles.smallButton}
+            >
+              <Text style={styles.smallText}>💾</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => deleteVariable(item.id)}
+              style={styles.deleteButton}
+            >
+              <Text style={styles.smallText}>🗑</Text>
+            </Pressable>
+          </View>
         </View>
       ))}
     </ScrollView>
   );
 }
 
-// -------------------------
 const styles = StyleSheet.create({
   container: { padding: 24, backgroundColor: "#F4F7FA" },
   title: { fontSize: 28, fontWeight: "800", marginTop: 30 },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    flexDirection: "column",
-    width: "50%",
     marginTop: 20,
   },
   input: {
@@ -494,15 +642,33 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   expenseTitle: { fontSize: 16 },
-  expenseAmount: { color: "#DC2626", fontWeight: "700" },
   paidText: {
     color: "#9CA3AF",
     textDecorationLine: "line-through",
   },
-  payButton: { padding: 6, borderRadius: 6 },
-  saveButton: { backgroundColor: "#2563EB", padding: 6, borderRadius: 6 },
-  deleteButton: { backgroundColor: "#DC2626", padding: 6, borderRadius: 6 },
+  deleteButton: {
+    backgroundColor: "#DC2626",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  smallButton: {
+    backgroundColor: "#2563EB",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
+  smallButtonBlue: {
+    backgroundColor: "#0EA5E9",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+  },
   smallText: { color: "#fff", fontSize: 12 },
+  smallTextWhite: { color: "#fff", fontSize: 14, fontWeight: "600" },
   total: { fontSize: 20, fontWeight: "800", marginTop: 20 },
   available: { fontSize: 22, fontWeight: "800", marginTop: 10 },
   monthBar: {
