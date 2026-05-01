@@ -1,4 +1,5 @@
 import { supabase } from "@/src/lib/supabase";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Platform,
@@ -7,7 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View
+  View,
 } from "react-native";
 
 export default function SavingsScreen() {
@@ -57,20 +58,26 @@ export default function SavingsScreen() {
 
     const ahorradoActual = contributed + passedMonths * monthly;
 
-    const deberiasTener = goal - monthly * remainingMonths;
+    const ahorroMensual = (goal - ahorradoActual) / totalMonths;
 
     const pendiente = goal - ahorradoActual;
 
     const completed = ahorradoActual >= goal;
+
+    const pronosticoAhorrado = contributed + totalMonths * monthly;
+
+    const objetivo = goal;
 
     return {
       totalMonths,
       passedMonths,
       remainingMonths,
       ahorradoActual,
-      deberiasTener,
+      ahorroMensual,
       pendiente,
       completed,
+      pronosticoAhorrado,
+      objetivo,
     };
   };
 
@@ -197,10 +204,16 @@ export default function SavingsScreen() {
 
             return (
               <>
+                <Text>Objetivo: {s.objetivo} €</Text>
                 <Text>Meses totales: {s.totalMonths}</Text>
                 <Text>Meses pasados: {s.passedMonths}</Text>
                 <Text>Meses restantes: {s.remainingMonths}</Text>
-                <Text>Deberías tener: {s.deberiasTener.toFixed(2)} €</Text>
+                <Text>
+                  Ahorro necesario mensual: {s.ahorroMensual.toFixed(2)} €
+                </Text>
+                <Text>
+                  Pronostico ahorrado: {s.pronosticoAhorrado.toFixed(2)} €
+                </Text>
                 <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
                 <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
                 <Text>
@@ -221,18 +234,6 @@ export default function SavingsScreen() {
           </Pressable>
         </View>
       )}
-
-      {/* BOTÓN SIMULAR (SOLO CREAR) */}
-      <Pressable
-        style={styles.expandButton}
-        onPress={() => {
-          resetForm();
-          setEditingId(null); // ← evita modo edición
-          setShowSimulator(true);
-        }}
-      >
-        <Text style={styles.expandText}>+ Simular ahorro</Text>
-      </Pressable>
 
       {/* SIMULADOR */}
       {showSimulator && (
@@ -322,10 +323,16 @@ export default function SavingsScreen() {
 
             return (
               <View style={styles.resultBox}>
+                <Text>Objetivo: {s.objetivo} €</Text>
                 <Text>Meses totales: {s.totalMonths}</Text>
                 <Text>Meses pasados: {s.passedMonths}</Text>
                 <Text>Meses restantes: {s.remainingMonths}</Text>
-                <Text>Deberías tener: {s.deberiasTener.toFixed(2)} €</Text>
+                <Text>
+                  Ahorro necesario mensual: {s.ahorroMensual.toFixed(2)} €
+                </Text>
+                <Text>
+                  Pronostico ahorrado: {s.pronosticoAhorrado.toFixed(2)} €
+                </Text>
                 <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
                 <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
                 <Text>
@@ -339,6 +346,18 @@ export default function SavingsScreen() {
             <Text style={styles.buttonText}>
               {editingId ? "Guardar cambios" : "Guardar ahorro"}
             </Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.button,
+              { backgroundColor: "#6B7280", marginTop: 10 },
+            ]}
+            onPress={() => {
+              resetForm();
+              setShowSimulator(false);
+            }}
+          >
+            <Text style={styles.buttonText}>Cancelar</Text>
           </Pressable>
         </View>
       )}
@@ -404,6 +423,23 @@ export default function SavingsScreen() {
           );
         })
       )}
+      {/* BOTÓN SIMULAR (SOLO CREAR) */}
+      <Pressable
+        style={styles.expandButton}
+        onPress={() => {
+          resetForm();
+          setEditingId(null); // ← evita modo edición
+          setShowSimulator(true);
+        }}
+      >
+        <Text style={styles.expandText}>Simular ahorro</Text>
+      </Pressable>
+      <Pressable
+        style={styles.expandButton}
+        onPress={() => router.push("/HomePurchase")}
+      >
+        <Text style={styles.expandText}>Simulador de casa</Text>
+      </Pressable>
     </ScrollView>
   );
 }
