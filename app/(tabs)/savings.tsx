@@ -1,7 +1,6 @@
 import { supabase } from "@/src/lib/supabase";
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -112,29 +111,21 @@ export default function SavingsScreen() {
     setShowSimulator(false);
   };
 
-  const deleteSaving = (id: string) => {
-    Alert.alert("¿Eliminar ahorro?", "Esta acción no se puede deshacer.", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Eliminar",
-        style: "destructive",
-        onPress: async () => {
-          console.log("INTENTANDO BORRAR:", id);
-          const { error } = await supabase
-            .from("savings")
-            .delete()
-            .eq("id", id);
+  const deleteSaving = async (item: any) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-          if (error) {
-            console.log("ERROR DELETE:", error.message);
-            Alert.alert("Error", error.message);
-          } else {
-            if (selectedSaving?.id === id) setSelectedSaving(null);
-            loadSavings();
-          }
-        },
-      },
-    ]);
+    await supabase.from("savings").delete().eq("id", item.id);
+
+    await supabase
+      .from("savings")
+      .delete()
+      .eq("title", item.name)
+      .eq("user_id", user?.id);
+
+    loadSavings();
+    console.log("Ahorro eliminado:");
   };
 
   const editSaving = (item: any) => {
@@ -191,16 +182,21 @@ export default function SavingsScreen() {
               selectedSaving.monthly_amount,
               selectedSaving.contributed,
             );
-
+            const deberiasTener =
+              selectedSaving.goal - s.totalMonths * s.remainingMonths;
             const pendiente = selectedSaving.goal - s.ahorradoActual;
             const completed = s.ahorradoActual >= selectedSaving.goal;
 
             return (
               <>
+                <Text>Objetivo: {selectedSaving.goal.toFixed(2)} €</Text>
+                <Text>
+                  Ahorro mensual: {selectedSaving.monthly_amount.toFixed(2)} €
+                </Text>
                 <Text>Meses totales: {s.totalMonths}</Text>
                 <Text>Meses pasados: {s.passedMonths}</Text>
                 <Text>Meses restantes: {s.remainingMonths}</Text>
-                <Text>Deberías tener: {s.ahorradoActual.toFixed(2)} €</Text>
+                <Text>Deberías tener: {deberiasTener.toFixed(2)} €</Text>
                 <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
                 <Text>Pendiente: {pendiente.toFixed(2)} €</Text>
                 <Text>
@@ -400,7 +396,7 @@ export default function SavingsScreen() {
 
                 <Pressable
                   style={styles.iconButton}
-                  onPress={() => deleteSaving(item.id)}
+                  onPress={() => deleteSaving(item)}
                 >
                   <Text style={styles.icon}>🗑</Text>
                 </Pressable>
