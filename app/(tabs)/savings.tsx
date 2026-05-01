@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
+  View
 } from "react-native";
 
 export default function SavingsScreen() {
@@ -27,13 +27,14 @@ export default function SavingsScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // -----------------------------------------------------
-  // FUNCIÓN ÚNICA DE CÁLCULO (SIMULADOR, LISTA, VER)
+  // FUNCIÓN ÚNICA DE CÁLCULO
   // -----------------------------------------------------
   const calculateSaving = (
     startDate: string,
     endDate: string,
     monthly: number,
     contributed: number,
+    goal: number,
   ) => {
     const now = new Date();
     const start = new Date(startDate);
@@ -56,11 +57,20 @@ export default function SavingsScreen() {
 
     const ahorradoActual = contributed + passedMonths * monthly;
 
+    const deberiasTener = goal - monthly * remainingMonths;
+
+    const pendiente = goal - ahorradoActual;
+
+    const completed = ahorradoActual >= goal;
+
     return {
       totalMonths,
       passedMonths,
       remainingMonths,
       ahorradoActual,
+      deberiasTener,
+      pendiente,
+      completed,
     };
   };
 
@@ -111,6 +121,7 @@ export default function SavingsScreen() {
     setShowSimulator(false);
   };
 
+  // 🔥 FUNCIÓN FINAL DE BORRADO (TU VERSIÓN)
   const deleteSaving = async (item: any) => {
     const {
       data: { user },
@@ -137,7 +148,7 @@ export default function SavingsScreen() {
     setBorrowed(item.borrowed || "");
     setStartDate(item.start_date);
     setEndDate(item.end_date);
-    setShowSimulator(true);
+    setShowSimulator(true); // ← NO usa el botón azul
   };
 
   const resetForm = () => {
@@ -181,26 +192,19 @@ export default function SavingsScreen() {
               selectedSaving.end_date,
               selectedSaving.monthly_amount,
               selectedSaving.contributed,
+              selectedSaving.goal,
             );
-            const deberiasTener =
-              selectedSaving.goal - s.totalMonths * s.remainingMonths;
-            const pendiente = selectedSaving.goal - s.ahorradoActual;
-            const completed = s.ahorradoActual >= selectedSaving.goal;
 
             return (
               <>
-                <Text>Objetivo: {selectedSaving.goal.toFixed(2)} €</Text>
-                <Text>
-                  Ahorro mensual: {selectedSaving.monthly_amount.toFixed(2)} €
-                </Text>
                 <Text>Meses totales: {s.totalMonths}</Text>
                 <Text>Meses pasados: {s.passedMonths}</Text>
                 <Text>Meses restantes: {s.remainingMonths}</Text>
-                <Text>Deberías tener: {deberiasTener.toFixed(2)} €</Text>
+                <Text>Deberías tener: {s.deberiasTener.toFixed(2)} €</Text>
                 <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
-                <Text>Pendiente: {pendiente.toFixed(2)} €</Text>
+                <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
                 <Text>
-                  Estado: {completed ? "✔️ Cumplido" : "⌛ En progreso"}
+                  Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
                 </Text>
               </>
             );
@@ -218,17 +222,16 @@ export default function SavingsScreen() {
         </View>
       )}
 
-      {/* BOTÓN SIMULADOR */}
+      {/* BOTÓN SIMULAR (SOLO CREAR) */}
       <Pressable
         style={styles.expandButton}
         onPress={() => {
           resetForm();
-          setShowSimulator(!showSimulator);
+          setEditingId(null); // ← evita modo edición
+          setShowSimulator(true);
         }}
       >
-        <Text style={styles.expandText}>
-          {showSimulator ? "Cerrar simulador" : "+ Simular ahorro"}
-        </Text>
+        <Text style={styles.expandText}>+ Simular ahorro</Text>
       </Pressable>
 
       {/* SIMULADOR */}
@@ -314,21 +317,19 @@ export default function SavingsScreen() {
               endDate,
               Number(monthly),
               Number(contributed),
+              Number(goal),
             );
-
-            const pendiente = Number(goal || 0) - s.ahorradoActual;
-            const completed = s.ahorradoActual >= Number(goal || 0);
 
             return (
               <View style={styles.resultBox}>
                 <Text>Meses totales: {s.totalMonths}</Text>
                 <Text>Meses pasados: {s.passedMonths}</Text>
                 <Text>Meses restantes: {s.remainingMonths}</Text>
-                <Text>Deberías tener: {s.ahorradoActual.toFixed(2)} €</Text>
+                <Text>Deberías tener: {s.deberiasTener.toFixed(2)} €</Text>
                 <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
-                <Text>Pendiente: {pendiente.toFixed(2)} €</Text>
+                <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
                 <Text>
-                  Estado: {completed ? "✔️ Cumplido" : "⌛ En progreso"}
+                  Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
                 </Text>
               </View>
             );
@@ -354,10 +355,8 @@ export default function SavingsScreen() {
             item.end_date,
             item.monthly_amount,
             item.contributed,
+            item.goal,
           );
-
-          const pendiente = item.goal - s.ahorradoActual;
-          const completed = s.ahorradoActual >= item.goal;
 
           return (
             <View key={item.id} style={styles.savingRow}>
@@ -372,10 +371,10 @@ export default function SavingsScreen() {
                   Ahorro: {s.ahorradoActual.toFixed(2)}€
                 </Text>
                 <Text style={styles.infoText}>
-                  Pendiente: {pendiente.toFixed(2)}€
+                  Pendiente: {s.pendiente.toFixed(2)}€
                 </Text>
                 <Text style={styles.infoText}>
-                  Estado: {completed ? "✔️" : "⌛"}
+                  Estado: {s.completed ? "✔️" : "⌛"}
                 </Text>
               </View>
 
