@@ -56,13 +56,12 @@ export default function SavingsScreen() {
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("savings")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (error) console.log("ERROR LOAD:", error.message);
     setSavings(data || []);
   };
 
@@ -83,23 +82,10 @@ export default function SavingsScreen() {
       borrowed,
     };
 
-    let error;
-
     if (editingId) {
-      const res = await supabase
-        .from("savings")
-        .update(payload)
-        .eq("id", editingId);
-      error = res.error;
+      await supabase.from("savings").update(payload).eq("id", editingId);
     } else {
-      const res = await supabase.from("savings").insert([payload]);
-      error = res.error;
-    }
-
-    if (error) {
-      console.log("ERROR GUARDAR:", error.message);
-      Alert.alert("Error", "No se ha podido guardar el ahorro.");
-      return;
+      await supabase.from("savings").insert([payload]);
     }
 
     await loadSavings();
@@ -118,9 +104,10 @@ export default function SavingsScreen() {
             .from("savings")
             .delete()
             .eq("id", id);
+
           if (error) {
             console.log("ERROR DELETE:", error.message);
-            Alert.alert("Error", "No se ha podido eliminar el ahorro.");
+            Alert.alert("Error", error.message);
           } else {
             if (selectedSaving?.id === id) setSelectedSaving(null);
             loadSavings();
@@ -180,18 +167,6 @@ export default function SavingsScreen() {
           <Text>Prestado: {selectedSaving.borrowed}</Text>
           <Text>Inicio: {selectedSaving.start_date}</Text>
           <Text>Fin: {selectedSaving.end_date}</Text>
-
-          <View style={{ marginTop: 16 }}>
-            <Text style={{ fontWeight: "600" }}>Simulación actual</Text>
-            <Text>Meses: {months}</Text>
-            <Text>Deberías tener: {shouldHave.toFixed(2)} €</Text>
-            <Text>Objetivo: {goal || selectedSaving.goal} €</Text>
-            {remaining > 0 ? (
-              <Text style={styles.red}>Te faltan {remaining.toFixed(2)} €</Text>
-            ) : (
-              <Text style={styles.green}>✔ Objetivo cumplido</Text>
-            )}
-          </View>
 
           <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
             <Pressable
@@ -336,79 +311,74 @@ export default function SavingsScreen() {
       {savings.length === 0 ? (
         <Text style={styles.emptyText}>No tienes ahorros todavía</Text>
       ) : (
-        <>
-          {/* Cabecera */}
-          <View style={styles.headerRow}>
-            <Text style={[styles.headerText, { flex: 2 }]}>Nombre</Text>
-            <Text style={styles.headerText}>Objetivo</Text>
-            <Text style={styles.headerText}>Mensual</Text>
-            <Text style={styles.headerText}>Pendiente</Text>
-            <Text style={styles.headerText}>Estado</Text>
-            <Text style={styles.headerText}>Acciones</Text>
-          </View>
+        savings.map((item) => {
+          const start = new Date(item.start_date);
+          const end = new Date(item.end_date);
+          const now = new Date();
 
-          {savings.map((item) => {
-            // Cálculo de pendiente basado en datos del ahorro
-            const start = new Date(item.start_date);
-            const end = new Date(item.end_date);
-            const now = new Date();
+          const totalMonths =
+            (end.getFullYear() - start.getFullYear()) * 12 +
+            (end.getMonth() - start.getMonth());
 
-            const totalMonths =
-              (end.getFullYear() - start.getFullYear()) * 12 +
-              (end.getMonth() - start.getMonth());
+          const passedMonths =
+            now < start
+              ? 0
+              : Math.min(
+                  totalMonths,
+                  (now.getFullYear() - start.getFullYear()) * 12 +
+                    (now.getMonth() - start.getMonth()),
+                );
 
-            const passedMonths =
-              now < start
-                ? 0
-                : Math.min(
-                    totalMonths,
-                    (now.getFullYear() - start.getFullYear()) * 12 +
-                      (now.getMonth() - start.getMonth()),
-                  );
+          const expected =
+            passedMonths * item.monthly_amount + item.contributed;
+          const pending = item.goal - expected;
+          const completed = pending <= 0;
 
-            const expected =
-              passedMonths * item.monthly_amount + item.contributed;
-            const pending = item.goal - expected;
-            const completed = pending <= 0;
+          return (
+            <View key={item.id} style={styles.savingRow}>
+              {/* Nombre */}
+              <Text style={styles.savingName}>{item.name}</Text>
 
-            return (
-              <View key={item.id} style={styles.savingRow}>
-                <Text style={[styles.savingName, { flex: 2 }]}>
-                  {item.name}
+              {/* Información en una sola línea */}
+              <View style={styles.infoLine}>
+                <Text style={styles.infoText}>Objetivo: {item.goal}€</Text>
+                <Text style={styles.infoText}>
+                  Mensual: {item.monthly_amount}€
                 </Text>
-                <Text style={styles.savingCell}>{item.goal}€</Text>
-                <Text style={styles.savingCell}>{item.monthly_amount}€</Text>
-                <Text style={styles.savingCell}>
-                  {pending > 0 ? pending.toFixed(2) + "€" : "0€"}
+                <Text style={styles.infoText}>
+                  Pendiente: {pending > 0 ? pending.toFixed(2) + "€" : "0€"}
                 </Text>
-                <Text style={styles.savingCell}>{completed ? "✔️" : "⌛"}</Text>
-
-                <View style={styles.actionsRow}>
-                  <Pressable
-                    style={styles.iconButton}
-                    onPress={() => setSelectedSaving(item)}
-                  >
-                    <Text style={styles.icon}>👁</Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={styles.iconButton}
-                    onPress={() => editSaving(item)}
-                  >
-                    <Text style={styles.icon}>✏️</Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={styles.iconButton}
-                    onPress={() => deleteSaving(item.id)}
-                  >
-                    <Text style={styles.icon}>🗑</Text>
-                  </Pressable>
-                </View>
+                <Text style={styles.infoText}>
+                  Estado: {completed ? "✔️" : "⌛"}
+                </Text>
               </View>
-            );
-          })}
-        </>
+
+              {/* Acciones alineadas a la derecha */}
+              <View style={styles.actionsRowRight}>
+                <Pressable
+                  style={styles.iconButton}
+                  onPress={() => setSelectedSaving(item)}
+                >
+                  <Text style={styles.icon}>👁</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.iconButton}
+                  onPress={() => editSaving(item)}
+                >
+                  <Text style={styles.icon}>✏️</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.iconButton}
+                  onPress={() => deleteSaving(item.id)}
+                >
+                  <Text style={styles.icon}>🗑</Text>
+                </Pressable>
+              </View>
+            </View>
+          );
+        })
       )}
     </ScrollView>
   );
@@ -510,51 +480,37 @@ const styles = StyleSheet.create({
     color: "#6B7280",
   },
 
-  red: {
-    color: "#DC2626",
-    fontWeight: "600",
-  },
-
-  green: {
-    color: "#16A34A",
-    fontWeight: "600",
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    marginBottom: 6,
-  },
-
-  headerText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#4B5563",
-  },
-
   savingRow: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: "#fff",
-    padding: 10,
+    padding: 12,
     borderRadius: 10,
-    marginBottom: 8,
+    marginBottom: 10,
   },
 
   savingName: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
+    marginBottom: 4,
   },
 
-  savingCell: {
-    flex: 1,
+  infoLine: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 12,
+    rowGap: 4,
+    alignItems: "center",
+  },
+
+  infoText: {
     fontSize: 13,
     color: "#374151",
   },
 
-  actionsRow: {
+  actionsRowRight: {
+    marginTop: 6,
     flexDirection: "row",
-    gap: 6,
+    justifyContent: "flex-end",
+    columnGap: 8,
   },
 
   iconButton: {
@@ -565,5 +521,15 @@ const styles = StyleSheet.create({
 
   icon: {
     fontSize: 16,
+  },
+
+  red: {
+    color: "#DC2626",
+    fontWeight: "600",
+  },
+
+  green: {
+    color: "#16A34A",
+    fontWeight: "600",
   },
 });
