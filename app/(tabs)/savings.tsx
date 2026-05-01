@@ -163,7 +163,7 @@ export default function SavingsScreen() {
 
           <Text>Objetivo: {selectedSaving.goal} €</Text>
           <Text>Ahorro mensual: {selectedSaving.monthly_amount} €</Text>
-          <Text>Aportado: {selectedSaving.contributed} €</Text>
+          <Text>Ahorro acumulado: {selectedSaving.contributed} €</Text>
           <Text>Prestado: {selectedSaving.borrowed}</Text>
           <Text>Inicio: {selectedSaving.start_date}</Text>
           <Text>Fin: {selectedSaving.end_date}</Text>
@@ -345,6 +345,7 @@ export default function SavingsScreen() {
                 <Text style={styles.infoText}>
                   Mensual: {item.monthly_amount}€
                 </Text>
+                <Text style={styles.infoText}>Ahorro: {item.contributed}€</Text>
                 <Text style={styles.infoText}>
                   Pendiente: {pending > 0 ? pending.toFixed(2) + "€" : "0€"}
                 </Text>
