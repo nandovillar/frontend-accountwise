@@ -1,6 +1,7 @@
 import { supabase } from "@/src/lib/supabase";
 import { useEffect, useState } from "react";
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -37,9 +38,7 @@ export default function SavingsScreen() {
   };
 
   const months = monthsBetween();
-
   const shouldHave = months * Number(monthly || 0) + Number(contributed || 0);
-
   const remaining = Number(goal || 0) - shouldHave;
 
   // -------------------------
@@ -53,18 +52,16 @@ export default function SavingsScreen() {
 
     if (!user) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("savings")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
+    if (error) console.log("ERROR LOAD:", error.message);
+
     setSavings(data || []);
   };
-
-  useEffect(() => {
-    loadSavings();
-  }, []);
 
   const saveSaving = async () => {
     const {
@@ -87,12 +84,24 @@ export default function SavingsScreen() {
     ]);
 
     if (error) {
-      console.log("ERROR:", error);
+      console.log("ERROR GUARDAR:", error.message);
     } else {
       loadSavings();
       setShowSimulator(false);
     }
   };
+
+  useEffect(() => {
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          loadSavings();
+        }
+      },
+    );
+
+    return () => subscription.subscription.unsubscribe();
+  }, []);
 
   // -------------------------
   // UI
@@ -100,7 +109,6 @@ export default function SavingsScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* BOTON SIMULADOR */}
       <Pressable
         style={styles.expandButton}
         onPress={() => setShowSimulator(!showSimulator)}
@@ -110,7 +118,6 @@ export default function SavingsScreen() {
         </Text>
       </Pressable>
 
-      {/* SIMULADOR */}
       {showSimulator && (
         <View style={styles.card}>
           <Text style={styles.title}>Simulador de ahorro</Text>
@@ -123,19 +130,36 @@ export default function SavingsScreen() {
             onChangeText={setGoal}
           />
 
-          <TextInput
-            placeholder="Fecha inicio (YYYY-MM-DD)"
-            style={styles.input}
-            value={startDate}
-            onChangeText={setStartDate}
-          />
-
-          <TextInput
-            placeholder="Fecha fin (YYYY-MM-DD)"
-            style={styles.input}
-            value={endDate}
-            onChangeText={setEndDate}
-          />
+          {/* FECHAS MULTIPLATAFORMA */}
+          {Platform.OS === "web" ? (
+            <>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                style={styles.webDate}
+              />
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                style={styles.webDate}
+              />
+            </>
+          ) : (
+            <>
+              <TextInput
+                style={styles.input}
+                value={startDate}
+                onChangeText={setStartDate}
+              />
+              <TextInput
+                style={styles.input}
+                value={endDate}
+                onChangeText={setEndDate}
+              />
+            </>
+          )}
 
           <TextInput
             placeholder="Importe mensual (€)"
@@ -154,13 +178,12 @@ export default function SavingsScreen() {
           />
 
           <TextInput
-            placeholder="Prestado (texto)"
+            placeholder="Prestado"
             style={styles.input}
             value={borrowed}
             onChangeText={setBorrowed}
           />
 
-          {/* RESULTADOS */}
           <View style={styles.resultBox}>
             <Text>Meses: {months}</Text>
             <Text>Deberías tener: {shouldHave.toFixed(2)} €</Text>
@@ -179,44 +202,17 @@ export default function SavingsScreen() {
         </View>
       )}
 
-      {/* LISTA */}
       <Text style={styles.sectionTitle}>Tus ahorros</Text>
 
       {savings.length === 0 ? (
         <Text style={styles.emptyText}>No tienes ahorros todavía</Text>
       ) : (
-        savings.map((item) => {
-          const months =
-            (new Date(item.end_date).getFullYear() -
-              new Date(item.start_date).getFullYear()) *
-              12 +
-            (new Date(item.end_date).getMonth() -
-              new Date(item.start_date).getMonth());
-
-          const shouldHave = months * item.monthly_amount + item.contributed;
-
-          const remaining = item.goal - shouldHave;
-
-          return (
-            <View key={item.id} style={styles.card}>
-              <Text style={styles.savingTitle}>{item.name}</Text>
-
-              <Text style={styles.savingInfo}>
-                {item.monthly_amount}€/mes · {months} meses
-              </Text>
-
-              <Text style={styles.savingInfo}>
-                Deberías tener: {shouldHave.toFixed(2)} €
-              </Text>
-
-              {remaining > 0 ? (
-                <Text style={styles.red}>Faltan {remaining.toFixed(2)} €</Text>
-              ) : (
-                <Text style={styles.green}>✔ Completado</Text>
-              )}
-            </View>
-          );
-        })
+        savings.map((item) => (
+          <View key={item.id} style={styles.card}>
+            <Text style={styles.savingTitle}>{item.name}</Text>
+            <Text style={styles.savingInfo}>{item.monthly_amount}€/mes</Text>
+          </View>
+        ))
       )}
     </ScrollView>
   );
@@ -250,10 +246,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 14,
     marginBottom: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
   },
 
   title: {
@@ -269,6 +261,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     marginTop: 8,
+  },
+
+  webDate: {
+    padding: 10,
+    marginTop: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
 
   resultBox: {
@@ -315,12 +315,10 @@ const styles = StyleSheet.create({
   red: {
     color: "#DC2626",
     fontWeight: "600",
-    marginTop: 4,
   },
 
   green: {
     color: "#16A34A",
     fontWeight: "600",
-    marginTop: 4,
   },
 });
