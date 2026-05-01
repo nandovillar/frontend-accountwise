@@ -1,5 +1,7 @@
 import { supabase } from "@/src/lib/supabase";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
+
 import {
   Pressable,
   ScrollView,
@@ -35,6 +37,8 @@ export default function TabTwoScreen() {
   );
   const [editingDay, setEditingDay] = useState<{ [key: string]: string }>({});
   const [editingVar, setEditingVar] = useState<{ [key: string]: string }>({});
+  const [editingFixedId, setEditingFixedId] = useState<string | null>(null);
+  const [editingVarId, setEditingVarId] = useState<string | null>(null);
   const [varDay, setVarDay] = useState("");
   const [editingVarDay, setEditingVarDay] = useState<{ [key: string]: string }>(
     {},
@@ -408,6 +412,10 @@ export default function TabTwoScreen() {
   // CALCULOS
   // -------------------------
 
+  const totalFixed = fixedExpenses.reduce(
+    (sum, f) => sum + Number(f.amount),
+    0,
+  );
   const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
   const fixedPaidTotal = fixedExpenses
@@ -422,6 +430,19 @@ export default function TabTwoScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* HEADER FULL WIDTH */}
+      <View style={styles.headerFull}>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Gastos</Text>
+
+          <Pressable
+            style={styles.settingsButton}
+            onPress={() => router.push("/settings")}
+          >
+            <Text style={styles.settingsButtonText}>⚙️</Text>
+          </Pressable>
+        </View>
+      </View>
       {/* SELECTOR MES */}
       <View style={styles.monthBar}>
         <Pressable
@@ -478,12 +499,14 @@ export default function TabTwoScreen() {
       </View>
 
       {/* RESUMEN */}
-      <Text style={styles.sectionInfo}>Gastos fijos: {fixedPaidTotal} €</Text>
+      <Text style={styles.sectionInfo}>
+        Gastos fijos pagados: {fixedPaidTotal} €
+      </Text>
       <Text style={styles.sectionInfo}>Otros Gastos: {totalExpenses} €</Text>
       <Text style={styles.available}>Disponible: {available} €</Text>
 
       {/* GASTOS FIJOS */}
-      <Text style={styles.sectionTitle}>Gastos fijos</Text>
+      <Text style={styles.sectionTitle}>Gastos fijos: {totalFixed} €</Text>
       {/* BOTÓN DESPLEGABLE FIJO */}
       <Pressable
         style={styles.smallButtonBlue}
@@ -493,61 +516,82 @@ export default function TabTwoScreen() {
           {showAddFixed ? "Cerrar" : "Añadir fijo"}
         </Text>
       </Pressable>
-      {fixedExpenses.map((item: any) => (
-        <View key={item.id} style={styles.fixedRow}>
-          <Text style={styles.fixedTitle}>{item.title}</Text>
+      {fixedExpenses.map((item: any) => {
+        const isEditing = editingFixedId === item.id;
 
-          <View style={styles.fixedInputs}>
-            <TextInput
-              style={styles.inlineInput}
-              value={editingValues[item.id] ?? String(item.amount) + " €"}
-              keyboardType="numeric"
-              onChangeText={(v) =>
-                setEditingValues((prev) => ({ ...prev, [item.id]: v }))
-              }
-            />
-            <Pressable
-              onPress={() => updateAmount(item.id)}
-              style={styles.smallButton}
-            >
-              <Text style={styles.smallText}>💾</Text>
-            </Pressable>
-            <Text style={styles.label}>Día:</Text>
-            <TextInput
-              style={styles.inlineInput}
-              value={editingDay[item.id] ?? String(item.day_of_month)}
-              keyboardType="numeric"
-              onChangeText={(v) =>
-                setEditingDay((prev) => ({ ...prev, [item.id]: v }))
-              }
-            />
+        return (
+          <View style={styles.rowBetween}>
+            {/* IZQUIERDA */}
+            <Text style={styles.fixedTitle}>{item.title}</Text>
 
-            <Pressable
-              onPress={() => updateDay(item.id)}
-              style={styles.smallButton}
-            >
-              <Text style={styles.smallText}>📅</Text>
-            </Pressable>
+            {/* CENTRO */}
+            {!isEditing ? (
+              <Text style={styles.middleInfo}>
+                {item.amount}€ · día {item.day_of_month}
+              </Text>
+            ) : (
+              <View style={styles.editInputs}>
+                <TextInput
+                  style={styles.inlineInput}
+                  value={editingValues[item.id] ?? String(item.amount)}
+                  keyboardType="numeric"
+                  onChangeText={(v) =>
+                    setEditingValues((prev) => ({ ...prev, [item.id]: v }))
+                  }
+                />
+                <TextInput
+                  style={styles.inlineInput}
+                  value={editingDay[item.id] ?? String(item.day_of_month)}
+                  keyboardType="numeric"
+                  onChangeText={(v) =>
+                    setEditingDay((prev) => ({ ...prev, [item.id]: v }))
+                  }
+                />
+              </View>
+            )}
 
-            <Pressable
-              onPress={() => togglePaid(item)}
-              style={[
-                styles.smallButton,
-                { backgroundColor: item.is_paid ? "#6B7280" : "#16A34A" },
-              ]}
-            >
-              <Text style={styles.smallText}>{item.is_paid ? "↺" : "✔"}</Text>
-            </Pressable>
+            {/* DERECHA */}
+            <View style={styles.actions}>
+              {!isEditing ? (
+                <Pressable
+                  onPress={() => setEditingFixedId(item.id)}
+                  style={styles.smallButton}
+                >
+                  <Text style={styles.smallText}>✏️</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={async () => {
+                    await updateAmount(item.id);
+                    await updateDay(item.id);
+                    setEditingFixedId(null);
+                  }}
+                  style={styles.smallButton}
+                >
+                  <Text style={styles.smallText}>💾</Text>
+                </Pressable>
+              )}
 
-            <Pressable
-              onPress={() => deleteFixed(item)}
-              style={styles.deleteButton}
-            >
-              <Text style={styles.smallText}>🗑</Text>
-            </Pressable>
+              <Pressable
+                onPress={() => togglePaid(item)}
+                style={[
+                  styles.smallButton,
+                  { backgroundColor: item.is_paid ? "#6B7280" : "#16A34A" },
+                ]}
+              >
+                <Text style={styles.smallText}>{item.is_paid ? "↺" : "✔"}</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => deleteFixed(item)}
+                style={styles.deleteButton}
+              >
+                <Text style={styles.smallText}>🗑</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
 
       {showAddFixed && (
         <>
@@ -586,7 +630,7 @@ export default function TabTwoScreen() {
         onPress={() => setShowAddVariable(!showAddVariable)}
       >
         <Text style={styles.smallTextWhite}>
-          {showAddVariable ? "Cerrar" : "+"}
+          {showAddVariable ? "Cerrar" : "Añadir gasto"}
         </Text>
       </Pressable>
 
@@ -612,51 +656,76 @@ export default function TabTwoScreen() {
         </>
       )}
 
-      {expenses.map((item: any) => (
-        <View key={item.id} style={styles.fixedRow}>
-          <Text style={styles.fixedTitle}>{item.title}</Text>
+      {expenses.map((item: any) => {
+        const isEditing = editingVarId === item.id;
 
-          <View style={styles.fixedInputs}>
-            <TextInput
-              style={styles.inlineInput}
-              value={editingVar[item.id] ?? String(item.amount) + " €"}
-              keyboardType="numeric"
-              onChangeText={(v) =>
-                setEditingVar((prev) => ({ ...prev, [item.id]: v }))
-              }
-            />
-            <Pressable
-              onPress={() => updateVariable(item.id)}
-              style={styles.smallButton}
-            >
-              <Text style={styles.smallText}>💾</Text>
-            </Pressable>
+        return (
+          <View key={item.id} style={styles.rowBetween}>
+            {/* IZQUIERDA */}
+            <Text style={styles.fixedTitle}>{item.title}</Text>
 
-            <Text style={styles.label}>Día:</Text>
-            <TextInput
-              style={styles.inlineInput}
-              value={editingVarDay[item.id] ?? String(item.day_of_month)}
-              keyboardType="numeric"
-              onChangeText={(v) =>
-                setEditingVarDay((prev) => ({ ...prev, [item.id]: v }))
-              }
-            />
-            <Pressable
-              onPress={() => updateVariableDay(item.id)}
-              style={styles.smallButton}
-            >
-              <Text style={styles.smallText}>📅</Text>
-            </Pressable>
+            {/* CENTRO */}
+            {!isEditing ? (
+              <Text style={styles.middleInfo}>
+                {item.amount}€ · día {item.day_of_month}
+              </Text>
+            ) : (
+              <View style={styles.editInputs}>
+                <TextInput
+                  style={styles.inlineInput}
+                  value={editingVar[item.id] ?? String(item.amount)}
+                  keyboardType="numeric"
+                  onChangeText={(v) =>
+                    setEditingVar((prev) => ({ ...prev, [item.id]: v }))
+                  }
+                />
 
-            <Pressable
-              onPress={() => deleteVariable(item.id)}
-              style={styles.deleteButton}
-            >
-              <Text style={styles.smallText}>🗑</Text>
-            </Pressable>
+                <TextInput
+                  style={styles.inlineInput}
+                  value={editingVarDay[item.id] ?? String(item.day_of_month)}
+                  keyboardType="numeric"
+                  onChangeText={(v) =>
+                    setEditingVarDay((prev) => ({
+                      ...prev,
+                      [item.id]: v,
+                    }))
+                  }
+                />
+              </View>
+            )}
+
+            {/* DERECHA */}
+            <View style={styles.actions}>
+              {!isEditing ? (
+                <Pressable
+                  onPress={() => setEditingVarId(item.id)}
+                  style={styles.smallButton}
+                >
+                  <Text style={styles.smallText}>✏️</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={async () => {
+                    await updateVariable(item.id);
+                    await updateVariableDay(item.id);
+                    setEditingVarId(null);
+                  }}
+                  style={styles.smallButton}
+                >
+                  <Text style={styles.smallText}>💾</Text>
+                </Pressable>
+              )}
+
+              <Pressable
+                onPress={() => deleteVariable(item.id)}
+                style={styles.deleteButton}
+              >
+                <Text style={styles.smallText}>🗑</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </ScrollView>
   );
 }
@@ -769,5 +838,68 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginTop: 4,
     textAlign: "right",
+  },
+  rowBetween: {
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  actions: {
+    flexDirection: "row",
+    gap: 6,
+  },
+
+  subInfo: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  middleInfo: {
+    flex: 1,
+    textAlign: "right",
+    marginRight: 10,
+    fontSize: 14,
+    color: "#6B7280",
+  },
+
+  editInputs: {
+    flexDirection: "row",
+    gap: 6,
+    flex: 1,
+    justifyContent: "center",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24, // mismo padding que tu contenido
+  },
+
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+  },
+
+  settingsButton: {
+    backgroundColor: "#111827",
+    padding: 10,
+    borderRadius: 10,
+  },
+
+  settingsButtonText: {
+    color: "#fff",
+    fontSize: 16,
   },
 });
