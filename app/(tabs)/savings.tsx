@@ -27,28 +27,47 @@ export default function SavingsScreen() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // -------------------------
-  // CÁLCULOS
-  // -------------------------
-
-  const monthsBetween = () => {
+  // -----------------------------------------------------
+  // FUNCIÓN ÚNICA DE CÁLCULO (SIMULADOR, LISTA, VER)
+  // -----------------------------------------------------
+  const calculateSaving = (
+    startDate: string,
+    endDate: string,
+    monthly: number,
+    contributed: number,
+  ) => {
+    const now = new Date();
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    const months =
+    const totalMonths =
       (end.getFullYear() - start.getFullYear()) * 12 +
       (end.getMonth() - start.getMonth());
 
-    return months > 0 ? months : 0;
+    const passedMonths =
+      now < start
+        ? 0
+        : Math.min(
+            totalMonths,
+            (now.getFullYear() - start.getFullYear()) * 12 +
+              (now.getMonth() - start.getMonth()),
+          );
+
+    const remainingMonths = totalMonths - passedMonths;
+
+    const ahorradoActual = contributed + passedMonths * monthly;
+
+    return {
+      totalMonths,
+      passedMonths,
+      remainingMonths,
+      ahorradoActual,
+    };
   };
 
-  const months = monthsBetween();
-  const shouldHave = months * Number(monthly || 0) + Number(contributed || 0);
-  const remaining = Number(goal || 0) - shouldHave;
-
-  // -------------------------
+  // -----------------------------------------------------
   // SUPABASE
-  // -------------------------
+  // -----------------------------------------------------
 
   const loadSavings = async () => {
     const {
@@ -100,6 +119,7 @@ export default function SavingsScreen() {
         text: "Eliminar",
         style: "destructive",
         onPress: async () => {
+          console.log("INTENTANDO BORRAR:", id);
           const { error } = await supabase
             .from("savings")
             .delete()
@@ -150,49 +170,55 @@ export default function SavingsScreen() {
     return () => subscription.subscription.unsubscribe();
   }, []);
 
-  // -------------------------
+  // -----------------------------------------------------
   // UI
-  // -------------------------
+  // -----------------------------------------------------
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* DETALLE EN PANTALLA COMPLETA */}
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* VISTA SOLO INFORMACIÓN */}
       {selectedSaving && (
         <View style={styles.detailCard}>
           <Text style={styles.detailTitle}>{selectedSaving.name}</Text>
 
-          <Text>Objetivo: {selectedSaving.goal} €</Text>
-          <Text>Ahorro mensual: {selectedSaving.monthly_amount} €</Text>
-          <Text>Ahorro acumulado: {selectedSaving.contributed} €</Text>
-          <Text>Prestado: {selectedSaving.borrowed}</Text>
-          <Text>Inicio: {selectedSaving.start_date}</Text>
-          <Text>Fin: {selectedSaving.end_date}</Text>
+          {(() => {
+            const s = calculateSaving(
+              selectedSaving.start_date,
+              selectedSaving.end_date,
+              selectedSaving.monthly_amount,
+              selectedSaving.contributed,
+            );
 
-          <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
-            <Pressable
-              style={[styles.button, { backgroundColor: "#2563EB" }]}
-              onPress={() => {
-                editSaving(selectedSaving);
-                setSelectedSaving(null);
-              }}
-            >
-              <Text style={styles.buttonText}>✏️ Editar</Text>
-            </Pressable>
+            const pendiente = selectedSaving.goal - s.ahorradoActual;
+            const completed = s.ahorradoActual >= selectedSaving.goal;
 
-            <Pressable
-              style={[styles.button, { backgroundColor: "#DC2626" }]}
-              onPress={() => deleteSaving(selectedSaving.id)}
-            >
-              <Text style={styles.buttonText}>🗑 Eliminar</Text>
-            </Pressable>
+            return (
+              <>
+                <Text>Meses totales: {s.totalMonths}</Text>
+                <Text>Meses pasados: {s.passedMonths}</Text>
+                <Text>Meses restantes: {s.remainingMonths}</Text>
+                <Text>Deberías tener: {s.ahorradoActual.toFixed(2)} €</Text>
+                <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
+                <Text>Pendiente: {pendiente.toFixed(2)} €</Text>
+                <Text>
+                  Estado: {completed ? "✔️ Cumplido" : "⌛ En progreso"}
+                </Text>
+              </>
+            );
+          })()}
 
-            <Pressable
-              style={[styles.button, { backgroundColor: "#6B7280" }]}
-              onPress={() => setSelectedSaving(null)}
-            >
-              <Text style={styles.buttonText}>Cerrar</Text>
-            </Pressable>
-          </View>
+          <Pressable
+            style={[
+              styles.button,
+              { backgroundColor: "#6B7280", marginTop: 20 },
+            ]}
+            onPress={() => setSelectedSaving(null)}
+          >
+            <Text style={styles.buttonText}>Cerrar</Text>
+          </Pressable>
         </View>
       )}
 
@@ -286,16 +312,31 @@ export default function SavingsScreen() {
             onChangeText={setBorrowed}
           />
 
-          <View style={styles.resultBox}>
-            <Text>Meses: {months}</Text>
-            <Text>Deberías tener: {shouldHave.toFixed(2)} €</Text>
-            <Text>Objetivo: {goal || 0} €</Text>
-            {remaining > 0 ? (
-              <Text style={styles.red}>Te faltan {remaining.toFixed(2)} €</Text>
-            ) : (
-              <Text style={styles.green}>✔ Objetivo cumplido</Text>
-            )}
-          </View>
+          {(() => {
+            const s = calculateSaving(
+              startDate,
+              endDate,
+              Number(monthly),
+              Number(contributed),
+            );
+
+            const pendiente = Number(goal || 0) - s.ahorradoActual;
+            const completed = s.ahorradoActual >= Number(goal || 0);
+
+            return (
+              <View style={styles.resultBox}>
+                <Text>Meses totales: {s.totalMonths}</Text>
+                <Text>Meses pasados: {s.passedMonths}</Text>
+                <Text>Meses restantes: {s.remainingMonths}</Text>
+                <Text>Deberías tener: {s.ahorradoActual.toFixed(2)} €</Text>
+                <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
+                <Text>Pendiente: {pendiente.toFixed(2)} €</Text>
+                <Text>
+                  Estado: {completed ? "✔️ Cumplido" : "⌛ En progreso"}
+                </Text>
+              </View>
+            );
+          })()}
 
           <Pressable style={styles.button} onPress={saveSaving}>
             <Text style={styles.buttonText}>
@@ -312,49 +353,36 @@ export default function SavingsScreen() {
         <Text style={styles.emptyText}>No tienes ahorros todavía</Text>
       ) : (
         savings.map((item) => {
-          const start = new Date(item.start_date);
-          const end = new Date(item.end_date);
-          const now = new Date();
+          const s = calculateSaving(
+            item.start_date,
+            item.end_date,
+            item.monthly_amount,
+            item.contributed,
+          );
 
-          const totalMonths =
-            (end.getFullYear() - start.getFullYear()) * 12 +
-            (end.getMonth() - start.getMonth());
-
-          const passedMonths =
-            now < start
-              ? 0
-              : Math.min(
-                  totalMonths,
-                  (now.getFullYear() - start.getFullYear()) * 12 +
-                    (now.getMonth() - start.getMonth()),
-                );
-
-          const expected =
-            passedMonths * item.monthly_amount + item.contributed;
-          const pending = item.goal - expected;
-          const completed = pending <= 0;
+          const pendiente = item.goal - s.ahorradoActual;
+          const completed = s.ahorradoActual >= item.goal;
 
           return (
             <View key={item.id} style={styles.savingRow}>
-              {/* Nombre */}
               <Text style={styles.savingName}>{item.name}</Text>
 
-              {/* Información en una sola línea */}
               <View style={styles.infoLine}>
                 <Text style={styles.infoText}>Objetivo: {item.goal}€</Text>
                 <Text style={styles.infoText}>
                   Mensual: {item.monthly_amount}€
                 </Text>
-                <Text style={styles.infoText}>Ahorro: {item.contributed}€</Text>
                 <Text style={styles.infoText}>
-                  Pendiente: {pending > 0 ? pending.toFixed(2) + "€" : "0€"}
+                  Ahorro: {s.ahorradoActual.toFixed(2)}€
+                </Text>
+                <Text style={styles.infoText}>
+                  Pendiente: {pendiente.toFixed(2)}€
                 </Text>
                 <Text style={styles.infoText}>
                   Estado: {completed ? "✔️" : "⌛"}
                 </Text>
               </View>
 
-              {/* Acciones alineadas a la derecha */}
               <View style={styles.actionsRowRight}>
                 <Pressable
                   style={styles.iconButton}
@@ -385,9 +413,9 @@ export default function SavingsScreen() {
   );
 }
 
-// -------------------------
+// -----------------------------------------------------
 // ESTILOS
-// -------------------------
+// -----------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
@@ -486,6 +514,9 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     marginBottom: 10,
+    zIndex: 10,
+    elevation: 3,
+    pointerEvents: "auto",
   },
 
   savingName: {
@@ -512,12 +543,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     columnGap: 8,
+    flexShrink: 1,
+    zIndex: 20,
   },
 
   iconButton: {
     padding: 6,
     backgroundColor: "#E5E7EB",
     borderRadius: 8,
+    zIndex: 30,
+    elevation: 5,
   },
 
   icon: {
