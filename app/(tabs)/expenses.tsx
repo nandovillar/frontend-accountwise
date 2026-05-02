@@ -1,4 +1,5 @@
 import { supabase } from "@/src/lib/supabase";
+import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 
@@ -429,304 +430,302 @@ export default function TabTwoScreen() {
   // -------------------------
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* HEADER FULL WIDTH */}
-      <View style={styles.headerFull}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Gastos</Text>
+    <View style={{ flex: 1 }}>
+      <Header title="Gastos" />
+      <Pressable
+        style={styles.settingsButton}
+        onPress={() => router.push("/settings")}
+      >
+        <Text style={styles.settingsButtonText}>☰</Text>
+      </Pressable>
+      <ScrollView contentContainerStyle={styles.container} style={{ flex: 1 }}>
+        {/* SELECTOR MES */}
+        <View style={styles.monthBar}>
+          <Pressable
+            onPress={() => {
+              const d = new Date(selectedMonth + "-01");
+              d.setMonth(d.getMonth() - 1);
+              setSelectedMonth(d.toISOString().slice(0, 7));
+            }}
+          >
+            <Text>⬅️</Text>
+          </Pressable>
+
+          <Text style={styles.monthText}>{selectedMonth}</Text>
 
           <Pressable
-            style={styles.settingsButton}
-            onPress={() => router.push("/settings")}
+            onPress={() => {
+              const d = new Date(selectedMonth + "-01");
+              d.setMonth(d.getMonth() + 1);
+              setSelectedMonth(d.toISOString().slice(0, 7));
+            }}
           >
-            <Text style={styles.settingsButtonText}>⚙️</Text>
+            <Text>➡️</Text>
           </Pressable>
         </View>
-      </View>
-      {/* SELECTOR MES */}
-      <View style={styles.monthBar}>
+
+        {/* SUELDO */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          {!editingSalary ? (
+            <>
+              <Text>Sueldo actual: {salary} €</Text>
+              <Pressable
+                style={styles.smallButtonBlue}
+                onPress={() => {
+                  setSalaryInput(String(salary));
+                  setEditingSalary(true);
+                }}
+              >
+                <Text style={styles.smallTextWhite}>✏️</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <TextInput
+                style={[styles.inlineInput, { width: 100 }]}
+                value={salaryInput}
+                keyboardType="numeric"
+                onChangeText={setSalaryInput}
+              />
+              <Pressable onPress={saveSalary} style={styles.smallButton}>
+                <Text style={styles.smallText}>💾</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+
+        {/* RESUMEN */}
+        <Text style={styles.sectionInfo}>
+          Gastos fijos pagados: {fixedPaidTotal} €
+        </Text>
+        <Text style={styles.sectionInfo}>Otros Gastos: {totalExpenses} €</Text>
+        <Text style={styles.available}>Disponible: {available} €</Text>
+
+        {/* GASTOS FIJOS */}
+        <Text style={styles.sectionTitle}>Gastos fijos: {totalFixed} €</Text>
+        {/* BOTÓN DESPLEGABLE FIJO */}
         <Pressable
-          onPress={() => {
-            const d = new Date(selectedMonth + "-01");
-            d.setMonth(d.getMonth() - 1);
-            setSelectedMonth(d.toISOString().slice(0, 7));
-          }}
+          style={styles.smallButtonBlue}
+          onPress={() => setShowAddFixed(!showAddFixed)}
         >
-          <Text>⬅️</Text>
+          <Text style={styles.smallTextWhite}>
+            {showAddFixed ? "Cerrar" : "Añadir fijo"}
+          </Text>
         </Pressable>
+        {fixedExpenses.map((item: any) => {
+          const isEditing = editingFixedId === item.id;
 
-        <Text style={styles.monthText}>{selectedMonth}</Text>
+          return (
+            <View style={styles.rowBetween}>
+              {/* IZQUIERDA */}
+              <Text style={styles.fixedTitle}>{item.title}</Text>
 
-        <Pressable
-          onPress={() => {
-            const d = new Date(selectedMonth + "-01");
-            d.setMonth(d.getMonth() + 1);
-            setSelectedMonth(d.toISOString().slice(0, 7));
-          }}
-        >
-          <Text>➡️</Text>
-        </Pressable>
-      </View>
+              {/* CENTRO */}
+              {!isEditing ? (
+                <Text style={styles.middleInfo}>
+                  {item.amount}€ · día {item.day_of_month}
+                </Text>
+              ) : (
+                <View style={styles.editInputs}>
+                  <TextInput
+                    style={styles.inlineInput}
+                    value={editingValues[item.id] ?? String(item.amount)}
+                    keyboardType="numeric"
+                    onChangeText={(v) =>
+                      setEditingValues((prev) => ({ ...prev, [item.id]: v }))
+                    }
+                  />
+                  <TextInput
+                    style={styles.inlineInput}
+                    value={editingDay[item.id] ?? String(item.day_of_month)}
+                    keyboardType="numeric"
+                    onChangeText={(v) =>
+                      setEditingDay((prev) => ({ ...prev, [item.id]: v }))
+                    }
+                  />
+                </View>
+              )}
 
-      {/* SUELDO */}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-        {!editingSalary ? (
-          <>
-            <Text>Sueldo actual: {salary} €</Text>
-            <Pressable
-              style={styles.smallButtonBlue}
-              onPress={() => {
-                setSalaryInput(String(salary));
-                setEditingSalary(true);
-              }}
-            >
-              <Text style={styles.smallTextWhite}>✏️</Text>
-            </Pressable>
-          </>
-        ) : (
+              {/* DERECHA */}
+              <View style={styles.actions}>
+                {!isEditing ? (
+                  <Pressable
+                    onPress={() => setEditingFixedId(item.id)}
+                    style={styles.smallButton}
+                  >
+                    <Text style={styles.smallText}>✏️</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={async () => {
+                      await updateAmount(item.id);
+                      await updateDay(item.id);
+                      setEditingFixedId(null);
+                    }}
+                    style={styles.smallButton}
+                  >
+                    <Text style={styles.smallText}>💾</Text>
+                  </Pressable>
+                )}
+
+                <Pressable
+                  onPress={() => togglePaid(item)}
+                  style={[
+                    styles.smallButton,
+                    { backgroundColor: item.is_paid ? "#6B7280" : "#16A34A" },
+                  ]}
+                >
+                  <Text style={styles.smallText}>
+                    {item.is_paid ? "↺" : "✔"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => deleteFixed(item)}
+                  style={styles.deleteButton}
+                >
+                  <Text style={styles.smallText}>🗑</Text>
+                </Pressable>
+              </View>
+            </View>
+          );
+        })}
+
+        {showAddFixed && (
           <>
             <TextInput
-              style={[styles.inlineInput, { width: 100 }]}
-              value={salaryInput}
-              keyboardType="numeric"
-              onChangeText={setSalaryInput}
+              style={styles.input}
+              placeholder="Concepto"
+              value={fixedTitle}
+              onChangeText={setFixedTitle}
             />
-            <Pressable onPress={saveSalary} style={styles.smallButton}>
-              <Text style={styles.smallText}>💾</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Cantidad"
+              value={fixedAmount}
+              keyboardType="numeric"
+              onChangeText={setFixedAmount}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Día del mes"
+              value={fixedDay}
+              keyboardType="numeric"
+              onChangeText={setFixedDay}
+            />
+
+            <Pressable style={styles.button} onPress={handleAddFixedExpense}>
+              <Text style={styles.buttonText}>Guardar fijo</Text>
             </Pressable>
           </>
         )}
-      </View>
 
-      {/* RESUMEN */}
-      <Text style={styles.sectionInfo}>
-        Gastos fijos pagados: {fixedPaidTotal} €
-      </Text>
-      <Text style={styles.sectionInfo}>Otros Gastos: {totalExpenses} €</Text>
-      <Text style={styles.available}>Disponible: {available} €</Text>
+        {/* VARIABLES */}
+        <Text style={styles.sectionTitle}>Otros Gastos</Text>
 
-      {/* GASTOS FIJOS */}
-      <Text style={styles.sectionTitle}>Gastos fijos: {totalFixed} €</Text>
-      {/* BOTÓN DESPLEGABLE FIJO */}
-      <Pressable
-        style={styles.smallButtonBlue}
-        onPress={() => setShowAddFixed(!showAddFixed)}
-      >
-        <Text style={styles.smallTextWhite}>
-          {showAddFixed ? "Cerrar" : "Añadir fijo"}
-        </Text>
-      </Pressable>
-      {fixedExpenses.map((item: any) => {
-        const isEditing = editingFixedId === item.id;
+        <Pressable
+          style={styles.smallButtonBlue}
+          onPress={() => setShowAddVariable(!showAddVariable)}
+        >
+          <Text style={styles.smallTextWhite}>
+            {showAddVariable ? "Cerrar" : "Añadir gasto"}
+          </Text>
+        </Pressable>
 
-        return (
-          <View style={styles.rowBetween}>
-            {/* IZQUIERDA */}
-            <Text style={styles.fixedTitle}>{item.title}</Text>
+        {showAddVariable && (
+          <>
+            <TextInput
+              style={styles.input}
+              placeholder="Concepto"
+              value={title}
+              onChangeText={setTitle}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Cantidad"
+              value={amount}
+              keyboardType="numeric"
+              onChangeText={setAmount}
+            />
 
-            {/* CENTRO */}
-            {!isEditing ? (
-              <Text style={styles.middleInfo}>
-                {item.amount}€ · día {item.day_of_month}
-              </Text>
-            ) : (
-              <View style={styles.editInputs}>
-                <TextInput
-                  style={styles.inlineInput}
-                  value={editingValues[item.id] ?? String(item.amount)}
-                  keyboardType="numeric"
-                  onChangeText={(v) =>
-                    setEditingValues((prev) => ({ ...prev, [item.id]: v }))
-                  }
-                />
-                <TextInput
-                  style={styles.inlineInput}
-                  value={editingDay[item.id] ?? String(item.day_of_month)}
-                  keyboardType="numeric"
-                  onChangeText={(v) =>
-                    setEditingDay((prev) => ({ ...prev, [item.id]: v }))
-                  }
-                />
-              </View>
-            )}
+            <Pressable style={styles.button} onPress={handleAddExpense}>
+              <Text style={styles.buttonText}>Guardar gasto</Text>
+            </Pressable>
+          </>
+        )}
 
-            {/* DERECHA */}
-            <View style={styles.actions}>
+        {expenses.map((item: any) => {
+          const isEditing = editingVarId === item.id;
+
+          return (
+            <View key={item.id} style={styles.rowBetween}>
+              {/* IZQUIERDA */}
+              <Text style={styles.fixedTitle}>{item.title}</Text>
+
+              {/* CENTRO */}
               {!isEditing ? (
-                <Pressable
-                  onPress={() => setEditingFixedId(item.id)}
-                  style={styles.smallButton}
-                >
-                  <Text style={styles.smallText}>✏️</Text>
-                </Pressable>
+                <Text style={styles.middleInfo}>
+                  {item.amount}€ · día {item.day_of_month}
+                </Text>
               ) : (
-                <Pressable
-                  onPress={async () => {
-                    await updateAmount(item.id);
-                    await updateDay(item.id);
-                    setEditingFixedId(null);
-                  }}
-                  style={styles.smallButton}
-                >
-                  <Text style={styles.smallText}>💾</Text>
-                </Pressable>
+                <View style={styles.editInputs}>
+                  <TextInput
+                    style={styles.inlineInput}
+                    value={editingVar[item.id] ?? String(item.amount)}
+                    keyboardType="numeric"
+                    onChangeText={(v) =>
+                      setEditingVar((prev) => ({ ...prev, [item.id]: v }))
+                    }
+                  />
+
+                  <TextInput
+                    style={styles.inlineInput}
+                    value={editingVarDay[item.id] ?? String(item.day_of_month)}
+                    keyboardType="numeric"
+                    onChangeText={(v) =>
+                      setEditingVarDay((prev) => ({
+                        ...prev,
+                        [item.id]: v,
+                      }))
+                    }
+                  />
+                </View>
               )}
 
-              <Pressable
-                onPress={() => togglePaid(item)}
-                style={[
-                  styles.smallButton,
-                  { backgroundColor: item.is_paid ? "#6B7280" : "#16A34A" },
-                ]}
-              >
-                <Text style={styles.smallText}>{item.is_paid ? "↺" : "✔"}</Text>
-              </Pressable>
+              {/* DERECHA */}
+              <View style={styles.actions}>
+                {!isEditing ? (
+                  <Pressable
+                    onPress={() => setEditingVarId(item.id)}
+                    style={styles.smallButton}
+                  >
+                    <Text style={styles.smallText}>✏️</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    onPress={async () => {
+                      await updateVariable(item.id);
+                      await updateVariableDay(item.id);
+                      setEditingVarId(null);
+                    }}
+                    style={styles.smallButton}
+                  >
+                    <Text style={styles.smallText}>💾</Text>
+                  </Pressable>
+                )}
 
-              <Pressable
-                onPress={() => deleteFixed(item)}
-                style={styles.deleteButton}
-              >
-                <Text style={styles.smallText}>🗑</Text>
-              </Pressable>
-            </View>
-          </View>
-        );
-      })}
-
-      {showAddFixed && (
-        <>
-          <TextInput
-            style={styles.input}
-            placeholder="Concepto"
-            value={fixedTitle}
-            onChangeText={setFixedTitle}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Cantidad"
-            value={fixedAmount}
-            keyboardType="numeric"
-            onChangeText={setFixedAmount}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Día del mes"
-            value={fixedDay}
-            keyboardType="numeric"
-            onChangeText={setFixedDay}
-          />
-
-          <Pressable style={styles.button} onPress={handleAddFixedExpense}>
-            <Text style={styles.buttonText}>Guardar fijo</Text>
-          </Pressable>
-        </>
-      )}
-
-      {/* VARIABLES */}
-      <Text style={styles.sectionTitle}>Otros Gastos</Text>
-
-      <Pressable
-        style={styles.smallButtonBlue}
-        onPress={() => setShowAddVariable(!showAddVariable)}
-      >
-        <Text style={styles.smallTextWhite}>
-          {showAddVariable ? "Cerrar" : "Añadir gasto"}
-        </Text>
-      </Pressable>
-
-      {showAddVariable && (
-        <>
-          <TextInput
-            style={styles.input}
-            placeholder="Concepto"
-            value={title}
-            onChangeText={setTitle}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Cantidad"
-            value={amount}
-            keyboardType="numeric"
-            onChangeText={setAmount}
-          />
-
-          <Pressable style={styles.button} onPress={handleAddExpense}>
-            <Text style={styles.buttonText}>Guardar gasto</Text>
-          </Pressable>
-        </>
-      )}
-
-      {expenses.map((item: any) => {
-        const isEditing = editingVarId === item.id;
-
-        return (
-          <View key={item.id} style={styles.rowBetween}>
-            {/* IZQUIERDA */}
-            <Text style={styles.fixedTitle}>{item.title}</Text>
-
-            {/* CENTRO */}
-            {!isEditing ? (
-              <Text style={styles.middleInfo}>
-                {item.amount}€ · día {item.day_of_month}
-              </Text>
-            ) : (
-              <View style={styles.editInputs}>
-                <TextInput
-                  style={styles.inlineInput}
-                  value={editingVar[item.id] ?? String(item.amount)}
-                  keyboardType="numeric"
-                  onChangeText={(v) =>
-                    setEditingVar((prev) => ({ ...prev, [item.id]: v }))
-                  }
-                />
-
-                <TextInput
-                  style={styles.inlineInput}
-                  value={editingVarDay[item.id] ?? String(item.day_of_month)}
-                  keyboardType="numeric"
-                  onChangeText={(v) =>
-                    setEditingVarDay((prev) => ({
-                      ...prev,
-                      [item.id]: v,
-                    }))
-                  }
-                />
+                <Pressable
+                  onPress={() => deleteVariable(item.id)}
+                  style={styles.deleteButton}
+                >
+                  <Text style={styles.smallText}>🗑</Text>
+                </Pressable>
               </View>
-            )}
-
-            {/* DERECHA */}
-            <View style={styles.actions}>
-              {!isEditing ? (
-                <Pressable
-                  onPress={() => setEditingVarId(item.id)}
-                  style={styles.smallButton}
-                >
-                  <Text style={styles.smallText}>✏️</Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={async () => {
-                    await updateVariable(item.id);
-                    await updateVariableDay(item.id);
-                    setEditingVarId(null);
-                  }}
-                  style={styles.smallButton}
-                >
-                  <Text style={styles.smallText}>💾</Text>
-                </Pressable>
-              )}
-
-              <Pressable
-                onPress={() => deleteVariable(item.id)}
-                style={styles.deleteButton}
-              >
-                <Text style={styles.smallText}>🗑</Text>
-              </Pressable>
             </View>
-          </View>
-        );
-      })}
-    </ScrollView>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -893,13 +892,24 @@ const styles = StyleSheet.create({
   },
 
   settingsButton: {
-    backgroundColor: "#111827",
-    padding: 10,
-    borderRadius: 10,
+    position: "absolute",
+    top: 24,
+    right: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
 
   settingsButtonText: {
-    color: "#fff",
-    fontSize: 16,
+    marginBottom: 25,
+    fontSize: 22,
   },
 });

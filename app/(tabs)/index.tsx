@@ -1,26 +1,155 @@
 import { supabase } from "@/src/lib/supabase";
+import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+
 export default function HomeScreen() {
+  const [userName, setUserName] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(
+    new Date().toISOString().slice(0, 7),
+  );
+
+  function diffInMonths(start: Date, end: Date) {
+    let months =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth());
+
+    // Si el día del mes aún no ha llegado, restamos 1
+    if (end.getDate() < start.getDate()) {
+      months--;
+    }
+
+    return Math.max(0, months);
+  }
+
+  const [summary, setSummary] = useState({
+    salary: 0,
+    fixedPaid: 0,
+    variables: 0,
+    savings: 0,
+  });
+
+  // --------------------------
+  // CARGAR PERFIL
+  // --------------------------
+  const loadProfile = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", user.id)
+      .single();
+
+    setUserName(data?.username || "Usuario");
+  };
+
   useEffect(() => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
-
-      if (!data.session) {
-        router.replace("/login");
-      }
+      if (!data.session) router.replace("/login");
+      loadProfile();
     };
 
     checkSession();
   }, []);
+
+  // --------------------------
+  // CAMBIAR MES
+  // --------------------------
+  const changeMonth = (offset: number) => {
+    const date = new Date(selectedMonth + "-01");
+    date.setMonth(date.getMonth() + offset);
+    setSelectedMonth(date.toISOString().slice(0, 7));
+  };
+
+  // --------------------------
+  // CARGAR RESUMEN MENSUAL
+  // --------------------------
+  const loadMonthlySummary = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    // 1. Sueldo
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("salary")
+      .eq("id", user.id)
+      .single();
+
+    const salary = profile?.salary || 0;
+
+    // 2. Gastos fijos pagados
+    const { data: fixed } = await supabase
+      .from("fixed_expenses")
+      .select("amount")
+      .eq("month", selectedMonth)
+      .eq("is_paid", true);
+
+    const fixedPaid = fixed?.reduce((sum, f) => sum + f.amount, 0) || 0;
+
+    // 3. Gastos variables
+    const { data: vars } = await supabase
+      .from("transactions")
+      .select("amount")
+      .eq("month", selectedMonth)
+      .eq("type", "expense");
+
+    const variables = vars?.reduce((sum, t) => sum + t.amount, 0) || 0;
+
+    // 4. Ahorro total acumulado (RECALCULADO IGUAL QUE EN SAVINGSSCREEN)
+    const { data: savingsList } = await supabase
+      .from("savings")
+      .select("monthly_amount, contributed, start_date, end_date");
+
+    let totalSavings = 0;
+
+    if (savingsList) {
+      const now = new Date();
+
+      savingsList.forEach((s) => {
+        const start = new Date(s.start_date);
+        const end = new Date(s.end_date);
+
+        const passedMonths = diffInMonths(start, now);
+        const totalMonths = diffInMonths(start, end);
+
+        const ahorradoActual =
+          (s.contributed || 0) + passedMonths * (s.monthly_amount || 0);
+
+        totalSavings += ahorradoActual;
+      });
+    }
+
+    setSummary({
+      salary,
+      fixedPaid,
+      variables,
+      savings: totalSavings,
+    });
+  };
+
+  useEffect(() => {
+    loadMonthlySummary();
+  }, [selectedMonth]);
+
   return (
-    <View style={styles.container}>
+    <View style={{ flex: 1 }}>
+      <Header title="Inicio" />
+
       <Pressable
         style={styles.settingsButton}
         onPress={() => router.push("/settings")}
       >
-        <Text style={styles.settingsButtonText}>⚙️</Text>
+        <Text style={styles.settingsButtonText}>☰</Text>
       </Pressable>
 
       <View style={styles.card}>
@@ -28,19 +157,27 @@ export default function HomeScreen() {
 
         <Text style={styles.title}>Resumen mensual</Text>
 
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <Text onPress={() => changeMonth(-1)}>◀️</Text>
+          <Text>{selectedMonth}</Text>
+          <Text onPress={() => changeMonth(1)}>▶️</Text>
+        </View>
+
         <View style={styles.summaryBox}>
           <Text style={styles.summaryLabel}>Ingresos</Text>
-          <Text style={styles.summaryAmount}>0 €</Text>
+          <Text style={styles.summaryAmount}>{summary.salary} €</Text>
         </View>
 
         <View style={styles.summaryBox}>
           <Text style={styles.summaryLabel}>Gastos</Text>
-          <Text style={styles.summaryAmount}>0 €</Text>
+          <Text style={styles.summaryAmount}>
+            {summary.fixedPaid + summary.variables} €
+          </Text>
         </View>
 
         <View style={styles.summaryBox}>
           <Text style={styles.summaryLabel}>Ahorros</Text>
-          <Text style={styles.summaryAmount}>0 €</Text>
+          <Text style={styles.summaryAmount}>{summary.savings} €</Text>
         </View>
       </View>
     </View>
@@ -67,10 +204,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   card: {
+    flex: 1,
     width: "100%",
     maxWidth: 420,
     backgroundColor: "#FFFFFF",
-    borderRadius: 28,
     padding: 28,
     alignItems: "center",
     shadowColor: "#000",
@@ -78,6 +215,7 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
     elevation: 4,
+    height: "100%",
   },
   logo: {
     fontSize: 34,
@@ -141,6 +279,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   settingsButtonText: {
+    marginBottom: 25,
     fontSize: 22,
   },
   summaryBox: {

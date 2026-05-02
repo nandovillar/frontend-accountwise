@@ -1,4 +1,5 @@
 import { supabase } from "@/src/lib/supabase";
+import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -184,263 +185,262 @@ export default function SavingsScreen() {
   // -----------------------------------------------------
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      keyboardShouldPersistTaps="handled"
-    >
-      {/* VISTA SOLO INFORMACIÓN */}
-      {selectedSaving && (
-        <View style={styles.detailCard}>
-          <Text style={styles.detailTitle}>{selectedSaving.name}</Text>
+    <View style={{ flex: 1 }}>
+      <Header title="Ahorros" />
+      <Pressable
+        style={styles.settingsButton}
+        onPress={() => router.push("/settings")}
+      >
+        <Text style={styles.settingsButtonText}>☰</Text>
+      </Pressable>
 
-          {(() => {
-            const s = calculateSaving(
-              selectedSaving.start_date,
-              selectedSaving.end_date,
-              selectedSaving.monthly_amount,
-              selectedSaving.contributed,
-              selectedSaving.goal,
-            );
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* VISTA SOLO INFORMACIÓN */}
+        {selectedSaving && (
+          <View style={styles.detailCard}>
+            <Text style={styles.detailTitle}>{selectedSaving.name}</Text>
 
-            return (
-              <>
-                <Text>Objetivo: {s.objetivo} €</Text>
-                <Text>Meses totales: {s.totalMonths}</Text>
-                <Text>Meses pasados: {s.passedMonths}</Text>
-                <Text>Meses restantes: {s.remainingMonths}</Text>
-                <Text>
-                  Ahorro necesario mensual: {s.ahorroMensual.toFixed(2)} €
-                </Text>
-                <Text>
-                  Pronostico ahorrado: {s.pronosticoAhorrado.toFixed(2)} €
-                </Text>
-                <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
-                <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
-                <Text>
-                  Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
-                </Text>
-              </>
-            );
-          })()}
+            {(() => {
+              const s = calculateSaving(
+                selectedSaving.start_date,
+                selectedSaving.end_date,
+                selectedSaving.monthly_amount,
+                selectedSaving.contributed,
+                selectedSaving.goal,
+              );
 
-          <Pressable
-            style={[
-              styles.button,
-              { backgroundColor: "#6B7280", marginTop: 20 },
-            ]}
-            onPress={() => setSelectedSaving(null)}
-          >
-            <Text style={styles.buttonText}>Cerrar</Text>
-          </Pressable>
-        </View>
-      )}
+              return (
+                <>
+                  <Text>Objetivo: {s.objetivo} €</Text>
+                  <Text>Meses totales: {s.totalMonths}</Text>
+                  <Text>Meses pasados: {s.passedMonths}</Text>
+                  <Text>Meses restantes: {s.remainingMonths}</Text>
+                  <Text>Ahorro necesario mensual: {s.ahorroMensual} €</Text>
+                  <Text>Pronostico ahorrado: {s.pronosticoAhorrado} €</Text>
+                  <Text>Ahorro actual: {s.ahorradoActual} €</Text>
+                  <Text>Pendiente: {s.pendiente} €</Text>
+                  <Text>
+                    Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
+                  </Text>
+                </>
+              );
+            })()}
 
-      {/* SIMULADOR */}
-      {showSimulator && (
-        <View style={styles.card}>
-          <Text style={styles.title}>
-            {editingId ? "Editar ahorro" : "Simulador de ahorro"}
-          </Text>
+            <Pressable
+              style={[
+                styles.button,
+                { backgroundColor: "#6B7280", marginTop: 20 },
+              ]}
+              onPress={() => setSelectedSaving(null)}
+            >
+              <Text style={styles.buttonText}>Cerrar</Text>
+            </Pressable>
+          </View>
+        )}
 
-          <TextInput
-            placeholder="Nombre del ahorro"
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-          />
-
-          <TextInput
-            placeholder="Objetivo (€)"
-            style={styles.input}
-            keyboardType="numeric"
-            value={goal}
-            onChangeText={setGoal}
-          />
-
-          {Platform.OS === "web" ? (
-            <>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                style={styles.webDate}
-              />
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                style={styles.webDate}
-              />
-            </>
-          ) : (
-            <>
-              <TextInput
-                style={styles.input}
-                value={startDate}
-                onChangeText={setStartDate}
-                placeholder="YYYY-MM-DD"
-              />
-              <TextInput
-                style={styles.input}
-                value={endDate}
-                onChangeText={setEndDate}
-                placeholder="YYYY-MM-DD"
-              />
-            </>
-          )}
-
-          <TextInput
-            placeholder="Ahorro mensual (€)"
-            style={styles.input}
-            keyboardType="numeric"
-            value={monthly}
-            onChangeText={setMonthly}
-          />
-
-          <TextInput
-            placeholder="Aportado (€)"
-            style={styles.input}
-            keyboardType="numeric"
-            value={contributed}
-            onChangeText={setContributed}
-          />
-
-          <TextInput
-            placeholder="Prestado"
-            style={styles.input}
-            value={borrowed}
-            onChangeText={setBorrowed}
-          />
-
-          {(() => {
-            const s = calculateSaving(
-              startDate,
-              endDate,
-              Number(monthly),
-              Number(contributed),
-              Number(goal),
-            );
-
-            return (
-              <View style={styles.resultBox}>
-                <Text>Objetivo: {s.objetivo} €</Text>
-                <Text>Meses totales: {s.totalMonths}</Text>
-                <Text>Meses pasados: {s.passedMonths}</Text>
-                <Text>Meses restantes: {s.remainingMonths}</Text>
-                <Text>
-                  Ahorro necesario mensual: {s.ahorroMensual.toFixed(2)} €
-                </Text>
-                <Text>
-                  Pronostico ahorrado: {s.pronosticoAhorrado.toFixed(2)} €
-                </Text>
-                <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
-                <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
-                <Text>
-                  Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
-                </Text>
-              </View>
-            );
-          })()}
-
-          <Pressable style={styles.button} onPress={saveSaving}>
-            <Text style={styles.buttonText}>
-              {editingId ? "Guardar cambios" : "Guardar ahorro"}
+        {/* SIMULADOR */}
+        {showSimulator && (
+          <View style={styles.card}>
+            <Text style={styles.title}>
+              {editingId ? "Editar ahorro" : "Simulador de ahorro"}
             </Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.button,
-              { backgroundColor: "#6B7280", marginTop: 10 },
-            ]}
-            onPress={() => {
-              resetForm();
-              setShowSimulator(false);
-            }}
-          >
-            <Text style={styles.buttonText}>Cancelar</Text>
-          </Pressable>
-        </View>
-      )}
 
-      {/* LISTA DE AHORROS */}
-      <Text style={styles.sectionTitle}>Tus ahorros</Text>
+            <TextInput
+              placeholder="Nombre del ahorro"
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+            />
 
-      {savings.length === 0 ? (
-        <Text style={styles.emptyText}>No tienes ahorros todavía</Text>
-      ) : (
-        savings.map((item) => {
-          const s = calculateSaving(
-            item.start_date,
-            item.end_date,
-            item.monthly_amount,
-            item.contributed,
-            item.goal,
-          );
+            <TextInput
+              placeholder="Objetivo (€)"
+              style={styles.input}
+              keyboardType="numeric"
+              value={goal}
+              onChangeText={setGoal}
+            />
 
-          return (
-            <View key={item.id} style={styles.savingRow}>
-              <Text style={styles.savingName}>{item.name}</Text>
+            {Platform.OS === "web" ? (
+              <>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  style={styles.webDate}
+                />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  style={styles.webDate}
+                />
+              </>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.input}
+                  value={startDate}
+                  onChangeText={setStartDate}
+                  placeholder="YYYY-MM-DD"
+                />
+                <TextInput
+                  style={styles.input}
+                  value={endDate}
+                  onChangeText={setEndDate}
+                  placeholder="YYYY-MM-DD"
+                />
+              </>
+            )}
 
-              <View style={styles.infoLine}>
-                <Text style={styles.infoText}>Objetivo: {item.goal}€</Text>
-                <Text style={styles.infoText}>
-                  Mensual: {item.monthly_amount}€
-                </Text>
-                <Text style={styles.infoText}>
-                  Ahorro: {s.ahorradoActual.toFixed(2)}€
-                </Text>
-                <Text style={styles.infoText}>
-                  Pendiente: {s.pendiente.toFixed(2)}€
-                </Text>
-                <Text style={styles.infoText}>
-                  Estado: {s.completed ? "✔️" : "⌛"}
-                </Text>
+            <TextInput
+              placeholder="Ahorro mensual (€)"
+              style={styles.input}
+              keyboardType="numeric"
+              value={monthly}
+              onChangeText={setMonthly}
+            />
+
+            <TextInput
+              placeholder="Aportado (€)"
+              style={styles.input}
+              keyboardType="numeric"
+              value={contributed}
+              onChangeText={setContributed}
+            />
+
+            <TextInput
+              placeholder="Prestado"
+              style={styles.input}
+              value={borrowed}
+              onChangeText={setBorrowed}
+            />
+
+            {(() => {
+              const s = calculateSaving(
+                startDate,
+                endDate,
+                Number(monthly),
+                Number(contributed),
+                Number(goal),
+              );
+
+              return (
+                <View style={styles.resultBox}>
+                  <Text>Objetivo: {s.objetivo} €</Text>
+                  <Text>Meses totales: {s.totalMonths}</Text>
+                  <Text>Meses pasados: {s.passedMonths}</Text>
+                  <Text>Meses restantes: {s.remainingMonths}</Text>
+                  <Text>Ahorro necesario mensual: {s.ahorroMensual} €</Text>
+                  <Text>Pronostico ahorrado: {s.pronosticoAhorrado} €</Text>
+                  <Text>Ahorro actual: {s.ahorradoActual} €</Text>
+                  <Text>Pendiente: {s.pendiente} €</Text>
+                  <Text>
+                    Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
+                  </Text>
+                </View>
+              );
+            })()}
+
+            <Pressable style={styles.button} onPress={saveSaving}>
+              <Text style={styles.buttonText}>
+                {editingId ? "Guardar cambios" : "Guardar ahorro"}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.button,
+                { backgroundColor: "#6B7280", marginTop: 10 },
+              ]}
+              onPress={() => {
+                resetForm();
+                setShowSimulator(false);
+              }}
+            >
+              <Text style={styles.buttonText}>Cancelar</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* LISTA DE AHORROS */}
+
+        {savings.length === 0 ? (
+          <Text style={styles.emptyText}>No tienes ahorros todavía</Text>
+        ) : (
+          savings.map((item) => {
+            const s = calculateSaving(
+              item.start_date,
+              item.end_date,
+              item.monthly_amount,
+              item.contributed,
+              item.goal,
+            );
+
+            return (
+              <View key={item.id} style={styles.savingRow}>
+                <Text style={styles.savingName}>{item.name}</Text>
+
+                <View style={styles.infoLine}>
+                  <Text style={styles.infoText}>Objetivo: {item.goal}€</Text>
+                  <Text style={styles.infoText}>
+                    Mensual: {item.monthly_amount}€
+                  </Text>
+                  <Text style={styles.infoText}>
+                    Ahorro: {s.ahorradoActual}€
+                  </Text>
+                  <Text style={styles.infoText}>Pendiente: {s.pendiente}€</Text>
+                  <Text style={styles.infoText}>
+                    Estado: {s.completed ? "✔️" : "⌛"}
+                  </Text>
+                </View>
+
+                <View style={styles.actionsRowRight}>
+                  <Pressable
+                    style={styles.iconButton}
+                    onPress={() => setSelectedSaving(item)}
+                  >
+                    <Text style={styles.icon}>👁</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.iconButton}
+                    onPress={() => editSaving(item)}
+                  >
+                    <Text style={styles.icon}>✏️</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.iconButton}
+                    onPress={() => deleteSaving(item)}
+                  >
+                    <Text style={styles.icon}>🗑</Text>
+                  </Pressable>
+                </View>
               </View>
-
-              <View style={styles.actionsRowRight}>
-                <Pressable
-                  style={styles.iconButton}
-                  onPress={() => setSelectedSaving(item)}
-                >
-                  <Text style={styles.icon}>👁</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.iconButton}
-                  onPress={() => editSaving(item)}
-                >
-                  <Text style={styles.icon}>✏️</Text>
-                </Pressable>
-
-                <Pressable
-                  style={styles.iconButton}
-                  onPress={() => deleteSaving(item)}
-                >
-                  <Text style={styles.icon}>🗑</Text>
-                </Pressable>
-              </View>
-            </View>
-          );
-        })
-      )}
-      {/* BOTÓN SIMULAR (SOLO CREAR) */}
-      <Pressable
-        style={styles.expandButton}
-        onPress={() => {
-          resetForm();
-          setEditingId(null); // ← evita modo edición
-          setShowSimulator(true);
-        }}
-      >
-        <Text style={styles.expandText}>Simular ahorro</Text>
-      </Pressable>
-      <Pressable
-        style={styles.expandButton}
-        onPress={() => router.push("/HomePurchase")}
-      >
-        <Text style={styles.expandText}>Simulador de casa</Text>
-      </Pressable>
-    </ScrollView>
+            );
+          })
+        )}
+        {/* BOTÓN SIMULAR (SOLO CREAR) */}
+        <Pressable
+          style={styles.expandButton}
+          onPress={() => {
+            resetForm();
+            setEditingId(null); // ← evita modo edición
+            setShowSimulator(true);
+          }}
+        >
+          <Text style={styles.expandText}>Simular ahorro</Text>
+        </Pressable>
+        <Pressable
+          style={styles.expandButton}
+          onPress={() => router.push("/HomePurchase")}
+        >
+          <Text style={styles.expandText}>Simulador de casa</Text>
+        </Pressable>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -598,5 +598,26 @@ const styles = StyleSheet.create({
   green: {
     color: "#16A34A",
     fontWeight: "600",
+  },
+  settingsButton: {
+    position: "absolute",
+    top: 24,
+    right: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+
+  settingsButtonText: {
+    marginBottom: 25,
+    fontSize: 22,
   },
 });

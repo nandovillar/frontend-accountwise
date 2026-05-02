@@ -160,7 +160,15 @@ export default function HomePurchaseScreen() {
 // -----------------------------
 // INPUT COMPONENT
 // -----------------------------
-function Input({ label, value, onChange }) {
+function Input({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (text: string) => void;
+}) {
   return (
     <View style={{ marginBottom: 8 }}>
       <Text style={styles.label}>{label}</Text>

@@ -1,130 +1,261 @@
 import { supabase } from "@/src/lib/supabase";
-import { router } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 export default function LoginScreen() {
+  const [mode, setMode] = useState<"login" | "signup" | null>(null);
+
+  // Login fields
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  // Signup fields
+  const [name, setName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+
+  const [error, setError] = useState("");
+
+  // -----------------------------
+  // LOGIN
+  // -----------------------------
+  const handleLogin = async () => {
+    setError("");
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setError("Email o contraseña incorrectos");
+    }
+  };
+
+  // -----------------------------
+  // SIGNUP
+  // -----------------------------
+  const handleSignup = async () => {
+    setError("");
+
+    const { data, error: signupError } = await supabase.auth.signUp({
+      email: signupEmail,
+      password: signupPassword,
+    });
+
+    if (signupError) {
+      if (signupError.message.includes("already registered")) {
+        setError("Este email ya está registrado");
+      } else {
+        setError("Error al crear la cuenta");
+      }
+      return;
+    }
+
+    if (data.user) {
+      await supabase.from("profiles").insert({
+        id: data.user.id,
+        full_name: name,
+      });
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>AccountWise</Text>
-      <Text style={styles.title}>Controla tus gastos y ahorros</Text>
+      {/* TITULO */}
+      <Text style={styles.title}>Bienvenido</Text>
 
-      <Text style={styles.subtitle}>
-        Organiza tus objetivos, registra tus gastos y revisa tu dinero mensual
-        desde una app sencilla.
-      </Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Contraseña"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
-      <Pressable
-        style={styles.primaryButton}
-        onPress={async () => {
-          const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
+      {/* SUBTITULO */}
+      <Text style={styles.subtitle}>Gestiona tus finanzas fácilmente</Text>
 
-          if (error) {
-            alert(error.message);
-            return;
-          }
+      {/* BOTONES SUPERIORES */}
+      <View style={styles.switchRow}>
+        <Pressable
+          style={[styles.switchButton, mode === "login" && styles.activeButton]}
+          onPress={() => setMode("login")}
+        >
+          <Text style={styles.switchText}>Iniciar sesión</Text>
+        </Pressable>
 
-          router.replace("/");
-        }}
-      >
-        <Text style={styles.primaryButtonText}>Iniciar sesión</Text>
-      </Pressable>
-      <Pressable
-        style={styles.secondaryButton}
-        onPress={async () => {
-          const { error } = await supabase.auth.signUp({
-            email,
-            password,
-          });
+        <Pressable
+          style={[
+            styles.switchButton,
+            mode === "signup" && styles.activeButton,
+          ]}
+          onPress={() => setMode("signup")}
+        >
+          <Text style={styles.switchText}>Crear cuenta</Text>
+        </Pressable>
+      </View>
 
-          if (error) {
-            alert(error.message);
-            return;
-          }
+      {/* ERROR */}
+      {error !== "" && <Text style={styles.error}>{error}</Text>}
 
-          alert("Cuenta creada. Ya puedes iniciar sesión.");
-        }}
-      >
-        <Text style={styles.secondaryButtonText}>Crear cuenta</Text>
-      </Pressable>
+      {/* FORMULARIO LOGIN */}
+      {mode === "login" && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Iniciar sesión</Text>
+
+          <Input
+            label="Email"
+            value={email}
+            onChange={setEmail}
+            secure={false}
+          />
+          <Input
+            label="Contraseña"
+            value={password}
+            onChange={setPassword}
+            secure
+          />
+
+          <Pressable style={styles.button} onPress={handleLogin}>
+            <Text style={styles.buttonText}>Entrar</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* FORMULARIO SIGNUP */}
+      {mode === "signup" && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Crear cuenta</Text>
+
+          <Input
+            label="Email"
+            value={signupEmail}
+            onChange={setSignupEmail}
+            secure={false}
+          />
+          <Input
+            label="Contraseña"
+            value={signupPassword}
+            onChange={setSignupPassword}
+            secure
+          />
+
+          <Pressable style={styles.button} onPress={handleSignup}>
+            <Text style={styles.buttonText}>Crear cuenta</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
 
+// -----------------------------
+// INPUT COMPONENT
+// -----------------------------
+interface InputProps {
+  label: string;
+  value: string;
+  onChange: (text: string) => void;
+  secure?: boolean;
+}
+
+function Input({ label, value, onChange, secure }: InputProps) {
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChange}
+        secureTextEntry={secure}
+      />
+    </View>
+  );
+}
+
+// -----------------------------
+// STYLES
+// -----------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 20,
+    justifyContent: "flex-start",
     backgroundColor: "#F4F7FA",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
   },
+
   title: {
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: "800",
-    color: "#111827",
-    marginBottom: 12,
+    textAlign: "center",
+    marginTop: 40,
   },
+
   subtitle: {
     fontSize: 16,
+    textAlign: "center",
     color: "#6B7280",
+    marginBottom: 30,
   },
-  input: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 14,
-    padding: 14,
-    fontSize: 16,
-    marginTop: 16,
+
+  switchRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginBottom: 20,
+    gap: 10,
   },
-  primaryButton: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: "#16A34A",
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: "center",
-    marginTop: 16,
-  },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  secondaryButton: {
-    width: "100%",
-    maxWidth: 420,
+
+  switchButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     backgroundColor: "#E5E7EB",
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: "center",
-    marginTop: 12,
+    borderRadius: 8,
   },
-  secondaryButtonText: {
-    color: "#111827",
-    fontSize: 16,
+
+  activeButton: {
+    backgroundColor: "#2563EB",
+  },
+
+  switchText: {
+    color: "#111",
+    fontWeight: "600",
+  },
+
+  card: {
+    backgroundColor: "#fff",
+    padding: 16,
+    borderRadius: 12,
+  },
+
+  cardTitle: {
+    fontSize: 18,
     fontWeight: "700",
+    marginBottom: 12,
+  },
+
+  label: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+
+  input: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    padding: 10,
+  },
+
+  button: {
+    backgroundColor: "#16A34A",
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+
+  buttonText: {
+    color: "#fff",
+    textAlign: "center",
+    fontWeight: "700",
+  },
+
+  error: {
+    color: "#DC2626",
+    textAlign: "center",
+    marginBottom: 10,
+    fontWeight: "600",
   },
 });
