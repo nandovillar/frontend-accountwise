@@ -59,6 +59,27 @@ export default function LoginScreen() {
       });
     }
   };
+  // -----------------------------
+  // RESET PASSWORD
+  // -----------------------------
+  const handleResetPassword = async () => {
+    setError("");
+
+    if (!email) {
+      setError("Introduce tu email para recuperar la contraseña");
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: "https://frontend-accountwise.vercel.app/reset-password",
+    });
+
+    if (error) {
+      setError("No se pudo enviar el email de recuperación");
+    } else {
+      setError("Te hemos enviado un email para restablecer tu contraseña");
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -138,6 +159,15 @@ export default function LoginScreen() {
           </Pressable>
         </View>
       )}
+
+      <Pressable style={styles.button} onPress={handleLogin}>
+        <Text style={styles.buttonText}>Entrar</Text>
+      </Pressable>
+      <Pressable onPress={handleResetPassword} style={{ marginTop: 10 }}>
+        <Text style={{ color: "#085175", fontSize: 12 }}>
+          ¿Olvidaste tu contraseña?
+        </Text>
+      </Pressable>
     </View>
   );
 }
