@@ -29,21 +29,6 @@ export default function SavingsScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // -----------------------------------------------------
-  // CÁLCULO ROBUSTO DE MESES (igual criterio que en Home)
-  // -----------------------------------------------------
-  function diffInMonths(start: Date, end: Date) {
-    let months =
-      (end.getFullYear() - start.getFullYear()) * 12 +
-      (end.getMonth() - start.getMonth());
-
-    if (end.getDate() < start.getDate()) {
-      months--;
-    }
-
-    return Math.max(0, months);
-  }
-
-  // -----------------------------------------------------
   // FUNCIÓN ÚNICA DE CÁLCULO
   // -----------------------------------------------------
   const calculateSaving = (
@@ -53,35 +38,28 @@ export default function SavingsScreen() {
     contributed: number,
     goal: number,
   ) => {
+    const now = new Date();
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const now = new Date();
 
-    // 🔥 Si alguna fecha es inválida → devolvemos valores seguros
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return {
-        totalMonths: 0,
-        passedMonths: 0,
-        remainingMonths: 0,
-        ahorradoActual: 0,
-        ahorroMensual: 0,
-        pendiente: goal || 0,
-        completed: false,
-        pronosticoAhorrado: 0,
-        objetivo: goal || 0,
-      };
-    }
+    const totalMonths =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth());
 
-    const totalMonths = diffInMonths(start, end);
-    const rawPassed = diffInMonths(start, now);
-    const passedMonths = Math.min(totalMonths, rawPassed);
+    const passedMonths =
+      now < start
+        ? 0
+        : Math.min(
+            totalMonths,
+            (now.getFullYear() - start.getFullYear()) * 12 +
+              (now.getMonth() - start.getMonth()),
+          );
 
     const remainingMonths = totalMonths - passedMonths;
 
     const ahorradoActual = contributed + passedMonths * monthly;
 
-    const ahorroMensual =
-      totalMonths > 0 ? (goal - ahorradoActual) / totalMonths : 0;
+    const ahorroMensual = (goal - ahorradoActual) / totalMonths;
 
     const pendiente = goal - ahorradoActual;
 
@@ -178,7 +156,7 @@ export default function SavingsScreen() {
     setBorrowed(item.borrowed || "");
     setStartDate(item.start_date);
     setEndDate(item.end_date);
-    setShowSimulator(true);
+    setShowSimulator(true); // ← NO usa el botón azul
   };
 
   const resetForm = () => {
@@ -208,7 +186,7 @@ export default function SavingsScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Header title="Ahorros" />
+      <Header title="Ahorro" />
       <Pressable
         style={styles.settingsButton}
         onPress={() => router.push("/settings")}
@@ -240,10 +218,14 @@ export default function SavingsScreen() {
                   <Text>Meses totales: {s.totalMonths}</Text>
                   <Text>Meses pasados: {s.passedMonths}</Text>
                   <Text>Meses restantes: {s.remainingMonths}</Text>
-                  <Text>Ahorro necesario mensual: {s.ahorroMensual} €</Text>
-                  <Text>Pronostico ahorrado: {s.pronosticoAhorrado} €</Text>
-                  <Text>Ahorro actual: {s.ahorradoActual} €</Text>
-                  <Text>Pendiente: {s.pendiente} €</Text>
+                  <Text>
+                    Ahorro necesario mensual: {s.ahorroMensual.toFixed(2)} €
+                  </Text>
+                  <Text>
+                    Pronostico ahorrado: {s.pronosticoAhorrado.toFixed(2)} €
+                  </Text>
+                  <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
+                  <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
                   <Text>
                     Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
                   </Text>
@@ -355,10 +337,14 @@ export default function SavingsScreen() {
                   <Text>Meses totales: {s.totalMonths}</Text>
                   <Text>Meses pasados: {s.passedMonths}</Text>
                   <Text>Meses restantes: {s.remainingMonths}</Text>
-                  <Text>Ahorro necesario mensual: {s.ahorroMensual} €</Text>
-                  <Text>Pronostico ahorrado: {s.pronosticoAhorrado} €</Text>
-                  <Text>Ahorro actual: {s.ahorradoActual} €</Text>
-                  <Text>Pendiente: {s.pendiente} €</Text>
+                  <Text>
+                    Ahorro necesario mensual: {s.ahorroMensual.toFixed(2)} €
+                  </Text>
+                  <Text>
+                    Pronostico ahorrado: {s.pronosticoAhorrado.toFixed(2)} €
+                  </Text>
+                  <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
+                  <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
                   <Text>
                     Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
                   </Text>
@@ -410,9 +396,11 @@ export default function SavingsScreen() {
                     Mensual: {item.monthly_amount}€
                   </Text>
                   <Text style={styles.infoText}>
-                    Ahorro: {s.ahorradoActual}€
+                    Ahorro: {s.ahorradoActual.toFixed(2)}€
                   </Text>
-                  <Text style={styles.infoText}>Pendiente: {s.pendiente}€</Text>
+                  <Text style={styles.infoText}>
+                    Pendiente: {s.pendiente.toFixed(2)}€
+                  </Text>
                   <Text style={styles.infoText}>
                     Estado: {s.completed ? "✔️" : "⌛"}
                   </Text>

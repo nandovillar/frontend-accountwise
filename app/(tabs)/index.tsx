@@ -116,7 +116,7 @@ export default function HomeScreen() {
 
     const variables = vars?.reduce((sum, t) => sum + t.amount, 0) || 0;
 
-    // 4. Ahorro total acumulado (RECALCULADO IGUAL QUE EN SAVINGSSCREEN)
+    // 4. Ahorro total acumulado (MISMA LÓGICA QUE SAVINGSSCREEN)
     const { data: savingsList } = await supabase
       .from("savings")
       .select("monthly_amount, contributed, start_date, end_date");
@@ -128,7 +128,11 @@ export default function HomeScreen() {
 
       savingsList.forEach((s) => {
         const start = new Date(s.start_date);
-        const passedMonths = diffInMonths(start, now);
+        const end = new Date(s.end_date);
+
+        const totalMonths = diffInMonths(start, end);
+        const rawPassed = diffInMonths(start, now);
+        const passedMonths = Math.min(totalMonths, rawPassed);
 
         const ahorradoActual =
           (s.contributed || 0) + passedMonths * (s.monthly_amount || 0);
@@ -149,6 +153,9 @@ export default function HomeScreen() {
     loadMonthlySummary();
   }, [selectedMonth]);
 
+  // --------------------------
+  // UI
+  // --------------------------
   return (
     <View style={{ flex: 1 }}>
       <Header title="Inicio" />
