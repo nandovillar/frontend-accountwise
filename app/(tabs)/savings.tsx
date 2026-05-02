@@ -29,7 +29,7 @@ export default function SavingsScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // -----------------------------------------------------
-  // FUNCIÓN ROBUSTA DE MESES (MISMA QUE EN HOME)
+  // CÁLCULO ROBUSTO DE MESES (igual criterio que en Home)
   // -----------------------------------------------------
   function diffInMonths(start: Date, end: Date) {
     let months =
@@ -44,7 +44,7 @@ export default function SavingsScreen() {
   }
 
   // -----------------------------------------------------
-  // FUNCIÓN ÚNICA DE CÁLCULO (MISMA LÓGICA QUE HOME)
+  // FUNCIÓN ÚNICA DE CÁLCULO
   // -----------------------------------------------------
   const calculateSaving = (
     startDate: string,
@@ -53,13 +53,29 @@ export default function SavingsScreen() {
     contributed: number,
     goal: number,
   ) => {
-    const now = new Date();
     const start = new Date(startDate);
     const end = new Date(endDate);
+    const now = new Date();
+
+    // 🔥 Si alguna fecha es inválida → devolvemos valores seguros
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return {
+        totalMonths: 0,
+        passedMonths: 0,
+        remainingMonths: 0,
+        ahorradoActual: 0,
+        ahorroMensual: 0,
+        pendiente: goal || 0,
+        completed: false,
+        pronosticoAhorrado: 0,
+        objetivo: goal || 0,
+      };
+    }
 
     const totalMonths = diffInMonths(start, end);
     const rawPassed = diffInMonths(start, now);
     const passedMonths = Math.min(totalMonths, rawPassed);
+
     const remainingMonths = totalMonths - passedMonths;
 
     const ahorradoActual = contributed + passedMonths * monthly;
@@ -135,6 +151,7 @@ export default function SavingsScreen() {
     setShowSimulator(false);
   };
 
+  // 🔥 FUNCIÓN FINAL DE BORRADO (TU VERSIÓN)
   const deleteSaving = async (item: any) => {
     const {
       data: { user },
@@ -184,8 +201,6 @@ export default function SavingsScreen() {
 
     return () => subscription.subscription.unsubscribe();
   }, []);
-}
-
 
   // -----------------------------------------------------
   // UI

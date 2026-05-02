@@ -443,9 +443,18 @@ export default function TabTwoScreen() {
         <View style={styles.monthBar}>
           <Pressable
             onPress={() => {
-              const d = new Date(selectedMonth + "-01");
-              d.setMonth(d.getMonth() - 1);
-              setSelectedMonth(d.toISOString().slice(0, 7));
+              const [year, month] = selectedMonth.split("-").map(Number);
+              let newYear = year;
+              let newMonth = month - 1;
+
+              if (newMonth < 1) {
+                newMonth = 12;
+                newYear -= 1;
+              }
+
+              setSelectedMonth(
+                `${newYear}-${String(newMonth).padStart(2, "0")}`,
+              );
             }}
           >
             <Text>⬅️</Text>
@@ -455,9 +464,18 @@ export default function TabTwoScreen() {
 
           <Pressable
             onPress={() => {
-              const d = new Date(selectedMonth + "-01");
-              d.setMonth(d.getMonth() + 1);
-              setSelectedMonth(d.toISOString().slice(0, 7));
+              const [year, month] = selectedMonth.split("-").map(Number);
+              let newYear = year;
+              let newMonth = month + 1;
+
+              if (newMonth > 12) {
+                newMonth = 1;
+                newYear += 1;
+              }
+
+              setSelectedMonth(
+                `${newYear}-${String(newMonth).padStart(2, "0")}`,
+              );
             }}
           >
             <Text>➡️</Text>
