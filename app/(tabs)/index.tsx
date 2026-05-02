@@ -15,7 +15,6 @@ export default function HomeScreen() {
       (end.getFullYear() - start.getFullYear()) * 12 +
       (end.getMonth() - start.getMonth());
 
-    // Si el día del mes aún no ha llegado, restamos 1
     if (end.getDate() < start.getDate()) {
       months--;
     }
@@ -60,12 +59,24 @@ export default function HomeScreen() {
   }, []);
 
   // --------------------------
-  // CAMBIAR MES
+  // CAMBIAR MES (sin Date, sin bugs marzo/abril)
   // --------------------------
   const changeMonth = (offset: number) => {
-    const date = new Date(selectedMonth + "-01");
-    date.setMonth(date.getMonth() + offset);
-    setSelectedMonth(date.toISOString().slice(0, 7));
+    const [year, month] = selectedMonth.split("-").map(Number);
+
+    let newYear = year;
+    let newMonth = month + offset;
+
+    if (newMonth < 1) {
+      newMonth += 12;
+      newYear -= 1;
+    } else if (newMonth > 12) {
+      newMonth -= 12;
+      newYear += 1;
+    }
+
+    const monthStr = String(newMonth).padStart(2, "0");
+    setSelectedMonth(`${newYear}-${monthStr}`);
   };
 
   // --------------------------
@@ -117,10 +128,7 @@ export default function HomeScreen() {
 
       savingsList.forEach((s) => {
         const start = new Date(s.start_date);
-        const end = new Date(s.end_date);
-
         const passedMonths = diffInMonths(start, now);
-        const totalMonths = diffInMonths(start, end);
 
         const ahorradoActual =
           (s.contributed || 0) + passedMonths * (s.monthly_amount || 0);

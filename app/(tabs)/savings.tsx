@@ -29,7 +29,22 @@ export default function SavingsScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // -----------------------------------------------------
-  // FUNCIÓN ÚNICA DE CÁLCULO
+  // FUNCIÓN ROBUSTA DE MESES (MISMA QUE EN HOME)
+  // -----------------------------------------------------
+  function diffInMonths(start: Date, end: Date) {
+    let months =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth());
+
+    if (end.getDate() < start.getDate()) {
+      months--;
+    }
+
+    return Math.max(0, months);
+  }
+
+  // -----------------------------------------------------
+  // FUNCIÓN ÚNICA DE CÁLCULO (MISMA LÓGICA QUE HOME)
   // -----------------------------------------------------
   const calculateSaving = (
     startDate: string,
@@ -42,24 +57,15 @@ export default function SavingsScreen() {
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    const totalMonths =
-      (end.getFullYear() - start.getFullYear()) * 12 +
-      (end.getMonth() - start.getMonth());
-
-    const passedMonths =
-      now < start
-        ? 0
-        : Math.min(
-            totalMonths,
-            (now.getFullYear() - start.getFullYear()) * 12 +
-              (now.getMonth() - start.getMonth()),
-          );
-
+    const totalMonths = diffInMonths(start, end);
+    const rawPassed = diffInMonths(start, now);
+    const passedMonths = Math.min(totalMonths, rawPassed);
     const remainingMonths = totalMonths - passedMonths;
 
     const ahorradoActual = contributed + passedMonths * monthly;
 
-    const ahorroMensual = (goal - ahorradoActual) / totalMonths;
+    const ahorroMensual =
+      totalMonths > 0 ? (goal - ahorradoActual) / totalMonths : 0;
 
     const pendiente = goal - ahorradoActual;
 
@@ -129,7 +135,6 @@ export default function SavingsScreen() {
     setShowSimulator(false);
   };
 
-  // 🔥 FUNCIÓN FINAL DE BORRADO (TU VERSIÓN)
   const deleteSaving = async (item: any) => {
     const {
       data: { user },
@@ -156,7 +161,7 @@ export default function SavingsScreen() {
     setBorrowed(item.borrowed || "");
     setStartDate(item.start_date);
     setEndDate(item.end_date);
-    setShowSimulator(true); // ← NO usa el botón azul
+    setShowSimulator(true);
   };
 
   const resetForm = () => {
@@ -179,6 +184,8 @@ export default function SavingsScreen() {
 
     return () => subscription.subscription.unsubscribe();
   }, []);
+}
+
 
   // -----------------------------------------------------
   // UI
