@@ -133,6 +133,11 @@ export default function LoginScreen() {
           <Pressable style={styles.button} onPress={handleLogin}>
             <Text style={styles.buttonText}>Entrar</Text>
           </Pressable>
+          <Pressable onPress={handleResetPassword} style={{ marginTop: 10 }}>
+            <Text style={{ color: "#085175", fontSize: 12 }}>
+              ¿Olvidaste tu contraseña?
+            </Text>
+          </Pressable>
         </View>
       )}
 
@@ -159,15 +164,6 @@ export default function LoginScreen() {
           </Pressable>
         </View>
       )}
-
-      <Pressable style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Entrar</Text>
-      </Pressable>
-      <Pressable onPress={handleResetPassword} style={{ marginTop: 10 }}>
-        <Text style={{ color: "#085175", fontSize: 12 }}>
-          ¿Olvidaste tu contraseña?
-        </Text>
-      </Pressable>
     </View>
   );
 }
