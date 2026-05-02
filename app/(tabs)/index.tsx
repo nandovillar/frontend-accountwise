@@ -51,7 +51,18 @@ export default function HomeScreen() {
   useEffect(() => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
-      if (!data.session) router.replace("/login");
+
+      // 👇 Si vienes desde el email de recuperación, NO redirigir al login
+      const hash = window?.location?.hash || "";
+      if (hash.includes("type=recovery") || hash.includes("access_token")) {
+        return;
+      }
+
+      if (!data.session) {
+        router.replace("/login");
+        return;
+      }
+
       loadProfile();
     };
 
