@@ -169,8 +169,38 @@ export default function SavingsScreen() {
     setStartDate("2026-05-01");
     setEndDate("2026-12-01");
   };
+  const loadProfile = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", user.id)
+      .single();
+
+    console.log("Perfil cargado:", data);
+  };
 
   useEffect(() => {
+    const checkSession = async () => {
+      // Esperar a que Supabase restaure la sesión en Web
+      const { data } = await supabase.auth.getSession();
+
+      // Si aún no hay sesión, esperar un poco y volver a intentar
+      if (!data.session) {
+        setTimeout(checkSession, 200);
+        return;
+      }
+
+      // Si hay sesión → cargar datos
+      loadProfile();
+    };
+
+    checkSession();
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
         if (session?.user) loadSavings();

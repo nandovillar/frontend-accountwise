@@ -6,28 +6,9 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Colors } from "@/constants/theme";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
-import { supabase } from "@/src/lib/supabase";
-import { router } from "expo-router";
-import { useEffect } from "react";
-
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
-  useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (session) {
-          router.replace("/");
-        } else {
-          router.replace("/login");
-        }
-      },
-    );
-
-    return () => {
-      listener.subscription.unsubscribe();
-    };
-  }, []);
   return (
     <Tabs
       screenOptions={{

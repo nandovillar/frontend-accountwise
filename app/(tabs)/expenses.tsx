@@ -121,6 +121,21 @@ export default function TabTwoScreen() {
   };
 
   useEffect(() => {
+    const checkSession = async () => {
+      // Esperar a que Supabase restaure la sesión en Web
+      const { data } = await supabase.auth.getSession();
+
+      // Si aún no hay sesión, esperar un poco y volver a intentar
+      if (!data.session) {
+        setTimeout(checkSession, 200);
+        return;
+      }
+
+      // Si hay sesión → cargar datos
+      loadProfile();
+    };
+
+    checkSession();
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session?.user) {
