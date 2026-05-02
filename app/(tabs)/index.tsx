@@ -10,18 +10,6 @@ export default function HomeScreen() {
     new Date().toISOString().slice(0, 7),
   );
 
-  function diffInMonths(start: Date, end: Date) {
-    let months =
-      (end.getFullYear() - start.getFullYear()) * 12 +
-      (end.getMonth() - start.getMonth());
-
-    if (end.getDate() < start.getDate()) {
-      months--;
-    }
-
-    return Math.max(0, months);
-  }
-
   const [summary, setSummary] = useState({
     salary: 0,
     fixedPaid: 0,
@@ -48,25 +36,34 @@ export default function HomeScreen() {
     setUserName(data?.username || "Usuario");
   };
 
+  // --------------------------
+  // CHECK SESSION (CORREGIDO)
+  // --------------------------
   useEffect(() => {
     const checkSession = async () => {
-      // Esperar a que Supabase restaure la sesión en Web
       const { data } = await supabase.auth.getSession();
 
-      // Si aún no hay sesión, esperar un poco y volver a intentar
+      // Esperar a que Supabase restaure la sesión
       if (!data.session) {
         setTimeout(checkSession, 200);
+        return;
+      }
+
+      // Si después de restaurar sigue sin sesión → login
+      if (!data.session) {
+        router.replace("/login");
         return;
       }
 
       // Si hay sesión → cargar datos
       loadProfile();
     };
+
     checkSession();
   }, []);
 
   // --------------------------
-  // CAMBIAR MES (sin Date, sin bugs marzo/abril)
+  // CAMBIAR MES
   // --------------------------
   const changeMonth = (offset: number) => {
     const [year, month] = selectedMonth.split("-").map(Number);
@@ -96,7 +93,6 @@ export default function HomeScreen() {
 
     if (!user) return;
 
-    // 1. Sueldo
     const { data: profile } = await supabase
       .from("profiles")
       .select("salary")
@@ -105,7 +101,6 @@ export default function HomeScreen() {
 
     const salary = profile?.salary || 0;
 
-    // 2. Gastos fijos pagados
     const { data: fixed } = await supabase
       .from("fixed_expenses")
       .select("amount")
@@ -114,7 +109,6 @@ export default function HomeScreen() {
 
     const fixedPaid = fixed?.reduce((sum, f) => sum + f.amount, 0) || 0;
 
-    // 3. Gastos variables
     const { data: vars } = await supabase
       .from("transactions")
       .select("amount")
@@ -123,7 +117,6 @@ export default function HomeScreen() {
 
     const variables = vars?.reduce((sum, t) => sum + t.amount, 0) || 0;
 
-    // 4. Ahorro total acumulado (MISMA LÓGICA QUE SAVINGSSCREEN)
     const { data: savingsList } = await supabase
       .from("savings")
       .select("monthly_amount, contributed, start_date, end_date");
@@ -137,8 +130,14 @@ export default function HomeScreen() {
         const start = new Date(s.start_date);
         const end = new Date(s.end_date);
 
-        const totalMonths = diffInMonths(start, end);
-        const rawPassed = diffInMonths(start, now);
+        const totalMonths =
+          (end.getFullYear() - start.getFullYear()) * 12 +
+          (end.getMonth() - start.getMonth());
+
+        const rawPassed =
+          (now.getFullYear() - start.getFullYear()) * 12 +
+          (now.getMonth() - start.getMonth());
+
         const passedMonths = Math.min(totalMonths, rawPassed);
 
         const ahorradoActual =
@@ -160,9 +159,6 @@ export default function HomeScreen() {
     loadMonthlySummary();
   }, [selectedMonth]);
 
-  // --------------------------
-  // UI
-  // --------------------------
   return (
     <View style={{ flex: 1 }}>
       <Header title="Inicio" />

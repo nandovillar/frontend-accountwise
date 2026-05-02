@@ -1,15 +1,14 @@
 import { supabase } from "@/src/lib/supabase";
+import { router } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 export default function LoginScreen() {
   const [mode, setMode] = useState<"login" | "signup" | null>(null);
 
-  // Login fields
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  // Signup fields
   const [name, setName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
@@ -29,7 +28,11 @@ export default function LoginScreen() {
 
     if (error) {
       setError("Email o contraseña incorrectos");
+      return;
     }
+
+    // 👇 Redirigir al usuario logado
+    router.replace("/(tabs)");
   };
 
   // -----------------------------
@@ -59,6 +62,7 @@ export default function LoginScreen() {
       });
     }
   };
+
   // -----------------------------
   // RESET PASSWORD
   // -----------------------------
@@ -83,13 +87,9 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      {/* TITULO */}
       <Text style={styles.title}>Bienvenido</Text>
-
-      {/* SUBTITULO */}
       <Text style={styles.subtitle}>Gestiona tus finanzas fácilmente</Text>
 
-      {/* BOTONES SUPERIORES */}
       <View style={styles.switchRow}>
         <Pressable
           style={[styles.switchButton, mode === "login" && styles.activeButton]}
@@ -109,10 +109,8 @@ export default function LoginScreen() {
         </Pressable>
       </View>
 
-      {/* ERROR */}
       {error !== "" && <Text style={styles.error}>{error}</Text>}
 
-      {/* FORMULARIO LOGIN */}
       {mode === "login" && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Iniciar sesión</Text>
@@ -133,6 +131,7 @@ export default function LoginScreen() {
           <Pressable style={styles.button} onPress={handleLogin}>
             <Text style={styles.buttonText}>Entrar</Text>
           </Pressable>
+
           <Pressable onPress={handleResetPassword} style={{ marginTop: 10 }}>
             <Text style={{ color: "#085175", fontSize: 12 }}>
               ¿Olvidaste tu contraseña?
@@ -141,7 +140,6 @@ export default function LoginScreen() {
         </View>
       )}
 
-      {/* FORMULARIO SIGNUP */}
       {mode === "signup" && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Crear cuenta</Text>
