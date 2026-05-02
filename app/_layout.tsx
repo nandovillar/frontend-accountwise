@@ -23,6 +23,10 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ title: "Ajustes" }} />
         <Stack.Screen
+          name="reset-password"
+          options={{ title: "Restablecer contraseña" }}
+        />
+        <Stack.Screen
           name="modal"
           options={{ presentation: "modal", title: "Modal" }}
         />
