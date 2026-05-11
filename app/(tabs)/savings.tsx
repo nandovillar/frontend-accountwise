@@ -1,8 +1,11 @@
 import { supabase } from "@/src/lib/supabase";
+import { colors } from "@/src/theme/colors";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
+
 import {
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -13,7 +16,7 @@ import {
 } from "react-native";
 
 export default function SavingsScreen() {
-  const [showSimulator, setShowSimulator] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [savings, setSavings] = useState<any[]>([]);
   const [selectedSaving, setSelectedSaving] = useState<any | null>(null);
 
@@ -27,24 +30,30 @@ export default function SavingsScreen() {
   const [endDate, setEndDate] = useState("2026-12-01");
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editGoal, setEditGoal] = useState("");
+  const [editMonthly, setEditMonthly] = useState("");
+  const [editContributed, setEditContributed] = useState("");
+  const [editBorrowed, setEditBorrowed] = useState("");
+  const [editStartDate, setEditStartDate] = useState("");
+  const [editEndDate, setEditEndDate] = useState("");
 
-  // -----------------------------------------------------
-  // FUNCIÓN ÚNICA DE CÁLCULO
-  // -----------------------------------------------------
   const calculateSaving = (
-    startDate: string,
-    endDate: string,
-    monthly: number,
-    contributed: number,
-    goal: number,
+    startDateValue: string,
+    endDateValue: string,
+    monthlyValue: number,
+    contributedValue: number,
+    goalValue: number,
   ) => {
     const now = new Date();
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = new Date(startDateValue);
+    const end = new Date(endDateValue);
 
-    const totalMonths =
+    const totalMonths = Math.max(
+      0,
       (end.getFullYear() - start.getFullYear()) * 12 +
-      (end.getMonth() - start.getMonth());
+        (end.getMonth() - start.getMonth()),
+    );
 
     const passedMonths =
       now < start
@@ -55,19 +64,13 @@ export default function SavingsScreen() {
               (now.getMonth() - start.getMonth()),
           );
 
-    const remainingMonths = totalMonths - passedMonths;
-
-    const ahorradoActual = contributed + passedMonths * monthly;
-
-    const ahorroMensual = (goal - ahorradoActual) / totalMonths;
-
-    const pendiente = goal - ahorradoActual;
-
-    const completed = ahorradoActual >= goal;
-
-    const pronosticoAhorrado = contributed + totalMonths * monthly;
-
-    const objetivo = goal;
+    const remainingMonths = Math.max(0, totalMonths - passedMonths);
+    const ahorradoActual = contributedValue + passedMonths * monthlyValue;
+    const pendiente = goalValue - ahorradoActual;
+    const ahorroMensual =
+      remainingMonths > 0 ? pendiente / remainingMonths : pendiente;
+    const completed = ahorradoActual >= goalValue;
+    const pronosticoAhorrado = contributedValue + totalMonths * monthlyValue;
 
     return {
       totalMonths,
@@ -78,18 +81,15 @@ export default function SavingsScreen() {
       pendiente,
       completed,
       pronosticoAhorrado,
-      objetivo,
+      objetivo: goalValue,
     };
   };
-
-  // -----------------------------------------------------
-  // SUPABASE
-  // -----------------------------------------------------
 
   const loadSavings = async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
     if (!user) return;
 
     const { data } = await supabase
@@ -101,66 +101,48 @@ export default function SavingsScreen() {
     setSavings(data || []);
   };
 
-  const saveSaving = async () => {
+  const loadProfile = async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+
     if (!user) return;
 
-    const payload = {
-      user_id: user.id,
-      name: name || "Ahorro sin nombre",
-      goal: Number(goal),
-      start_date: startDate,
-      end_date: endDate,
-      monthly_amount: Number(monthly),
-      contributed: Number(contributed),
-      borrowed,
+    await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", user.id)
+      .single();
+  };
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession();
+
+      if (!data.session) {
+        setTimeout(checkSession, 200);
+        return;
+      }
+
+      await loadProfile();
+      await loadSavings();
     };
 
-    if (editingId) {
-      await supabase.from("savings").update(payload).eq("id", editingId);
-    } else {
-      await supabase.from("savings").insert([payload]);
-    }
+    checkSession();
 
-    await loadSavings();
-    resetForm();
-    setShowSimulator(false);
-  };
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      async (_, session) => {
+        if (session?.user) {
+          await loadProfile();
+          await loadSavings();
+        }
+      },
+    );
 
-  // 🔥 FUNCIÓN FINAL DE BORRADO (TU VERSIÓN)
-  const deleteSaving = async (item: any) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    return () => subscription.subscription.unsubscribe();
+  }, []);
 
-    await supabase.from("savings").delete().eq("id", item.id);
-
-    await supabase
-      .from("savings")
-      .delete()
-      .eq("title", item.name)
-      .eq("user_id", user?.id);
-
-    loadSavings();
-    console.log("Ahorro eliminado:");
-  };
-
-  const editSaving = (item: any) => {
-    setEditingId(item.id);
-    setName(item.name);
-    setGoal(String(item.goal));
-    setMonthly(String(item.monthly_amount));
-    setContributed(String(item.contributed));
-    setBorrowed(item.borrowed || "");
-    setStartDate(item.start_date);
-    setEndDate(item.end_date);
-    setShowSimulator(true); // ← NO usa el botón azul
-  };
-
-  const resetForm = () => {
-    setEditingId(null);
+  const resetCreateForm = () => {
     setName("");
     setGoal("");
     setMonthly("");
@@ -169,54 +151,203 @@ export default function SavingsScreen() {
     setStartDate("2026-05-01");
     setEndDate("2026-12-01");
   };
-  const loadProfile = async () => {
+
+  const resetEditForm = () => {
+    setEditingId(null);
+    setEditName("");
+    setEditGoal("");
+    setEditMonthly("");
+    setEditContributed("");
+    setEditBorrowed("");
+    setEditStartDate("");
+    setEditEndDate("");
+  };
+
+  const saveNewSaving = async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (!user) return;
 
-    const { data } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", user.id)
-      .single();
+    if (!goal || !monthly) return;
 
-    console.log("Perfil cargado:", data);
-  };
-
-  useEffect(() => {
-    const checkSession = async () => {
-      // Esperar a que Supabase restaure la sesión en Web
-      const { data } = await supabase.auth.getSession();
-
-      // Si aún no hay sesión, esperar un poco y volver a intentar
-      if (!data.session) {
-        setTimeout(checkSession, 200);
-        return;
-      }
-
-      // Si hay sesión → cargar datos
-      loadProfile();
+    const payload = {
+      user_id: user.id,
+      name: name || "Ahorro sin nombre",
+      goal: Number(goal),
+      start_date: startDate,
+      end_date: endDate,
+      monthly_amount: Number(monthly),
+      contributed: Number(contributed || 0),
+      borrowed,
     };
 
-    checkSession();
-    const { data: subscription } = supabase.auth.onAuthStateChange(
-      async (_, session) => {
-        if (session?.user) loadSavings();
+    await supabase.from("savings").insert([payload]);
+
+    await loadSavings();
+    resetCreateForm();
+    setShowCreateForm(false);
+  };
+
+  const startEditSaving = (item: any) => {
+    setEditingId(item.id);
+    setEditName(item.name || "");
+    setEditGoal(String(item.goal || ""));
+    setEditMonthly(String(item.monthly_amount || ""));
+    setEditContributed(String(item.contributed || ""));
+    setEditBorrowed(item.borrowed || "");
+    setEditStartDate(item.start_date || "2026-05-01");
+    setEditEndDate(item.end_date || "2026-12-01");
+    setSelectedSaving(null);
+  };
+
+  const saveEditSaving = async () => {
+    if (!editingId) return;
+
+    const payload = {
+      name: editName || "Ahorro sin nombre",
+      goal: Number(editGoal),
+      start_date: editStartDate,
+      end_date: editEndDate,
+      monthly_amount: Number(editMonthly),
+      contributed: Number(editContributed || 0),
+      borrowed: editBorrowed,
+    };
+
+    await supabase.from("savings").update(payload).eq("id", editingId);
+
+    await loadSavings();
+    resetEditForm();
+  };
+
+  const deleteSaving = async (item: any) => {
+    const executeDelete = async () => {
+      await supabase.from("savings").delete().eq("id", item.id);
+      await loadSavings();
+
+      if (selectedSaving?.id === item.id) {
+        setSelectedSaving(null);
+      }
+
+      if (editingId === item.id) {
+        resetEditForm();
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(`¿Eliminar el ahorro "${item.name}"?`);
+
+      if (confirmed) {
+        await executeDelete();
+      }
+
+      return;
+    }
+
+    Alert.alert("Eliminar ahorro", `¿Eliminar "${item.name}"?`, [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Eliminar",
+        style: "destructive",
+        onPress: executeDelete,
       },
+    ]);
+  };
+
+  const renderDateInput = (
+    value: string,
+    onChange: (value: string) => void,
+    placeholder: string,
+  ) => {
+    if (Platform.OS === "web") {
+      return (
+        <input
+          type="date"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          style={styles.webDate}
+        />
+      );
+    }
+
+    return (
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+      />
+    );
+  };
+
+  const renderResultBox = (
+    startDateValue: string,
+    endDateValue: string,
+    monthlyValue: string,
+    contributedValue: string,
+    goalValue: string,
+  ) => {
+    const result = calculateSaving(
+      startDateValue,
+      endDateValue,
+      Number(monthlyValue || 0),
+      Number(contributedValue || 0),
+      Number(goalValue || 0),
     );
 
-    return () => subscription.subscription.unsubscribe();
-  }, []);
+    return (
+      <View style={styles.resultBox}>
+        <View style={styles.resultRow}>
+          <Text style={styles.resultLabel}>Objetivo</Text>
+          <Text style={styles.resultValue}>{result.objetivo.toFixed(2)} €</Text>
+        </View>
 
-  // -----------------------------------------------------
-  // UI
-  // -----------------------------------------------------
+        <View style={styles.resultRow}>
+          <Text style={styles.resultLabel}>Ahorro actual</Text>
+          <Text style={styles.resultValue}>
+            {result.ahorradoActual.toFixed(2)} €
+          </Text>
+        </View>
+
+        <View style={styles.resultRow}>
+          <Text style={styles.resultLabel}>Pendiente</Text>
+          <Text style={styles.resultValue}>
+            {result.pendiente.toFixed(2)} €
+          </Text>
+        </View>
+
+        <View style={styles.resultRow}>
+          <Text style={styles.resultLabel}>Meses restantes</Text>
+          <Text style={styles.resultValue}>{result.remainingMonths}</Text>
+        </View>
+
+        <View style={styles.resultRow}>
+          <Text style={styles.resultLabel}>Necesario mensual</Text>
+          <Text style={styles.resultValue}>
+            {result.ahorroMensual.toFixed(2)} €
+          </Text>
+        </View>
+
+        <View style={styles.resultRow}>
+          <Text style={styles.resultLabel}>Estado</Text>
+          <Text
+            style={[
+              styles.resultValue,
+              result.completed ? styles.successText : styles.pendingText,
+            ]}
+          >
+            {result.completed ? "Cumplido" : "En progreso"}
+          </Text>
+        </View>
+      </View>
+    );
+  };
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.screen}>
       <Header title="Ahorro" />
+
       <Pressable
         style={styles.settingsButton}
         onPress={() => router.push("/settings")}
@@ -228,436 +359,661 @@ export default function SavingsScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        {/* VISTA SOLO INFORMACIÓN */}
-        {selectedSaving && (
-          <View style={styles.detailCard}>
-            <Text style={styles.detailTitle}>{selectedSaving.name}</Text>
-
-            {(() => {
-              const s = calculateSaving(
-                selectedSaving.start_date,
-                selectedSaving.end_date,
-                selectedSaving.monthly_amount,
-                selectedSaving.contributed,
-                selectedSaving.goal,
-              );
-
-              return (
-                <>
-                  <Text>Objetivo: {s.objetivo} €</Text>
-                  <Text>Meses totales: {s.totalMonths}</Text>
-                  <Text>Meses pasados: {s.passedMonths}</Text>
-                  <Text>Meses restantes: {s.remainingMonths}</Text>
-                  <Text>
-                    Ahorro necesario mensual: {s.ahorroMensual.toFixed(2)} €
-                  </Text>
-                  <Text>
-                    Pronostico ahorrado: {s.pronosticoAhorrado.toFixed(2)} €
-                  </Text>
-                  <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
-                  <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
-                  <Text>
-                    Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
-                  </Text>
-                </>
-              );
-            })()}
-
-            <Pressable
-              style={[
-                styles.button,
-                { backgroundColor: "#6B7280", marginTop: 20 },
-              ]}
-              onPress={() => setSelectedSaving(null)}
-            >
-              <Text style={styles.buttonText}>Cerrar</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* SIMULADOR */}
-        {showSimulator && (
-          <View style={styles.card}>
-            <Text style={styles.title}>
-              {editingId ? "Editar ahorro" : "Simulador de ahorro"}
-            </Text>
-
-            <TextInput
-              placeholder="Nombre del ahorro"
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-            />
-
-            <TextInput
-              placeholder="Objetivo (€)"
-              style={styles.input}
-              keyboardType="numeric"
-              value={goal}
-              onChangeText={setGoal}
-            />
-
-            {Platform.OS === "web" ? (
-              <>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  style={styles.webDate}
-                />
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  style={styles.webDate}
-                />
-              </>
-            ) : (
-              <>
-                <TextInput
-                  style={styles.input}
-                  value={startDate}
-                  onChangeText={setStartDate}
-                  placeholder="YYYY-MM-DD"
-                />
-                <TextInput
-                  style={styles.input}
-                  value={endDate}
-                  onChangeText={setEndDate}
-                  placeholder="YYYY-MM-DD"
-                />
-              </>
-            )}
-
-            <TextInput
-              placeholder="Ahorro mensual (€)"
-              style={styles.input}
-              keyboardType="numeric"
-              value={monthly}
-              onChangeText={setMonthly}
-            />
-
-            <TextInput
-              placeholder="Aportado (€)"
-              style={styles.input}
-              keyboardType="numeric"
-              value={contributed}
-              onChangeText={setContributed}
-            />
-
-            <TextInput
-              placeholder="Prestado"
-              style={styles.input}
-              value={borrowed}
-              onChangeText={setBorrowed}
-            />
-
-            {(() => {
-              const s = calculateSaving(
-                startDate,
-                endDate,
-                Number(monthly),
-                Number(contributed),
-                Number(goal),
-              );
-
-              return (
-                <View style={styles.resultBox}>
-                  <Text>Objetivo: {s.objetivo} €</Text>
-                  <Text>Meses totales: {s.totalMonths}</Text>
-                  <Text>Meses pasados: {s.passedMonths}</Text>
-                  <Text>Meses restantes: {s.remainingMonths}</Text>
-                  <Text>
-                    Ahorro necesario mensual: {s.ahorroMensual.toFixed(2)} €
-                  </Text>
-                  <Text>
-                    Pronostico ahorrado: {s.pronosticoAhorrado.toFixed(2)} €
-                  </Text>
-                  <Text>Ahorro actual: {s.ahorradoActual.toFixed(2)} €</Text>
-                  <Text>Pendiente: {s.pendiente.toFixed(2)} €</Text>
-                  <Text>
-                    Estado: {s.completed ? "✔️ Cumplido" : "⌛ En progreso"}
-                  </Text>
-                </View>
-              );
-            })()}
-
-            <Pressable style={styles.button} onPress={saveSaving}>
-              <Text style={styles.buttonText}>
-                {editingId ? "Guardar cambios" : "Guardar ahorro"}
+        <View style={styles.content}>
+          <View style={styles.headerCard}>
+            <View>
+              <Text style={styles.headerTitle}>Ahorros</Text>
+              <Text style={styles.headerSubtitle}>
+                Objetivos y planificación
               </Text>
-            </Pressable>
+            </View>
+
             <Pressable
-              style={[
-                styles.button,
-                { backgroundColor: "#6B7280", marginTop: 10 },
-              ]}
+              style={styles.addButton}
               onPress={() => {
-                resetForm();
-                setShowSimulator(false);
+                resetCreateForm();
+                resetEditForm();
+                setShowCreateForm(!showCreateForm);
               }}
             >
-              <Text style={styles.buttonText}>Cancelar</Text>
+              <Text style={styles.addButtonText}>
+                {showCreateForm ? "Cerrar" : "+ Nuevo"}
+              </Text>
             </Pressable>
           </View>
-        )}
 
-        {/* LISTA DE AHORROS */}
+          {showCreateForm && (
+            <View style={styles.card}>
+              <Text style={styles.title}>Nuevo ahorro</Text>
+              <Text style={styles.subtitle}>Crea un objetivo nuevo</Text>
 
-        {savings.length === 0 ? (
-          <Text style={styles.emptyText}>No tienes ahorros todavía</Text>
-        ) : (
-          savings.map((item) => {
-            const s = calculateSaving(
-              item.start_date,
-              item.end_date,
-              item.monthly_amount,
-              item.contributed,
-              item.goal,
-            );
+              <View style={styles.formBox}>
+                <TextInput
+                  placeholder="Nombre del ahorro"
+                  style={styles.input}
+                  value={name}
+                  onChangeText={setName}
+                />
 
-            return (
-              <View key={item.id} style={styles.savingRow}>
-                <Text style={styles.savingName}>{item.name}</Text>
+                <TextInput
+                  placeholder="Objetivo (€)"
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={goal}
+                  onChangeText={setGoal}
+                />
 
-                <View style={styles.infoLine}>
-                  <Text style={styles.infoText}>Objetivo: {item.goal}€</Text>
-                  <Text style={styles.infoText}>
-                    Mensual: {item.monthly_amount}€
-                  </Text>
-                  <Text style={styles.infoText}>
-                    Ahorro: {s.ahorradoActual.toFixed(2)}€
-                  </Text>
-                  <Text style={styles.infoText}>
-                    Pendiente: {s.pendiente.toFixed(2)}€
-                  </Text>
-                  <Text style={styles.infoText}>
-                    Estado: {s.completed ? "✔️" : "⌛"}
-                  </Text>
-                </View>
+                {renderDateInput(startDate, setStartDate, "Fecha inicio")}
+                {renderDateInput(endDate, setEndDate, "Fecha fin")}
 
-                <View style={styles.actionsRowRight}>
-                  <Pressable
-                    style={styles.iconButton}
-                    onPress={() => setSelectedSaving(item)}
-                  >
-                    <Text style={styles.icon}>👁</Text>
-                  </Pressable>
+                <TextInput
+                  placeholder="Ahorro mensual (€)"
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={monthly}
+                  onChangeText={setMonthly}
+                />
 
-                  <Pressable
-                    style={styles.iconButton}
-                    onPress={() => editSaving(item)}
-                  >
-                    <Text style={styles.icon}>✏️</Text>
-                  </Pressable>
+                <TextInput
+                  placeholder="Aportado (€)"
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={contributed}
+                  onChangeText={setContributed}
+                />
 
-                  <Pressable
-                    style={styles.iconButton}
-                    onPress={() => deleteSaving(item)}
-                  >
-                    <Text style={styles.icon}>🗑</Text>
-                  </Pressable>
-                </View>
+                <TextInput
+                  placeholder="Prestado"
+                  style={styles.input}
+                  value={borrowed}
+                  onChangeText={setBorrowed}
+                />
+
+                <Pressable style={styles.primaryButton} onPress={saveNewSaving}>
+                  <Text style={styles.primaryButtonText}>Guardar ahorro</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.secondaryButton}
+                  onPress={() => {
+                    resetCreateForm();
+                    setShowCreateForm(false);
+                  }}
+                >
+                  <Text style={styles.secondaryButtonText}>Cancelar</Text>
+                </Pressable>
               </View>
-            );
-          })
-        )}
-        {/* BOTÓN SIMULAR (SOLO CREAR) */}
-        <Pressable
-          style={styles.expandButton}
-          onPress={() => {
-            resetForm();
-            setEditingId(null); // ← evita modo edición
-            setShowSimulator(true);
-          }}
-        >
-          <Text style={styles.expandText}>Simular ahorro</Text>
-        </Pressable>
-        <Pressable
-          style={styles.expandButton}
-          onPress={() => router.push("/HomePurchase")}
-        >
-          <Text style={styles.expandText}>Simulador de casa</Text>
-        </Pressable>
+
+              {renderResultBox(startDate, endDate, monthly, contributed, goal)}
+            </View>
+          )}
+
+          {selectedSaving && (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <View>
+                  <Text style={styles.title}>{selectedSaving.name}</Text>
+                  <Text style={styles.subtitle}>Detalle del ahorro</Text>
+                </View>
+
+                <Pressable
+                  style={styles.secondaryButtonSmall}
+                  onPress={() => setSelectedSaving(null)}
+                >
+                  <Text style={styles.secondaryButtonText}>Cerrar</Text>
+                </Pressable>
+              </View>
+
+              {renderResultBox(
+                selectedSaving.start_date,
+                selectedSaving.end_date,
+                String(selectedSaving.monthly_amount),
+                String(selectedSaving.contributed),
+                String(selectedSaving.goal),
+              )}
+            </View>
+          )}
+
+          {savings.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>No tienes ahorros todavía</Text>
+            </View>
+          ) : (
+            savings.map((item) => {
+              const result = calculateSaving(
+                item.start_date,
+                item.end_date,
+                Number(item.monthly_amount),
+                Number(item.contributed),
+                Number(item.goal),
+              );
+
+              const isEditing = editingId === item.id;
+
+              return (
+                <View key={item.id} style={styles.savingRow}>
+                  {!isEditing ? (
+                    <>
+                      <View style={styles.savingTopRow}>
+                        <View style={styles.savingInfo}>
+                          <Text style={styles.savingName}>{item.name}</Text>
+                          <Text style={styles.savingMeta}>
+                            {item.start_date} → {item.end_date}
+                          </Text>
+                        </View>
+
+                        <Text style={styles.savingAmount}>
+                          {result.ahorradoActual.toFixed(0)} €
+                        </Text>
+                      </View>
+
+                      <View style={styles.progressBackground}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${Math.min(
+                                100,
+                                Math.max(
+                                  0,
+                                  (result.ahorradoActual / Number(item.goal)) *
+                                    100,
+                                ),
+                              )}%`,
+                            },
+                          ]}
+                        />
+                      </View>
+
+                      <View style={styles.savingSummary}>
+                        <Text style={styles.infoText}>
+                          Objetivo: {Number(item.goal).toFixed(0)} €
+                        </Text>
+                        <Text style={styles.infoText}>
+                          Pendiente: {result.pendiente.toFixed(0)} €
+                        </Text>
+                        <Text style={styles.infoText}>
+                          Mensual: {Number(item.monthly_amount).toFixed(0)} €
+                        </Text>
+                      </View>
+
+                      <View style={styles.actionsRowRight}>
+                        <Pressable
+                          style={styles.iconButton}
+                          onPress={() => {
+                            setSelectedSaving(item);
+                            resetEditForm();
+                          }}
+                        >
+                          <Text style={styles.icon}>👁</Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={styles.iconButton}
+                          onPress={() => startEditSaving(item)}
+                        >
+                          <Text style={styles.icon}>✏️</Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={styles.deleteButton}
+                          onPress={() => deleteSaving(item)}
+                        >
+                          <Text style={styles.icon}>🗑</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.cardHeaderRow}>
+                        <View>
+                          <Text style={styles.title}>
+                            Editando: {item.name}
+                          </Text>
+                          <Text style={styles.subtitle}>
+                            Cambios solo en este ahorro
+                          </Text>
+                        </View>
+
+                        <Pressable
+                          style={styles.secondaryButtonSmall}
+                          onPress={resetEditForm}
+                        >
+                          <Text style={styles.secondaryButtonText}>
+                            Cancelar
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      <View style={styles.formBox}>
+                        <TextInput
+                          placeholder="Nombre del ahorro"
+                          style={styles.input}
+                          value={editName}
+                          onChangeText={setEditName}
+                        />
+
+                        <TextInput
+                          placeholder="Objetivo (€)"
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={editGoal}
+                          onChangeText={setEditGoal}
+                        />
+
+                        {renderDateInput(
+                          editStartDate,
+                          setEditStartDate,
+                          "Fecha inicio",
+                        )}
+
+                        {renderDateInput(
+                          editEndDate,
+                          setEditEndDate,
+                          "Fecha fin",
+                        )}
+
+                        <TextInput
+                          placeholder="Ahorro mensual (€)"
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={editMonthly}
+                          onChangeText={setEditMonthly}
+                        />
+
+                        <TextInput
+                          placeholder="Aportado (€)"
+                          style={styles.input}
+                          keyboardType="numeric"
+                          value={editContributed}
+                          onChangeText={setEditContributed}
+                        />
+
+                        <TextInput
+                          placeholder="Prestado"
+                          style={styles.input}
+                          value={editBorrowed}
+                          onChangeText={setEditBorrowed}
+                        />
+
+                        <Pressable
+                          style={styles.primaryButton}
+                          onPress={saveEditSaving}
+                        >
+                          <Text style={styles.primaryButtonText}>
+                            Guardar cambios
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={styles.secondaryButton}
+                          onPress={resetEditForm}
+                        >
+                          <Text style={styles.secondaryButtonText}>
+                            Cancelar
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      {renderResultBox(
+                        editStartDate,
+                        editEndDate,
+                        editMonthly,
+                        editContributed,
+                        editGoal,
+                      )}
+                    </>
+                  )}
+                </View>
+              );
+            })
+          )}
+
+          <Pressable
+            style={styles.homeButton}
+            onPress={() => router.push("/HomePurchase")}
+          >
+            <Text style={styles.homeButtonText}>Simulador de casa</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-// -----------------------------------------------------
-// ESTILOS
-// -----------------------------------------------------
+const isWeb = Platform.OS === "web";
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+
   container: {
-    padding: 20,
-    backgroundColor: "#F4F7FA",
+    flexGrow: 1,
+    padding: isWeb ? 28 : 14,
+    paddingBottom: 42,
+    alignItems: "center",
   },
 
-  expandButton: {
-    backgroundColor: "#2563EB",
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 15,
+  content: {
+    width: "100%",
+    maxWidth: 940,
   },
 
-  expandText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "600",
+  headerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: isWeb ? 18 : 15,
+    marginBottom: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  headerTitle: {
+    fontSize: isWeb ? 24 : 20,
+    fontWeight: "900",
+    color: colors.text,
+  },
+
+  headerSubtitle: {
+    fontSize: isWeb ? 14 : 12,
+    color: colors.mutedText,
+    marginTop: 4,
   },
 
   card: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 20,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: isWeb ? 16 : 13,
+    marginBottom: 16,
   },
 
-  detailCard: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 14,
-    marginBottom: 20,
-  },
-
-  detailTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 10,
+  cardHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
   },
 
   title: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 10,
+    fontSize: isWeb ? 18 : 16,
+    fontWeight: "900",
+    color: colors.text,
+  },
+
+  subtitle: {
+    fontSize: isWeb ? 13 : 11,
+    color: colors.mutedText,
+    marginTop: 3,
+  },
+
+  formBox: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    marginBottom: 12,
   },
 
   input: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     borderRadius: 10,
-    padding: 10,
-    marginTop: 8,
+    padding: isWeb ? 11 : 9,
+    marginBottom: 8,
+    fontSize: isWeb ? 14 : 12,
+    color: colors.text,
   },
 
   webDate: {
-    padding: 10,
-    marginTop: 8,
-    borderRadius: 10,
+    backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: isWeb ? 11 : 9,
+    marginBottom: 8,
+    fontSize: isWeb ? 14 : 12,
+    color: colors.text,
   },
 
   resultBox: {
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    overflow: "hidden",
+  },
+
+  resultRow: {
+    paddingVertical: isWeb ? 11 : 9,
+    paddingHorizontal: isWeb ? 14 : 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSoft,
+  },
+
+  resultLabel: {
+    fontSize: isWeb ? 13 : 11,
+    color: colors.mutedText,
+    fontWeight: "800",
+  },
+
+  resultValue: {
+    fontSize: isWeb ? 13 : 11,
+    color: colors.text,
+    fontWeight: "900",
+  },
+
+  successText: {
+    color: colors.success,
+  },
+
+  pendingText: {
+    color: colors.warning,
+  },
+
+  addButton: {
+    backgroundColor: colors.primarySoft,
+    paddingVertical: isWeb ? 10 : 8,
+    paddingHorizontal: isWeb ? 14 : 12,
     borderRadius: 10,
   },
 
-  button: {
-    backgroundColor: "#16A34A",
-    padding: 14,
+  addButtonText: {
+    color: colors.primaryDark,
+    fontSize: isWeb ? 14 : 12,
+    fontWeight: "900",
+  },
+
+  primaryButton: {
+    backgroundColor: colors.primaryDark,
+    padding: isWeb ? 12 : 10,
     borderRadius: 10,
-    marginTop: 12,
     alignItems: "center",
+    marginTop: 4,
   },
 
-  buttonText: {
-    color: "#fff",
-    fontWeight: "700",
+  primaryButtonText: {
+    color: colors.white,
+    fontWeight: "900",
+    fontSize: isWeb ? 14 : 12,
   },
 
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 10,
+  secondaryButton: {
+    backgroundColor: colors.primarySoft,
+    padding: isWeb ? 11 : 9,
+    borderRadius: 10,
+    alignItems: "center",
+    marginTop: 8,
+  },
+
+  secondaryButtonSmall: {
+    backgroundColor: colors.primarySoft,
+    paddingVertical: isWeb ? 8 : 7,
+    paddingHorizontal: isWeb ? 12 : 10,
+    borderRadius: 10,
+  },
+
+  secondaryButtonText: {
+    color: colors.primaryDark,
+    fontWeight: "900",
+    fontSize: isWeb ? 13 : 11,
+  },
+
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    marginBottom: 16,
   },
 
   emptyText: {
-    color: "#6B7280",
+    color: colors.mutedText,
+    fontSize: isWeb ? 14 : 12,
   },
 
   savingRow: {
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-    zIndex: 10,
-    elevation: 3,
-    pointerEvents: "auto",
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: isWeb ? 16 : 13,
+    marginBottom: 14,
+  },
+
+  savingTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+
+  savingInfo: {
+    flex: 1,
   },
 
   savingName: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 4,
+    fontSize: isWeb ? 17 : 15,
+    fontWeight: "800",
+    color: colors.text,
   },
 
-  infoLine: {
+  savingMeta: {
+    fontSize: isWeb ? 12 : 10,
+    color: colors.mutedText,
+    marginTop: 3,
+  },
+
+  savingAmount: {
+    fontSize: isWeb ? 20 : 17,
+    fontWeight: "900",
+    color: colors.primaryDark,
+  },
+
+  progressBackground: {
+    height: 8,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 999,
+    overflow: "hidden",
+    marginTop: 12,
+  },
+
+  progressFill: {
+    height: "100%",
+    backgroundColor: colors.primaryDark,
+    borderRadius: 999,
+  },
+
+  savingSummary: {
     flexDirection: "row",
     flexWrap: "wrap",
-    columnGap: 12,
-    rowGap: 4,
-    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
   },
 
   infoText: {
-    fontSize: 13,
-    color: "#374151",
+    fontSize: isWeb ? 12 : 10,
+    color: colors.mutedText,
+    fontWeight: "700",
   },
 
   actionsRowRight: {
-    marginTop: 6,
+    marginTop: 12,
     flexDirection: "row",
     justifyContent: "flex-end",
-    columnGap: 8,
-    flexShrink: 1,
-    zIndex: 20,
+    gap: 6,
   },
 
   iconButton: {
-    padding: 6,
-    backgroundColor: "#E5E7EB",
+    width: isWeb ? 30 : 28,
+    height: isWeb ? 30 : 28,
     borderRadius: 8,
-    zIndex: 30,
-    elevation: 5,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  deleteButton: {
+    width: isWeb ? 30 : 28,
+    height: isWeb ? 30 : 28,
+    borderRadius: 8,
+    backgroundColor: "#FEF2F2",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   icon: {
-    fontSize: 16,
+    fontSize: isWeb ? 12 : 10,
   },
 
-  red: {
-    color: "#DC2626",
-    fontWeight: "600",
+  homeButton: {
+    backgroundColor: colors.primaryDark,
+    padding: isWeb ? 13 : 11,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 18,
   },
 
-  green: {
-    color: "#16A34A",
-    fontWeight: "600",
+  homeButtonText: {
+    color: colors.white,
+    fontWeight: "900",
+    fontSize: isWeb ? 14 : 12,
   },
+
   settingsButton: {
     position: "absolute",
     top: 24,
     right: 24,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#FFFFFF",
+    width: isWeb ? 42 : 38,
+    height: isWeb ? 42 : 38,
+    borderRadius: 999,
+    backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+    zIndex: 10,
   },
 
   settingsButtonText: {
-    marginBottom: 25,
-    fontSize: 22,
+    fontSize: isWeb ? 22 : 20,
+    lineHeight: 24,
+    color: colors.text,
+    fontWeight: "900",
   },
 });
