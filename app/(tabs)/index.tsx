@@ -1,19 +1,10 @@
 import { supabase } from "@/src/lib/supabase";
-import { colors } from "@/src/theme/colors";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function HomeScreen() {
-  const [userName, setUserName] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(
     new Date().toISOString().slice(0, 7),
   );
@@ -25,29 +16,34 @@ export default function HomeScreen() {
     savings: 0,
   });
 
-  const totalExpenses = summary.fixedPaid + summary.variables;
-  const available = summary.salary - totalExpenses;
-
-  const loadProfile = async () => {
+  const getCurrentUser = async () => {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (!user) return;
+    return session?.user ?? null;
+  };
 
-    const { data } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", user.id)
-      .single();
+  const changeMonth = (offset: number) => {
+    const [year, month] = selectedMonth.split("-").map(Number);
 
-    setUserName(data?.username || "Usuario");
+    let newYear = year;
+    let newMonth = month + offset;
+
+    if (newMonth < 1) {
+      newMonth += 12;
+      newYear -= 1;
+    } else if (newMonth > 12) {
+      newMonth -= 12;
+      newYear += 1;
+    }
+
+    const monthStr = String(newMonth).padStart(2, "0");
+    setSelectedMonth(`${newYear}-${monthStr}`);
   };
 
   const loadMonthlySummary = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -55,7 +51,14 @@ export default function HomeScreen() {
       .from("profiles")
       .select("salary")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
+
+    if (!profile) {
+      await supabase.from("profiles").insert({
+        id: user.id,
+        salary: 0,
+      });
+    }
 
     const salary = Number(profile?.salary || 0);
 
@@ -89,9 +92,9 @@ export default function HomeScreen() {
     if (savingsList) {
       const now = new Date();
 
-      savingsList.forEach((item) => {
-        const start = new Date(item.start_date);
-        const end = new Date(item.end_date);
+      savingsList.forEach((saving) => {
+        const start = new Date(saving.start_date);
+        const end = new Date(saving.end_date);
 
         const totalMonths =
           (end.getFullYear() - start.getFullYear()) * 12 +
@@ -101,13 +104,13 @@ export default function HomeScreen() {
           (now.getFullYear() - start.getFullYear()) * 12 +
           (now.getMonth() - start.getMonth());
 
-        const passedMonths = Math.min(totalMonths, Math.max(0, rawPassed));
+        const passedMonths = Math.max(0, Math.min(totalMonths, rawPassed));
 
-        const currentSaving =
-          Number(item.contributed || 0) +
-          passedMonths * Number(item.monthly_amount || 0);
+        const ahorradoActual =
+          Number(saving.contributed || 0) +
+          passedMonths * Number(saving.monthly_amount || 0);
 
-        totalSavings += currentSaving;
+        totalSavings += ahorradoActual;
       });
     }
 
@@ -119,21 +122,18 @@ export default function HomeScreen() {
     });
   };
 
-  const loadAll = async () => {
-    await loadProfile();
-    await loadMonthlySummary();
-  };
-
   useEffect(() => {
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (!data.session) {
+      if (!session) {
         setTimeout(checkSession, 200);
         return;
       }
 
-      await loadAll();
+      await loadMonthlySummary();
     };
 
     checkSession();
@@ -141,7 +141,7 @@ export default function HomeScreen() {
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
         if (session?.user) {
-          await loadAll();
+          await loadMonthlySummary();
         }
       },
     );
@@ -153,27 +153,8 @@ export default function HomeScreen() {
     loadMonthlySummary();
   }, [selectedMonth]);
 
-  const changeMonth = (offset: number) => {
-    const [year, month] = selectedMonth.split("-").map(Number);
-
-    let newYear = year;
-    let newMonth = month + offset;
-
-    if (newMonth < 1) {
-      newMonth = 12;
-      newYear -= 1;
-    }
-
-    if (newMonth > 12) {
-      newMonth = 1;
-      newYear += 1;
-    }
-
-    setSelectedMonth(`${newYear}-${String(newMonth).padStart(2, "0")}`);
-  };
-
   return (
-    <View style={styles.screen}>
+    <View style={{ flex: 1 }}>
       <Header title="Inicio" />
 
       <Pressable
@@ -183,232 +164,135 @@ export default function HomeScreen() {
         <Text style={styles.settingsButtonText}>☰</Text>
       </Pressable>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.content}>
-          <View style={styles.headerBlock}>
-            <Text style={styles.logo}>AccountWise</Text>
-            <Text style={styles.subtitle}>Resumen mensual</Text>
-            <Text style={styles.helloText}>Hola, {userName}</Text>
-          </View>
+      <View style={styles.card}>
+        <Text style={styles.logo}>AccountWise</Text>
 
-          <View style={styles.monthCard}>
-            <Pressable
-              style={styles.monthButton}
-              onPress={() => changeMonth(-1)}
-            >
-              <Text style={styles.monthButtonText}>‹</Text>
-            </Pressable>
+        <Text style={styles.title}>Resumen mensual</Text>
 
-            <Text style={styles.monthText}>{selectedMonth}</Text>
+        <View style={styles.monthRow}>
+          <Text style={styles.monthArrow} onPress={() => changeMonth(-1)}>
+            ◀
+          </Text>
 
-            <Pressable
-              style={styles.monthButton}
-              onPress={() => changeMonth(1)}
-            >
-              <Text style={styles.monthButtonText}>›</Text>
-            </Pressable>
-          </View>
+          <Text style={styles.monthText}>{selectedMonth}</Text>
 
-          <View style={styles.balanceCard}>
-            <View>
-              <Text style={styles.balanceLabel}>Balance mensual</Text>
-              <Text style={styles.balanceSubText}>Disponible este mes</Text>
-            </View>
-
-            <Text style={styles.balanceAmount}>{available} €</Text>
-          </View>
-
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Ingresos</Text>
-              <Text style={styles.summaryAmount}>{summary.salary} €</Text>
-            </View>
-
-            <View style={styles.separator} />
-
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Gastos</Text>
-              <Text style={styles.summaryAmount}>{totalExpenses} €</Text>
-            </View>
-
-            <View style={styles.separator} />
-
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Ahorros</Text>
-              <Text style={styles.summaryAmount}>{summary.savings} €</Text>
-            </View>
-          </View>
+          <Text style={styles.monthArrow} onPress={() => changeMonth(1)}>
+            ▶
+          </Text>
         </View>
-      </ScrollView>
+
+        <View style={styles.summaryBox}>
+          <Text style={styles.summaryLabel}>Ingresos</Text>
+          <Text style={styles.summaryAmount}>{summary.salary} €</Text>
+        </View>
+
+        <View style={styles.summaryBox}>
+          <Text style={styles.summaryLabel}>Gastos</Text>
+          <Text style={styles.summaryAmount}>
+            {summary.fixedPaid + summary.variables} €
+          </Text>
+        </View>
+
+        <View style={styles.summaryBox}>
+          <Text style={styles.summaryLabel}>Ahorros</Text>
+          <Text style={styles.summaryAmount}>
+            {summary.savings.toFixed(0)} €
+          </Text>
+        </View>
+      </View>
     </View>
   );
 }
 
-const isWeb = Platform.OS === "web";
-
 const styles = StyleSheet.create({
-  screen: {
+  card: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-
-  container: {
-    flexGrow: 1,
-    padding: isWeb ? 28 : 16,
-    paddingBottom: 36,
-    alignItems: "center",
-  },
-
-  content: {
     width: "100%",
-    maxWidth: 760,
-  },
-
-  headerBlock: {
-    marginTop: isWeb ? 20 : 10,
-    marginBottom: 16,
+    maxWidth: 420,
+    backgroundColor: "#FFFFFF",
+    padding: 28,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+    height: "100%",
   },
 
   logo: {
-    fontSize: isWeb ? 32 : 26,
-    fontWeight: "900",
-    color: colors.text,
-    textAlign: "center",
-  },
-
-  subtitle: {
-    fontSize: isWeb ? 18 : 15,
+    fontSize: 34,
     fontWeight: "800",
-    color: colors.text,
-    textAlign: "center",
-    marginTop: 8,
+    color: "#1F2937",
+    marginBottom: 18,
   },
 
-  helloText: {
-    fontSize: isWeb ? 14 : 12,
-    color: colors.mutedText,
+  title: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#111827",
     textAlign: "center",
-    marginTop: 4,
-  },
-
-  monthCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     marginBottom: 12,
   },
 
-  monthButton: {
-    width: isWeb ? 34 : 30,
-    height: isWeb ? 34 : 30,
-    borderRadius: 999,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
+  monthRow: {
+    width: "100%",
+    flexDirection: "row",
     justifyContent: "center",
+    gap: 10,
+    alignItems: "center",
+    marginBottom: 8,
   },
 
-  monthButtonText: {
-    fontSize: isWeb ? 24 : 22,
-    lineHeight: isWeb ? 26 : 24,
-    color: colors.primaryDark,
-    fontWeight: "900",
+  monthArrow: {
+    fontSize: 16,
   },
 
   monthText: {
-    fontSize: isWeb ? 16 : 14,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  balanceCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: isWeb ? 18 : 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  balanceLabel: {
-    fontSize: isWeb ? 15 : 13,
-    fontWeight: "800",
-    color: colors.text,
-  },
-
-  balanceSubText: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    marginTop: 3,
-  },
-
-  balanceAmount: {
-    fontSize: isWeb ? 28 : 24,
-    fontWeight: "900",
-    color: colors.primaryDark,
-  },
-
-  summaryCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-
-  summaryRow: {
-    paddingVertical: isWeb ? 14 : 12,
-    paddingHorizontal: isWeb ? 16 : 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  summaryLabel: {
-    fontSize: isWeb ? 14 : 12,
-    color: colors.mutedText,
-    fontWeight: "700",
-  },
-
-  summaryAmount: {
-    fontSize: isWeb ? 17 : 15,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  separator: {
-    height: 1,
-    backgroundColor: colors.borderSoft,
+    fontSize: 15,
+    color: "#111827",
   },
 
   settingsButton: {
     position: "absolute",
     top: 24,
     right: 24,
-    width: isWeb ? 42 : 38,
-    height: isWeb ? 42 : 38,
-    borderRadius: 999,
-    backgroundColor: colors.white,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
     zIndex: 10,
   },
 
   settingsButtonText: {
-    fontSize: isWeb ? 22 : 20,
-    color: colors.text,
-    fontWeight: "900",
+    marginBottom: 25,
+    fontSize: 22,
+  },
+
+  summaryBox: {
+    width: "100%",
+    backgroundColor: "#F9FAFB",
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
+  },
+
+  summaryLabel: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginBottom: 4,
+  },
+
+  summaryAmount: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#111827",
   },
 });
