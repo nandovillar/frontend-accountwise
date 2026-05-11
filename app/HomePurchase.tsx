@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -77,6 +78,10 @@ const defaultSimulation = {
 };
 
 export default function HomePurchaseScreen() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+
   const [simulations, setSimulations] = useState<Simulation[]>([]);
   const [selectedSimulationId, setSelectedSimulationId] = useState<
     string | null
@@ -550,7 +555,12 @@ export default function HomePurchaseScreen() {
                   : "Simulación de ejemplo"}
               </Text>
 
-              <Text style={styles.titleText} numberOfLines={1}>
+              <Text
+                style={styles.titleText}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
                 {name}
               </Text>
 
@@ -579,7 +589,7 @@ export default function HomePurchaseScreen() {
                 style={styles.heroAmount}
                 numberOfLines={1}
                 adjustsFontSizeToFit
-                minimumFontScale={0.55}
+                minimumFontScale={0.45}
               >
                 {formatMoney(totalProperty)}
               </Text>
@@ -594,9 +604,21 @@ export default function HomePurchaseScreen() {
           </View>
 
           <View style={styles.kpiGrid}>
-            <KpiCard label="Entrada" value={formatMoney(down)} />
-            <KpiCard label="Hipoteca" value={formatMoney(mortgage)} />
-            <KpiCard label="Cuota" value={formatMoney(monthlyPayment)} />
+            <KpiCard
+              label="Entrada"
+              value={formatMoney(down)}
+              styles={styles}
+            />
+            <KpiCard
+              label="Hipoteca"
+              value={formatMoney(mortgage)}
+              styles={styles}
+            />
+            <KpiCard
+              label="Cuota"
+              value={formatMoney(monthlyPayment)}
+              styles={styles}
+            />
           </View>
 
           <View style={styles.actionsCard}>
@@ -609,27 +631,32 @@ export default function HomePurchaseScreen() {
               </Text>
             </Pressable>
 
-            <Pressable style={styles.secondaryButton} onPress={cleanToExample}>
-              <Ionicons
-                name="refresh-outline"
-                size={18}
-                color={colors.primaryDark}
-              />
-              <Text style={styles.secondaryButtonText}>Limpiar</Text>
-            </Pressable>
+            <View style={styles.secondaryActionsRow}>
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={cleanToExample}
+              >
+                <Ionicons
+                  name="refresh-outline"
+                  size={17}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.secondaryButtonText}>Limpiar</Text>
+              </Pressable>
 
-            <Pressable style={styles.secondaryButton} onPress={exitSimulator}>
-              <Ionicons
-                name="exit-outline"
-                size={18}
-                color={colors.primaryDark}
-              />
-              <Text style={styles.secondaryButtonText}>Salir</Text>
-            </Pressable>
+              <Pressable style={styles.secondaryButton} onPress={exitSimulator}>
+                <Ionicons
+                  name="exit-outline"
+                  size={17}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.secondaryButtonText}>Salir</Text>
+              </Pressable>
+            </View>
 
             {selectedSimulationId && (
               <Pressable style={styles.dangerButton} onPress={deleteSimulation}>
-                <Ionicons name="trash-outline" size={18} color="#B91C1C" />
+                <Ionicons name="trash-outline" size={17} color="#B91C1C" />
                 <Text style={styles.dangerButtonText}>Eliminar</Text>
               </Pressable>
             )}
@@ -687,29 +714,39 @@ export default function HomePurchaseScreen() {
               title="Costes del inmueble"
               subtitle="Precio, impuestos y gastos iniciales"
               onEdit={() => openEdit("property")}
+              styles={styles}
             />
 
-            <ResultRow label="Precio inmueble" value={formatMoney(price)} />
+            <ResultRow
+              label="Precio inmueble"
+              value={formatMoney(price)}
+              styles={styles}
+            />
             <ResultRow
               label={`Agencia (${agencyPercent}%)`}
               value={formatMoney(agency)}
+              styles={styles}
             />
             <ResultRow
               label={`ITP / IVA (${taxPercent}%)`}
               value={formatMoney(tax)}
+              styles={styles}
             />
             <ResultRow
               label="Comisión financiera"
               value={formatMoney(financial)}
+              styles={styles}
             />
             <ResultRow
               label={`Notaría + Registro (${notaryPercent}%)`}
               value={formatMoney(notary)}
+              styles={styles}
             />
             <ResultRow
               label="Total inmueble"
               value={formatMoney(totalProperty)}
               strong
+              styles={styles}
             />
           </View>
 
@@ -719,21 +756,33 @@ export default function HomePurchaseScreen() {
               title="Entrada e hipoteca"
               subtitle="Qué pagas tú y qué financias"
               onEdit={() => openEdit("mortgage")}
+              styles={styles}
             />
 
-            <ResultRow label="Entrada" value={formatMoney(down)} />
-            <ResultRow label="Hipoteca" value={formatMoney(mortgage)} />
+            <ResultRow
+              label="Entrada"
+              value={formatMoney(down)}
+              styles={styles}
+            />
+            <ResultRow
+              label="Hipoteca"
+              value={formatMoney(mortgage)}
+              styles={styles}
+            />
             <ResultRow
               label="% cubierto"
               value={`${coveredPercent.toFixed(2)}%`}
+              styles={styles}
             />
             <ResultRow
               label="% restante"
               value={`${remainingPercent.toFixed(2)}%`}
+              styles={styles}
             />
             <ResultRow
               label="Notaría pendiente"
               value={formatMoney(toNumber(pendingNotary))}
+              styles={styles}
             />
           </View>
 
@@ -743,30 +792,40 @@ export default function HomePurchaseScreen() {
               title="Banco"
               subtitle="TIN, bonificaciones y cuota"
               onEdit={() => openEdit("bank")}
+              styles={styles}
             />
 
-            <ResultRow label="Años" value={years} />
+            <ResultRow label="Años" value={years} styles={styles} />
             <ResultRow
               label="TIN inicial"
               value={`${toNumber(tin).toFixed(2)}%`}
+              styles={styles}
             />
             <ResultRow
               label="Bonificación total"
               value={`${bonusTotal.toFixed(2)}%`}
+              styles={styles}
             />
-            <ResultRow label="TIN final" value={`${finalTin.toFixed(2)}%`} />
+            <ResultRow
+              label="TIN final"
+              value={`${finalTin.toFixed(2)}%`}
+              styles={styles}
+            />
             <ResultRow
               label="Cuota mensual"
               value={formatMoney(monthlyPayment)}
               strong
+              styles={styles}
             />
             <ResultRow
               label="Intereses estimados"
               value={formatMoney(totalInterest)}
+              styles={styles}
             />
             <ResultRow
               label="Total pagado al banco"
               value={formatMoney(totalBankCost)}
+              styles={styles}
             />
           </View>
         </View>
@@ -777,12 +836,14 @@ export default function HomePurchaseScreen() {
           label="Inicio"
           icon="home-outline"
           onPress={() => router.push("/")}
+          styles={styles}
         />
 
         <BottomItem
           label="Gastos"
           icon="card-outline"
           onPress={() => router.push("/expenses")}
+          styles={styles}
         />
 
         <BottomItem
@@ -790,6 +851,7 @@ export default function HomePurchaseScreen() {
           icon="wallet-outline"
           active
           onPress={() => router.push("/savings")}
+          styles={styles}
         />
       </View>
 
@@ -802,7 +864,7 @@ export default function HomePurchaseScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <View>
+              <View style={styles.modalTitleBlock}>
                 <Text style={styles.modalTitle}>
                   {editMode === "main" && "Editar simulación"}
                   {editMode === "property" && "Editar costes"}
@@ -830,6 +892,7 @@ export default function HomePurchaseScreen() {
                   value={draftName}
                   onChange={setDraftName}
                   keyboardType="default"
+                  styles={styles}
                 />
               )}
 
@@ -839,30 +902,35 @@ export default function HomePurchaseScreen() {
                     label="Precio del inmueble (€)"
                     value={draftPropertyPrice}
                     onChange={setDraftPropertyPrice}
+                    styles={styles}
                   />
 
                   <Input
                     label="Agencia (%)"
                     value={draftAgencyPercent}
                     onChange={setDraftAgencyPercent}
+                    styles={styles}
                   />
 
                   <Input
                     label="ITP / IVA (%)"
                     value={draftTaxPercent}
                     onChange={setDraftTaxPercent}
+                    styles={styles}
                   />
 
                   <Input
                     label="Comisión financiera (€)"
                     value={draftFinancialFee}
                     onChange={setDraftFinancialFee}
+                    styles={styles}
                   />
 
                   <Input
                     label="Notaría + Registro (%)"
                     value={draftNotaryPercent}
                     onChange={setDraftNotaryPercent}
+                    styles={styles}
                   />
                 </>
               )}
@@ -873,12 +941,14 @@ export default function HomePurchaseScreen() {
                     label="Entrada (€)"
                     value={draftDownPayment}
                     onChange={setDraftDownPayment}
+                    styles={styles}
                   />
 
                   <Input
                     label="Notaría pendiente (€)"
                     value={draftPendingNotary}
                     onChange={setDraftPendingNotary}
+                    styles={styles}
                   />
                 </>
               )}
@@ -889,36 +959,42 @@ export default function HomePurchaseScreen() {
                     label="Años"
                     value={draftYears}
                     onChange={setDraftYears}
+                    styles={styles}
                   />
 
                   <Input
                     label="TIN (%)"
                     value={draftTin}
                     onChange={setDraftTin}
+                    styles={styles}
                   />
 
                   <Input
                     label="Bonificación base (%)"
                     value={draftBonus}
                     onChange={setDraftBonus}
+                    styles={styles}
                   />
 
                   <Input
                     label="Bonificación nómina (%)"
                     value={draftSalaryBonus}
                     onChange={setDraftSalaryBonus}
+                    styles={styles}
                   />
 
                   <Input
                     label="Seguro vida (%)"
                     value={draftLifeInsurance}
                     onChange={setDraftLifeInsurance}
+                    styles={styles}
                   />
 
                   <Input
                     label="Seguro hogar (%)"
                     value={draftHomeInsurance}
                     onChange={setDraftHomeInsurance}
+                    styles={styles}
                   />
                 </>
               )}
@@ -946,7 +1022,7 @@ export default function HomePurchaseScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCardSmall}>
             <View style={styles.modalHeader}>
-              <View>
+              <View style={styles.modalTitleBlock}>
                 <Text style={styles.modalTitle}>Guardar simulación</Text>
                 <Text style={styles.modalSubtitle}>
                   Ponle un nombre para encontrarla después
@@ -966,6 +1042,7 @@ export default function HomePurchaseScreen() {
               value={newSimulationName}
               onChange={setNewSimulationName}
               keyboardType="default"
+              styles={styles}
             />
 
             <View style={styles.modalActions}>
@@ -995,17 +1072,19 @@ function BottomItem({
   icon,
   active,
   onPress,
+  styles,
 }: {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   active?: boolean;
   onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <Pressable style={styles.bottomItem} onPress={onPress}>
       <Ionicons
         name={icon}
-        size={24}
+        size={22}
         color={active ? colors.primaryDark : colors.mutedText}
       />
       <Text style={[styles.bottomText, active && styles.bottomTextActive]}>
@@ -1015,7 +1094,15 @@ function BottomItem({
   );
 }
 
-function KpiCard({ label, value }: { label: string; value: string }) {
+function KpiCard({
+  label,
+  value,
+  styles,
+}: {
+  label: string;
+  value: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
   return (
     <View style={styles.kpiCard}>
       <Text style={styles.kpiLabel}>{label}</Text>
@@ -1024,7 +1111,7 @@ function KpiCard({ label, value }: { label: string; value: string }) {
         style={styles.kpiValue}
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.55}
+        minimumFontScale={0.5}
       >
         {value}
       </Text>
@@ -1037,27 +1124,33 @@ function SectionHeader({
   title,
   subtitle,
   onEdit,
+  styles,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   subtitle: string;
   onEdit: () => void;
+  styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionHeaderLeft}>
         <View style={styles.sectionIcon}>
-          <Ionicons name={icon} size={20} color={colors.primaryDark} />
+          <Ionicons name={icon} size={18} color={colors.primaryDark} />
         </View>
 
         <View style={styles.sectionTitleBlock}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+          <Text style={styles.sectionTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.sectionSubtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
         </View>
       </View>
 
       <Pressable style={styles.sectionEditButton} onPress={onEdit}>
-        <Ionicons name="create-outline" size={18} color={colors.primaryDark} />
+        <Ionicons name="create-outline" size={17} color={colors.primaryDark} />
       </Pressable>
     </View>
   );
@@ -1067,20 +1160,24 @@ function ResultRow({
   label,
   value,
   strong,
+  styles,
 }: {
   label: string;
   value: string;
   strong?: boolean;
+  styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <View style={styles.resultRow}>
-      <Text style={styles.resultLabel}>{label}</Text>
+      <Text style={styles.resultLabel} numberOfLines={1}>
+        {label}
+      </Text>
 
       <Text
         style={[styles.resultValue, strong && styles.resultValueStrong]}
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.75}
+        minimumFontScale={0.7}
       >
         {value}
       </Text>
@@ -1093,11 +1190,13 @@ function Input({
   value,
   onChange,
   keyboardType = "numeric",
+  styles,
 }: {
   label: string;
   value: string;
   onChange: (text: string) => void;
   keyboardType?: "numeric" | "default";
+  styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <View style={styles.inputGroup}>
@@ -1113,546 +1212,555 @@ function Input({
   );
 }
 
-const isWeb = Platform.OS === "web";
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-
-  container: {
-    flexGrow: 1,
-    padding: isWeb ? 28 : 14,
-    paddingBottom: 100,
-    alignItems: "center",
-  },
-
-  content: {
-    width: "100%",
-    maxWidth: 980,
-  },
-
-  settingsButton: {
-    position: "absolute",
-    top: 24,
-    right: 24,
-    width: isWeb ? 42 : 38,
-    height: isWeb ? 42 : 38,
-    borderRadius: 999,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-    zIndex: 20,
-  },
-
-  settingsButtonText: {
-    fontSize: isWeb ? 22 : 20,
-    lineHeight: 24,
-    color: colors.text,
-    fontWeight: "900",
-  },
-
-  titleCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: isWeb ? 18 : 15,
-    marginBottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  titleTextBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  titleLabel: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    fontWeight: "800",
-    marginBottom: 4,
-  },
-
-  titleText: {
-    fontSize: isWeb ? 22 : 18,
-    color: colors.text,
-    fontWeight: "900",
-  },
-
-  titleSubtitle: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    marginTop: 4,
-  },
-
-  iconEditButton: {
-    width: isWeb ? 42 : 38,
-    height: isWeb ? 42 : 38,
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  heroCard: {
-    backgroundColor: colors.primaryDark,
-    borderRadius: 20,
-    padding: isWeb ? 22 : 18,
-    marginBottom: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 14,
-  },
-
-  heroTextBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  heroLabel: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.white,
-    opacity: 0.85,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
-
-  heroAmount: {
-    fontSize: isWeb ? 34 : 31,
-    color: colors.white,
-    fontWeight: "900",
-  },
-
-  coveredBox: {
-    width: isWeb ? 96 : 76,
-    height: isWeb ? 76 : 68,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  coveredValue: {
-    color: colors.white,
-    fontSize: isWeb ? 23 : 20,
-    fontWeight: "900",
-  },
-
-  coveredLabel: {
-    color: colors.white,
-    fontSize: isWeb ? 11 : 9,
-    fontWeight: "800",
-    opacity: 0.9,
-  },
-
-  kpiGrid: {
-    flexDirection: isWeb ? "row" : "column",
-    gap: 10,
-    marginBottom: 14,
-  },
-
-  kpiCard: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: isWeb ? 15 : 14,
-  },
-
-  kpiLabel: {
-    fontSize: isWeb ? 12 : 11,
-    color: colors.mutedText,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
-
-  kpiValue: {
-    fontSize: isWeb ? 19 : 20,
-    color: colors.text,
-    fontWeight: "900",
-  },
-
-  actionsCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 10,
-    marginBottom: 14,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-
-  primaryButton: {
-    width: "100%",
-    backgroundColor: colors.primaryDark,
-    borderRadius: 12,
-    paddingVertical: isWeb ? 12 : 11,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-
-  primaryButtonText: {
-    color: colors.white,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  secondaryButton: {
-    flexGrow: 1,
-    width: isWeb ? undefined : "48%",
-    minWidth: isWeb ? 140 : 0,
-    backgroundColor: colors.primarySoft,
-    borderRadius: 12,
-    paddingVertical: isWeb ? 12 : 11,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-
-  secondaryButtonText: {
-    color: colors.primaryDark,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  dangerButton: {
-    flexGrow: 1,
-    width: isWeb ? undefined : "48%",
-    minWidth: isWeb ? 140 : 0,
-    backgroundColor: "#FEF2F2",
-    borderRadius: 12,
-    paddingVertical: isWeb ? 12 : 11,
-    paddingHorizontal: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-
-  dangerButtonText: {
-    color: "#B91C1C",
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  savedCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 13,
-    marginBottom: 14,
-  },
-
-  savedTitle: {
-    fontSize: isWeb ? 15 : 13,
-    fontWeight: "900",
-    color: colors.text,
-    marginBottom: 10,
-  },
-
-  savedList: {
-    gap: 8,
-  },
-
-  savedItem: {
-    width: isWeb ? 170 : 150,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 11,
-  },
-
-  savedItemActive: {
-    backgroundColor: colors.primaryDark,
-    borderColor: colors.primaryDark,
-  },
-
-  savedItemTitle: {
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-    color: colors.text,
-    marginBottom: 4,
-  },
-
-  savedItemTitleActive: {
-    color: colors.white,
-  },
-
-  savedItemSubtitle: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    fontWeight: "700",
-  },
-
-  savedItemSubtitleActive: {
-    color: colors.white,
-    opacity: 0.9,
-  },
-
-  sectionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: isWeb ? 16 : 13,
-    marginBottom: 14,
-  },
-
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-    gap: 10,
-  },
-
-  sectionHeaderLeft: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  sectionIcon: {
-    width: isWeb ? 38 : 34,
-    height: isWeb ? 38 : 34,
-    borderRadius: 12,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  sectionTitleBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  sectionTitle: {
-    fontSize: isWeb ? 17 : 15,
-    color: colors.text,
-    fontWeight: "900",
-  },
-
-  sectionSubtitle: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    marginTop: 3,
-  },
-
-  sectionEditButton: {
-    width: isWeb ? 36 : 32,
-    height: isWeb ? 36 : 32,
-    borderRadius: 10,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  resultRow: {
-    paddingVertical: isWeb ? 11 : 9,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSoft,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  resultLabel: {
-    flex: 1,
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    fontWeight: "800",
-  },
-
-  resultValue: {
-    flexShrink: 1,
-    fontSize: isWeb ? 13 : 11,
-    color: colors.text,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-
-  resultValueStrong: {
-    fontSize: isWeb ? 14 : 12,
-    fontWeight: "900",
-    color: colors.primaryDark,
-  },
-
-  bottomBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: isWeb ? 72 : 66,
-    paddingTop: 6,
-    paddingBottom: isWeb ? 10 : 8,
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    zIndex: 15,
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: -4 },
-  },
-
-  bottomItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  bottomText: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    fontWeight: "800",
-    marginTop: 2,
-  },
-
-  bottomTextActive: {
-    color: colors.primaryDark,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 18,
-  },
-
-  modalCard: {
-    width: "100%",
-    maxWidth: 520,
-    maxHeight: "86%",
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: isWeb ? 20 : 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  modalCardSmall: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: isWeb ? 20 : 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 14,
-  },
-
-  modalTitle: {
-    fontSize: isWeb ? 20 : 17,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  modalSubtitle: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    marginTop: 3,
-  },
-
-  closeButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  modalScroll: {
-    maxHeight: isWeb ? 430 : 390,
-  },
-
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 14,
-  },
-
-  modalCancelButton: {
-    flex: 1,
-    backgroundColor: colors.primarySoft,
-    padding: isWeb ? 12 : 10,
-    borderRadius: 11,
-    alignItems: "center",
-  },
-
-  modalCancelText: {
-    color: colors.primaryDark,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  modalSaveButton: {
-    flex: 1,
-    backgroundColor: colors.primaryDark,
-    padding: isWeb ? 12 : 10,
-    borderRadius: 11,
-    alignItems: "center",
-  },
-
-  modalSaveText: {
-    color: colors.white,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  inputGroup: {
-    marginBottom: 11,
-  },
-
-  inputLabel: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
-
-  input: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 11,
-    paddingVertical: isWeb ? 11 : 9,
-    paddingHorizontal: 11,
-    fontSize: isWeb ? 14 : 12,
-    color: colors.text,
-  },
-});
+const createStyles = (isDesktop: boolean) =>
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+
+    container: {
+      flexGrow: 1,
+      paddingHorizontal: isDesktop ? 28 : 14,
+      paddingTop: isDesktop ? 28 : 14,
+      paddingBottom: isDesktop ? 100 : 92,
+      alignItems: "center",
+    },
+
+    content: {
+      width: "100%",
+      maxWidth: 980,
+    },
+
+    settingsButton: {
+      position: "absolute",
+      top: isDesktop ? 24 : 20,
+      right: isDesktop ? 24 : 18,
+      width: isDesktop ? 42 : 38,
+      height: isDesktop ? 42 : 38,
+      borderRadius: 999,
+      backgroundColor: colors.white,
+      alignItems: "center",
+      justifyContent: "center",
+      shadowColor: "#000",
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 2,
+      zIndex: 20,
+    },
+
+    settingsButtonText: {
+      fontSize: isDesktop ? 22 : 20,
+      lineHeight: 24,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    titleCard: {
+      backgroundColor: colors.surface,
+      borderRadius: isDesktop ? 18 : 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: isDesktop ? 18 : 14,
+      marginBottom: isDesktop ? 14 : 12,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+
+    titleTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    titleLabel: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "800",
+      marginBottom: 3,
+    },
+
+    titleText: {
+      fontSize: isDesktop ? 22 : 18,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    titleSubtitle: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      marginTop: 3,
+    },
+
+    iconEditButton: {
+      width: isDesktop ? 42 : 40,
+      height: isDesktop ? 42 : 40,
+      borderRadius: 12,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    heroCard: {
+      backgroundColor: colors.primaryDark,
+      borderRadius: isDesktop ? 20 : 18,
+      padding: isDesktop ? 22 : 16,
+      marginBottom: isDesktop ? 14 : 12,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      minHeight: isDesktop ? 132 : 112,
+    },
+
+    heroTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    heroLabel: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
+
+    heroAmount: {
+      fontSize: isDesktop ? 34 : 28,
+      color: colors.white,
+      fontWeight: "900",
+      maxWidth: "100%",
+    },
+
+    coveredBox: {
+      width: isDesktop ? 96 : 76,
+      height: isDesktop ? 76 : 66,
+      backgroundColor: "rgba(255,255,255,0.16)",
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    coveredValue: {
+      color: colors.white,
+      fontSize: isDesktop ? 23 : 20,
+      fontWeight: "900",
+    },
+
+    coveredLabel: {
+      color: colors.white,
+      fontSize: isDesktop ? 11 : 9,
+      fontWeight: "800",
+      opacity: 0.9,
+    },
+
+    kpiGrid: {
+      flexDirection: "row",
+      gap: isDesktop ? 10 : 8,
+      marginBottom: isDesktop ? 14 : 12,
+    },
+
+    kpiCard: {
+      flex: 1,
+      minWidth: 0,
+      backgroundColor: colors.surface,
+      borderRadius: isDesktop ? 16 : 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: isDesktop ? 15 : 12,
+      paddingHorizontal: isDesktop ? 15 : 10,
+    },
+
+    kpiLabel: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "800",
+      marginBottom: 5,
+    },
+
+    kpiValue: {
+      fontSize: isDesktop ? 19 : 18,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    actionsCard: {
+      backgroundColor: colors.surface,
+      borderRadius: isDesktop ? 16 : 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: isDesktop ? 10 : 9,
+      marginBottom: isDesktop ? 14 : 12,
+      gap: 8,
+    },
+
+    primaryButton: {
+      width: "100%",
+      backgroundColor: colors.primaryDark,
+      borderRadius: 12,
+      paddingVertical: isDesktop ? 12 : 10,
+      paddingHorizontal: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 6,
+    },
+
+    primaryButtonText: {
+      color: colors.white,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+    },
+
+    secondaryActionsRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+
+    secondaryButton: {
+      flex: 1,
+      backgroundColor: colors.primarySoft,
+      borderRadius: 12,
+      paddingVertical: isDesktop ? 12 : 10,
+      paddingHorizontal: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 5,
+    },
+
+    secondaryButtonText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+    },
+
+    dangerButton: {
+      width: "100%",
+      backgroundColor: "#FEF2F2",
+      borderRadius: 12,
+      paddingVertical: isDesktop ? 12 : 10,
+      paddingHorizontal: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 5,
+    },
+
+    dangerButtonText: {
+      color: "#B91C1C",
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+    },
+
+    savedCard: {
+      backgroundColor: colors.surface,
+      borderRadius: isDesktop ? 16 : 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: isDesktop ? 13 : 11,
+      marginBottom: isDesktop ? 14 : 12,
+    },
+
+    savedTitle: {
+      fontSize: isDesktop ? 15 : 13,
+      fontWeight: "900",
+      color: colors.text,
+      marginBottom: 10,
+    },
+
+    savedList: {
+      gap: 8,
+    },
+
+    savedItem: {
+      width: isDesktop ? 170 : 140,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      padding: 10,
+    },
+
+    savedItemActive: {
+      backgroundColor: colors.primaryDark,
+      borderColor: colors.primaryDark,
+    },
+
+    savedItemTitle: {
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+      color: colors.text,
+      marginBottom: 4,
+    },
+
+    savedItemTitleActive: {
+      color: colors.white,
+    },
+
+    savedItemSubtitle: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "700",
+    },
+
+    savedItemSubtitleActive: {
+      color: colors.white,
+      opacity: 0.9,
+    },
+
+    sectionCard: {
+      backgroundColor: colors.surface,
+      borderRadius: isDesktop ? 18 : 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: isDesktop ? 16 : 12,
+      marginBottom: isDesktop ? 14 : 12,
+    },
+
+    sectionHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: isDesktop ? 12 : 10,
+      gap: 10,
+    },
+
+    sectionHeaderLeft: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      minWidth: 0,
+    },
+
+    sectionIcon: {
+      width: isDesktop ? 38 : 34,
+      height: isDesktop ? 38 : 34,
+      borderRadius: 12,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    sectionTitleBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    sectionTitle: {
+      fontSize: isDesktop ? 17 : 15,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    sectionSubtitle: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      marginTop: 2,
+    },
+
+    sectionEditButton: {
+      width: isDesktop ? 36 : 32,
+      height: isDesktop ? 36 : 32,
+      borderRadius: 10,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    resultRow: {
+      paddingVertical: isDesktop ? 11 : 9,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSoft,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+
+    resultLabel: {
+      flex: 1,
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      fontWeight: "800",
+    },
+
+    resultValue: {
+      flexShrink: 1,
+      maxWidth: "55%",
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.text,
+      fontWeight: "800",
+      textAlign: "right",
+    },
+
+    resultValueStrong: {
+      fontSize: isDesktop ? 14 : 12,
+      fontWeight: "900",
+      color: colors.primaryDark,
+    },
+
+    bottomBar: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: isDesktop ? 72 : 64,
+      paddingTop: 5,
+      paddingBottom: isDesktop ? 10 : 7,
+      backgroundColor: colors.white,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-around",
+      zIndex: 15,
+      elevation: 8,
+      shadowColor: "#000",
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: -4 },
+    },
+
+    bottomItem: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    bottomText: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "800",
+      marginTop: 2,
+    },
+
+    bottomTextActive: {
+      color: colors.primaryDark,
+    },
+
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(15, 23, 42, 0.55)",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: isDesktop ? 18 : 14,
+    },
+
+    modalCard: {
+      width: "100%",
+      maxWidth: 520,
+      maxHeight: "86%",
+      backgroundColor: colors.surface,
+      borderRadius: 20,
+      padding: isDesktop ? 20 : 15,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    modalCardSmall: {
+      width: "100%",
+      maxWidth: 420,
+      backgroundColor: colors.surface,
+      borderRadius: 20,
+      padding: isDesktop ? 20 : 15,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: 12,
+      marginBottom: 14,
+    },
+
+    modalTitleBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    modalTitle: {
+      fontSize: isDesktop ? 20 : 17,
+      fontWeight: "900",
+      color: colors.text,
+    },
+
+    modalSubtitle: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      marginTop: 3,
+    },
+
+    closeButton: {
+      width: 30,
+      height: 30,
+      borderRadius: 999,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    modalScroll: {
+      maxHeight: isDesktop ? 430 : 390,
+    },
+
+    modalActions: {
+      flexDirection: "row",
+      gap: 10,
+      marginTop: 14,
+    },
+
+    modalCancelButton: {
+      flex: 1,
+      backgroundColor: colors.primarySoft,
+      padding: isDesktop ? 12 : 10,
+      borderRadius: 11,
+      alignItems: "center",
+    },
+
+    modalCancelText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+    },
+
+    modalSaveButton: {
+      flex: 1,
+      backgroundColor: colors.primaryDark,
+      padding: isDesktop ? 12 : 10,
+      borderRadius: 11,
+      alignItems: "center",
+    },
+
+    modalSaveText: {
+      color: colors.white,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+    },
+
+    inputGroup: {
+      marginBottom: 11,
+    },
+
+    inputLabel: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      fontWeight: "800",
+      marginBottom: 5,
+    },
+
+    input: {
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 11,
+      paddingVertical: isDesktop ? 11 : 9,
+      paddingHorizontal: 11,
+      fontSize: isDesktop ? 14 : 12,
+      color: colors.text,
+    },
+  });
