@@ -395,24 +395,6 @@ export default function TabTwoScreen() {
     await loadCategories();
   };
 
-  const autoMarkDueFixedExpenses = async () => {
-    if (selectedMonth !== getCurrentMonth()) return;
-
-    const user = await getCurrentUser();
-
-    if (!user) return;
-
-    const todayDay = getDayFromDate(getTodayDate());
-
-    let dueQuery = supabase
-      .from("fixed_expenses")
-      .update({ is_paid: true })
-      .eq("month", selectedMonth)
-      .eq("is_paid", false)
-      .lte("day_of_month", todayDay);
-    await applySpaceFilter(dueQuery, user.id, activeSpaceId);
-  };
-
   const loadExpenses = async () => {
     const user = await getCurrentUser();
 
@@ -434,12 +416,31 @@ export default function TabTwoScreen() {
     setExpenses(data || []);
   };
 
+  const autoMarkPersonalDueFixedExpenses = async () => {
+    if (activeSpaceId || selectedMonth !== getCurrentMonth()) return;
+
+    const user = await getCurrentUser();
+
+    if (!user) return;
+
+    const todayDay = getDayFromDate(getTodayDate());
+
+    await supabase
+      .from("fixed_expenses")
+      .update({ is_paid: true })
+      .eq("user_id", user.id)
+      .is("space_id", null)
+      .eq("month", selectedMonth)
+      .eq("is_paid", false)
+      .lte("day_of_month", todayDay);
+  };
+
   const loadFixedExpenses = async () => {
     const user = await getCurrentUser();
 
     if (!user) return;
 
-    await autoMarkDueFixedExpenses();
+    await autoMarkPersonalDueFixedExpenses();
 
     const fixedQuery = supabase
       .from("fixed_expenses")
@@ -484,13 +485,29 @@ export default function TabTwoScreen() {
       activeSpaceId,
     );
 
-    if (!prevTemplates?.length) return;
+    let sourceItems = prevTemplates || [];
 
-    const toInsert = prevTemplates.map((item: any) => ({
+    if (!sourceItems.length) {
+      const prevFixedQuery = supabase
+        .from("fixed_expenses")
+        .select("*")
+        .eq("month", prevMonth);
+      const { data: prevFixedExpenses } = await applySpaceFilter(
+        prevFixedQuery,
+        user.id,
+        activeSpaceId,
+      );
+
+      sourceItems = prevFixedExpenses || [];
+    }
+
+    if (!sourceItems.length) return;
+
+    const toInsert = sourceItems.map((item: any) => ({
       title: item.title,
       amount: item.amount,
       day_of_month: item.day_of_month,
-      user_id: user.id,
+      user_id: activeSpaceId ? item.user_id || user.id : user.id,
       month: selectedMonth,
       category: normalizeCategory(item.category),
       ...getSpacePayload(activeSpaceId),
@@ -516,8 +533,6 @@ export default function TabTwoScreen() {
       activeSpaceId,
     );
 
-    if (!templates?.length) return;
-
     const existingQuery = supabase
       .from("fixed_expenses")
       .select("title")
@@ -531,13 +546,30 @@ export default function TabTwoScreen() {
     const existingTitles =
       existing?.map((item: { title: string }) => item.title) || [];
 
-    const toInsert = templates
+    let sourceItems = templates || [];
+
+    if (!sourceItems.length) {
+      const prevMonth = addMonths(selectedMonth, -1);
+      const prevFixedQuery = supabase
+        .from("fixed_expenses")
+        .select("*")
+        .eq("month", prevMonth);
+      const { data: prevFixedExpenses } = await applySpaceFilter(
+        prevFixedQuery,
+        user.id,
+        activeSpaceId,
+      );
+
+      sourceItems = prevFixedExpenses || [];
+    }
+
+    const toInsert = sourceItems
       .filter((item: any) => !existingTitles.includes(item.title))
       .map((item: any) => ({
         title: item.title,
         amount: item.amount,
         day_of_month: item.day_of_month,
-        user_id: user.id,
+        user_id: activeSpaceId ? item.user_id || user.id : user.id,
         month: selectedMonth,
         is_paid: false,
         category: normalizeCategory(item.category),
@@ -650,7 +682,7 @@ export default function TabTwoScreen() {
       await supabase.from("profiles").upsert({ id: user.id, salary: value });
     }
 
-    await loadIncome();
+    await loadAllRef.current();
     setEditingSalary(false);
   };
 
@@ -690,7 +722,7 @@ export default function TabTwoScreen() {
     setVariableCategory("Otros");
     setShowAddVariable(false);
     setShowVariableSection(true);
-    await loadExpenses();
+    await loadAllRef.current();
   };
 
   const handleAddSpaceIncome = async () => {
@@ -740,7 +772,7 @@ export default function TabTwoScreen() {
     setSpaceIncomeDate(getTodayDate());
     setSpaceIncomeNote("");
     setSpaceIncomeModalVisible(false);
-    await loadIncome();
+    await loadAllRef.current();
   };
 
   const handleAddFixedExpense = async () => {
@@ -752,10 +784,6 @@ export default function TabTwoScreen() {
 
     const expenseMonth = getMonthFromDate(fixedDate);
     const expenseDay = getDayFromDate(fixedDate);
-    const shouldBePaid =
-      expenseMonth === getCurrentMonth() &&
-      expenseDay <= getDayFromDate(getTodayDate());
-
     await supabase.from("fixed_templates").insert([
       {
         title: fixedTitle,
@@ -775,7 +803,7 @@ export default function TabTwoScreen() {
         day_of_month: expenseDay,
         user_id: user.id,
         month: expenseMonth,
-        is_paid: shouldBePaid,
+        is_paid: false,
         category: fixedCategory,
         ...getSpacePayload(activeSpaceId),
       },
@@ -793,7 +821,7 @@ export default function TabTwoScreen() {
     setFixedCategory("Otros");
     setShowAddFixed(false);
     setShowFixedSection(true);
-    await loadFixedExpenses();
+    await loadAllRef.current();
   };
 
   const openEditFixed = (item: any) => {
@@ -849,10 +877,6 @@ export default function TabTwoScreen() {
     }
 
     if (editingType === "fixed") {
-      const shouldBePaid =
-        newMonth === getCurrentMonth() &&
-        newDay <= getDayFromDate(getTodayDate());
-
       await supabase
         .from("fixed_expenses")
         .update({
@@ -860,7 +884,6 @@ export default function TabTwoScreen() {
           month: newMonth,
           day_of_month: newDay,
           category: editCategory,
-          is_paid: shouldBePaid,
         })
         .eq("id", editingItem.id);
 
@@ -882,7 +905,7 @@ export default function TabTwoScreen() {
       }
 
       closeEditModal();
-      await loadFixedExpenses();
+      await loadAllRef.current();
       await recordActivity(
         "fixed_expense_updated",
         "fixed_expense",
@@ -903,7 +926,7 @@ export default function TabTwoScreen() {
       .eq("id", editingItem.id);
 
     closeEditModal();
-    await loadExpenses();
+    await loadAllRef.current();
     await recordActivity(
       "transaction_updated",
       "transaction",
@@ -918,7 +941,7 @@ export default function TabTwoScreen() {
       .update({ is_paid: !item.is_paid })
       .eq("id", item.id);
 
-    await loadFixedExpenses();
+    await loadAllRef.current();
     await recordActivity(
       "fixed_expense_toggled",
       "fixed_expense",
@@ -942,7 +965,7 @@ export default function TabTwoScreen() {
         .eq("month", item.month || selectedMonth);
       await applySpaceFilter(templateDeleteQuery, user.id, activeSpaceId);
 
-      await loadFixedExpenses();
+      await loadAllRef.current();
       await recordActivity(
         "fixed_expense_deleted",
         "fixed_expense",
@@ -966,7 +989,7 @@ export default function TabTwoScreen() {
   const deleteVariable = async (item: any) => {
     const executeDelete = async () => {
       await supabase.from("transactions").delete().eq("id", item.id);
-      await loadExpenses();
+      await loadAllRef.current();
       await recordActivity(
         "transaction_deleted",
         "transaction",
@@ -1043,7 +1066,7 @@ export default function TabTwoScreen() {
         item.id,
         `Se traspaso el gasto fijo ${item.title}.`,
       );
-      await loadFixedExpenses();
+      await loadAllRef.current();
     } else {
       await supabase.from("transactions").insert([
         {
@@ -1065,7 +1088,7 @@ export default function TabTwoScreen() {
         item.id,
         `Se traspaso el gasto ${item.title}.`,
       );
-      await loadExpenses();
+      await loadAllRef.current();
     }
 
     setMovingExpenseKey(null);
@@ -1560,6 +1583,7 @@ export default function TabTwoScreen() {
               );
               const moveKey = `fixed-${item.id}`;
               const canManageItem = !activeSpaceId || item.user_id === currentUserId;
+              const canEditFixedItem = !activeSpaceId && canManageItem;
 
               return (
                 <View key={moveKey}>
@@ -1587,7 +1611,7 @@ export default function TabTwoScreen() {
                   </View>
 
                   <View style={styles.rowActions}>
-                    {canManageItem && (
+                    {canEditFixedItem && (
                       <IconAction
                         icon="create-outline"
                         onPress={() => openEditFixed(item)}
@@ -1611,7 +1635,7 @@ export default function TabTwoScreen() {
                         styles={styles}
                       />
                     )}
-                    {canManageItem && (
+                    {canEditFixedItem && (
                       <IconAction
                         icon="trash-outline"
                         danger
