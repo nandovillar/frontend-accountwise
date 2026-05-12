@@ -1,8 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
+import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
@@ -112,6 +120,8 @@ export default function TabTwoScreen() {
 
   const [fixedFilterCategory, setFixedFilterCategory] = useState("Todas");
   const [variableFilterCategory, setVariableFilterCategory] = useState("Todas");
+  const [showFixedFilter, setShowFixedFilter] = useState(false);
+  const [showVariableFilter, setShowVariableFilter] = useState(false);
 
   const [showAddFixed, setShowAddFixed] = useState(false);
   const [showAddVariable, setShowAddVariable] = useState(false);
@@ -580,6 +590,12 @@ export default function TabTwoScreen() {
     setVariableFilterCategory("Todas");
     loadAllRef.current();
   }, [activeSpaceId, selectedMonth]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAllRef.current();
+    }, []),
+  );
 
   const changeMonth = async (offset: number) => {
     const newSelectedMonth = addMonths(selectedMonth, offset);
@@ -1104,29 +1120,55 @@ export default function TabTwoScreen() {
   const renderFilterSelector = (
     selected: string,
     onSelect: (category: string) => void,
-  ) => (
-    <View style={styles.categoryList}>
-      {["Todas", ...categories].map((category) => (
+    isOpen: boolean,
+    setIsOpen: (value: boolean) => void,
+  ) => {
+    const options = ["Todas", ...categories];
+
+    return (
+      <View style={styles.filterDropdown}>
         <Pressable
-          key={category}
-          style={[
-            styles.categoryButton,
-            selected === category && styles.categoryButtonActive,
-          ]}
-          onPress={() => onSelect(category)}
+          style={styles.filterDropdownButton}
+          onPress={() => setIsOpen(!isOpen)}
         >
-          <Text
-            style={[
-              styles.categoryButtonText,
-              selected === category && styles.categoryButtonTextActive,
-            ]}
-          >
-            {category}
-          </Text>
+          <Text style={styles.filterDropdownText}>{selected}</Text>
+          <Ionicons
+            name={isOpen ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={colors.primaryDark}
+          />
         </Pressable>
-      ))}
-    </View>
-  );
+
+        {isOpen && (
+          <View style={styles.filterDropdownOptions}>
+            {options.map((category) => (
+              <Pressable
+                key={category}
+                style={[
+                  styles.filterDropdownOption,
+                  selected === category && styles.filterDropdownOptionActive,
+                ]}
+                onPress={() => {
+                  onSelect(category);
+                  setIsOpen(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.filterDropdownOptionText,
+                    selected === category &&
+                      styles.filterDropdownOptionTextActive,
+                  ]}
+                >
+                  {category}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   const renderCategoryBadge = (category: string) => (
     <View style={styles.categoryBadge}>
@@ -1400,7 +1442,12 @@ export default function TabTwoScreen() {
             setShowAdd={setShowAddFixed}
             filterTitle="Filtrar por categoría"
             renderFilterSelector={() =>
-              renderFilterSelector(fixedFilterCategory, setFixedFilterCategory)
+              renderFilterSelector(
+                fixedFilterCategory,
+                setFixedFilterCategory,
+                showFixedFilter,
+                setShowFixedFilter,
+              )
             }
             styles={styles}
           >
@@ -1520,6 +1567,8 @@ export default function TabTwoScreen() {
               renderFilterSelector(
                 variableFilterCategory,
                 setVariableFilterCategory,
+                showVariableFilter,
+                setShowVariableFilter,
               )
             }
             styles={styles}
@@ -2168,6 +2217,60 @@ const createStyles = (isDesktop: boolean) =>
       marginBottom: 8,
     },
 
+    filterDropdown: {
+      marginBottom: 10,
+    },
+
+    filterDropdownButton: {
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingVertical: isDesktop ? 10 : 9,
+      paddingHorizontal: 11,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+
+    filterDropdownText: {
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 12,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    filterDropdownOptions: {
+      marginTop: 6,
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      overflow: "hidden",
+    },
+
+    filterDropdownOption: {
+      paddingVertical: isDesktop ? 10 : 9,
+      paddingHorizontal: 11,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSoft,
+    },
+
+    filterDropdownOptionActive: {
+      backgroundColor: colors.primarySoft,
+    },
+
+    filterDropdownOptionText: {
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 12,
+      color: colors.mutedText,
+      fontWeight: "800",
+    },
+
+    filterDropdownOptionTextActive: {
+      color: colors.primaryDark,
+      fontWeight: "900",
+    },
+
     categoryTitle: {
       fontSize: isDesktop ? 13 : 11,
       fontWeight: "800",
@@ -2214,7 +2317,7 @@ const createStyles = (isDesktop: boolean) =>
       borderColor: colors.border,
       borderRadius: 10,
       padding: isDesktop ? 10 : 8,
-      fontSize: isDesktop ? 13 : 11,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 11,
       color: colors.text,
     },
 

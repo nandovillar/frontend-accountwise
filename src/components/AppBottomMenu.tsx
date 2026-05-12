@@ -13,21 +13,21 @@ export function AppBottomMenu({ active }: { active?: ActiveTab }) {
         label="Inicio"
         icon="home-outline"
         active={active === "home"}
-        onPress={() => router.push("/")}
+        onPress={() => router.replace("/")}
       />
 
       <MenuItem
         label="Gastos"
         icon="card-outline"
         active={active === "expenses"}
-        onPress={() => router.push("/expenses")}
+        onPress={() => router.replace("/expenses")}
       />
 
       <MenuItem
         label="Ahorros"
         icon="wallet-outline"
         active={active === "savings"}
-        onPress={() => router.push("/savings")}
+        onPress={() => router.replace("/savings")}
       />
     </View>
   );

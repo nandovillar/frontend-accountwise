@@ -27,6 +27,10 @@ type Summary = {
   fixedPaid: number;
   variables: number;
   savings: number;
+  categoryTotals: {
+    category: string;
+    amount: number;
+  }[];
 };
 
 export default function HomeScreen() {
@@ -50,6 +54,7 @@ export default function HomeScreen() {
     fixedPaid: 0,
     variables: 0,
     savings: 0,
+    categoryTotals: [],
   });
 
   const changeMonth = (offset: number) => {
@@ -104,7 +109,7 @@ export default function HomeScreen() {
 
     const fixedQuery = supabase
       .from("fixed_expenses")
-      .select("amount")
+      .select("amount, category")
       .eq("month", selectedMonth)
       .eq("is_paid", true);
     const { data: fixed } = await applySpaceFilter(
@@ -121,7 +126,7 @@ export default function HomeScreen() {
 
     const varsQuery = supabase
       .from("transactions")
-      .select("amount")
+      .select("amount, category")
       .eq("month", selectedMonth)
       .eq("type", "expense");
     const { data: vars } = await applySpaceFilter(
@@ -136,20 +141,18 @@ export default function HomeScreen() {
         0,
       ) || 0;
 
-    if (activeSpaceId) {
-      const { data: contributions } = await supabase
-        .from("space_contributions")
-        .select("amount")
-        .eq("space_id", activeSpaceId)
-        .eq("month", selectedMonth);
+    const categoryMap = new Map<string, number>();
+    [...(fixed || []), ...(vars || [])].forEach((item: any) => {
+      const category = item.category || "Otros";
+      categoryMap.set(
+        category,
+        (categoryMap.get(category) || 0) + Number(item.amount || 0),
+      );
+    });
 
-      salary +=
-        contributions?.reduce(
-          (sum: number, item: { amount: number }) =>
-            sum + Number(item.amount),
-          0,
-        ) || 0;
-    }
+    const categoryTotals = Array.from(categoryMap.entries())
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount);
 
     const savingsQuery = supabase
       .from("savings")
@@ -202,6 +205,7 @@ export default function HomeScreen() {
       fixedPaid,
       variables,
       savings: totalSavings,
+      categoryTotals,
     });
   }, [activeSpaceId, selectedMonth]);
 
@@ -356,6 +360,20 @@ export default function HomeScreen() {
               />
             </View>
           </View>
+
+          <View style={commonStyles.card}>
+            <Text style={commonStyles.cardTitle}>Gasto por categoria</Text>
+            <Text style={commonStyles.subtitle}>
+              Peso de cada categoria sobre tus ingresos del mes
+            </Text>
+
+            <CategoryChart
+              items={summary.categoryTotals}
+              salary={summary.salary}
+              totalExpenses={totalExpenses}
+              styles={styles}
+            />
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -418,6 +436,130 @@ function DetailRow({
       >
         {value}
       </Text>
+    </View>
+  );
+}
+
+function CategoryChart({
+  items,
+  salary,
+  totalExpenses,
+  styles,
+}: {
+  items: { category: string; amount: number }[];
+  salary: number;
+  totalExpenses: number;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const palette = [
+    colors.primaryDark,
+    "#0F766E",
+    "#2563EB",
+    "#7C3AED",
+    "#DB2777",
+    "#EA580C",
+    "#16A34A",
+    "#475569",
+  ];
+
+  if (items.length === 0) {
+    return (
+      <View style={styles.emptyChartBox}>
+        <Ionicons
+          name="pie-chart-outline"
+          size={26}
+          color={colors.primaryDark}
+        />
+        <Text style={styles.emptyChartText}>
+          Todavia no hay gastos para este mes.
+        </Text>
+      </View>
+    );
+  }
+
+  const mainItems = items.slice(0, 5);
+  const otherAmount = items
+    .slice(5)
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const chartItems =
+    otherAmount > 0
+      ? [...mainItems, { category: "Otros", amount: otherAmount }]
+      : mainItems;
+  const totalForChart = Math.max(
+    chartItems.reduce((sum, item) => sum + item.amount, 0),
+    1,
+  );
+
+  let current = 0;
+  const gradientStops = chartItems
+    .map((item, index) => {
+      const start = current;
+      const end = current + (item.amount / totalForChart) * 100;
+      current = end;
+      const color = palette[index % palette.length];
+      return `${color} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
+    })
+    .join(", ");
+
+  return (
+    <View style={styles.chartBlock}>
+      <View style={styles.chartSummaryRow}>
+        <View>
+          <Text style={styles.chartSummaryLabel}>Gastado</Text>
+          <Text style={styles.chartSummaryValue}>
+            {formatCompactMoney(totalExpenses)}
+          </Text>
+        </View>
+        <Text style={styles.chartSummaryPercent}>
+          {salary > 0 ? `${Math.round((totalExpenses / salary) * 100)}%` : "0%"}
+        </Text>
+      </View>
+
+      <View style={styles.donutLayout}>
+        <View
+          style={[
+            styles.donutRing,
+            {
+              backgroundImage: `conic-gradient(${gradientStops})`,
+            } as any,
+          ]}
+        >
+          <View style={styles.donutCenter}>
+            <Text style={styles.donutCenterLabel}>Total</Text>
+            <Text
+              style={styles.donutCenterValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.65}
+            >
+              {formatCompactMoney(totalExpenses)}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.legendList}>
+        {chartItems.map((item, index) => {
+        const percent = salary > 0 ? (item.amount / salary) * 100 : 0;
+
+        return (
+          <View key={item.category} style={styles.legendRow}>
+            <View
+              style={[
+                styles.legendDot,
+                { backgroundColor: palette[index % palette.length] },
+              ]}
+            />
+            <Text style={styles.legendLabel} numberOfLines={1}>
+                {item.category}
+              </Text>
+            <Text style={styles.legendAmount}>
+                {formatCompactMoney(item.amount)} · {percent.toFixed(0)}%
+              </Text>
+          </View>
+        );
+      })}
+      </View>
     </View>
   );
 }
@@ -540,6 +682,138 @@ const createStyles = (isDesktop: boolean) =>
 
     detailList: {
       marginTop: 10,
+    },
+
+    chartBlock: {
+      marginTop: 12,
+      gap: 12,
+    },
+
+    chartSummaryRow: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      borderRadius: 14,
+      padding: isDesktop ? 14 : 12,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+    },
+
+    chartSummaryLabel: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "800",
+      marginBottom: 3,
+    },
+
+    chartSummaryValue: {
+      fontSize: isDesktop ? 20 : 16,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    chartSummaryPercent: {
+      fontSize: isDesktop ? 28 : 22,
+      color: colors.primaryDark,
+      fontWeight: "900",
+    },
+
+    donutLayout: {
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    donutRing: {
+      width: isDesktop ? 188 : 164,
+      height: isDesktop ? 188 : 164,
+      borderRadius: 999,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.primarySoft,
+    },
+
+    donutCenter: {
+      width: isDesktop ? 112 : 96,
+      height: isDesktop ? 112 : 96,
+      borderRadius: 999,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 10,
+    },
+
+    donutCenterLabel: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "800",
+      marginBottom: 3,
+    },
+
+    donutCenterValue: {
+      maxWidth: "100%",
+      fontSize: isDesktop ? 20 : 16,
+      color: colors.text,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+
+    legendList: {
+      gap: 9,
+    },
+
+    legendRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 9,
+      backgroundColor: colors.borderSoft,
+      borderRadius: 12,
+      paddingVertical: isDesktop ? 9 : 8,
+      paddingHorizontal: 10,
+    },
+
+    legendDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+    },
+
+    legendLabel: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    legendAmount: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "800",
+      textAlign: "right",
+    },
+
+    emptyChartBox: {
+      marginTop: 12,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      borderRadius: 14,
+      paddingVertical: 20,
+      paddingHorizontal: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+
+    emptyChartText: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      fontWeight: "700",
+      textAlign: "center",
     },
 
     detailRow: {
