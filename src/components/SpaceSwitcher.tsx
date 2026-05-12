@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { ActivityFeed } from "@/src/components/ActivityFeed";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { colors } from "@/src/theme/colors";
 
@@ -8,50 +9,71 @@ export function SpaceSwitcher() {
   const {
     activeSpaceId,
     markActiveSpaceSeen,
+    recentActivity,
     selectSpace,
     spaces,
     unreadCount,
   } = useSpaces();
 
   return (
-    <View style={styles.card}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <Ionicons name="people-outline" size={17} color={colors.primaryDark} />
-          <Text style={styles.title}>Espacio</Text>
+    <>
+      <View style={styles.card}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            <Ionicons name="people-outline" size={17} color={colors.primaryDark} />
+            <Text style={styles.title}>Espacio</Text>
+          </View>
+
+          {unreadCount > 0 && (
+            <Pressable style={styles.badge} onPress={markActiveSpaceSeen}>
+              <Text style={styles.badgeText}>{unreadCount} cambios nuevos</Text>
+            </Pressable>
+          )}
         </View>
 
-        {unreadCount > 0 && (
-          <Pressable style={styles.badge} onPress={markActiveSpaceSeen}>
-            <Text style={styles.badgeText}>{unreadCount} cambios nuevos</Text>
-          </Pressable>
-        )}
+        <View style={styles.chipRow}>
+          {spaces.map((space) => {
+            const active = activeSpaceId === space.id;
+            const shared = space.type === "shared";
+
+            return (
+              <Pressable
+                key={space.id || "personal"}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => selectSpace(space.id)}
+              >
+                <Ionicons
+                  name={shared ? "people" : "person"}
+                  size={14}
+                  color={active ? colors.white : colors.primaryDark}
+                />
+
+                <View style={styles.chipTextBlock}>
+                  <Text
+                    style={[styles.chipText, active && styles.chipTextActive]}
+                    numberOfLines={1}
+                  >
+                    {space.name}
+                  </Text>
+                  {shared && (
+                    <Text
+                      style={[
+                        styles.chipMeta,
+                        active && styles.chipMetaActive,
+                      ]}
+                    >
+                      Compartido
+                    </Text>
+                  )}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
-      <View style={styles.chipRow}>
-        {spaces.map((space) => {
-          const active = activeSpaceId === space.id;
-
-          return (
-            <Pressable
-              key={space.id || "personal"}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => selectSpace(space.id)}
-            >
-              <Ionicons
-                name={space.type === "shared" ? "people" : "person"}
-                size={14}
-                color={active ? colors.white : colors.primaryDark}
-              />
-
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {space.name}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
+      {Boolean(activeSpaceId) && <ActivityFeed items={recentActivity} />}
+    </>
   );
 }
 
@@ -61,8 +83,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 14,
-    padding: 10,
+    padding: 12,
     marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 7,
   },
 
   headerRow: {
@@ -114,6 +140,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingVertical: 7,
     paddingHorizontal: 10,
+    maxWidth: "100%",
   },
 
   chipActive: {
@@ -125,6 +152,21 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     fontSize: 11,
     fontWeight: "900",
+  },
+
+  chipTextBlock: {
+    minWidth: 0,
+  },
+
+  chipMeta: {
+    color: colors.mutedText,
+    fontSize: 9,
+    fontWeight: "800",
+    marginTop: 1,
+  },
+
+  chipMetaActive: {
+    color: colors.primarySoft,
   },
 
   chipTextActive: {

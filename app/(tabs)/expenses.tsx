@@ -12,6 +12,9 @@ import {
   useState,
 } from "react";
 
+import { ActionNotice } from "@/src/components/ActionNotice";
+import { DataState } from "@/src/components/DataState";
+import { EmptyState } from "@/src/components/EmptyState";
 import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { supabase } from "@/src/lib/supabase";
@@ -27,6 +30,12 @@ import {
 } from "@/src/utils/dates";
 import { getCurrentUser } from "@/src/utils/auth";
 import { formatCompactMoney } from "@/src/utils/money";
+import {
+  canDeleteExpense,
+  canEditExpense,
+  canEditSharedFixedDetails,
+  canMoveExpense,
+} from "@/src/utils/permissions";
 import { applySpaceFilter, getSpacePayload } from "@/src/utils/spaceQueries";
 
 import {
@@ -77,6 +86,15 @@ const parseSectionTitles = (
   }
 };
 
+const getExpenseDuplicateKey = (item: any) => {
+  return [
+    String(item.title || "").trim().toLowerCase(),
+    Number(item.amount || 0),
+    Number(item.day_of_month || 1),
+    String(item.category || "Otros").trim().toLowerCase(),
+  ].join("|");
+};
+
 export default function TabTwoScreen() {
   const { activeSpaceId, recordActivity, spaces } = useSpaces();
   const { width } = useWindowDimensions();
@@ -95,7 +113,11 @@ export default function TabTwoScreen() {
   };
 
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+  const [actionMessage, setActionMessage] = useState("");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [dataError, setDataError] = useState("");
+  const [hasLoadedData, setHasLoadedData] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
 
   const [salary, setSalary] = useState(0);
   const [salaryInput, setSalaryInput] = useState("");
@@ -160,6 +182,11 @@ export default function TabTwoScreen() {
   const [spaceIncomeNote, setSpaceIncomeNote] = useState("");
   const [spaceIncomeTotal, setSpaceIncomeTotal] = useState(0);
   const [spaceIncomeModalVisible, setSpaceIncomeModalVisible] = useState(false);
+
+  const showActionMessage = (message: string) => {
+    setActionMessage(message);
+    setTimeout(() => setActionMessage(""), 2600);
+  };
 
   const sortCategories = (items: string[]) => {
     const normalized = items.map(normalizeCategory);
@@ -364,11 +391,13 @@ export default function TabTwoScreen() {
     setCategories(sortCategories(loaded));
   };
 
-  const createCategory = async () => {
+  const createCategory = async (onCreated?: (category: string) => void) => {
     const cleanName = newCategory.trim();
     if (!cleanName) return;
 
     if (categories.includes(cleanName)) {
+      onCreated?.(cleanName);
+      setEditCategory(cleanName);
       setNewCategory("");
       setShowAddCategoryInModal(false);
       return;
@@ -390,6 +419,7 @@ export default function TabTwoScreen() {
     }
 
     setEditCategory(cleanName);
+    onCreated?.(cleanName);
     setNewCategory("");
     setShowAddCategoryInModal(false);
     await loadCategories();
@@ -535,7 +565,7 @@ export default function TabTwoScreen() {
 
     const existingQuery = supabase
       .from("fixed_expenses")
-      .select("title")
+      .select("title, amount, day_of_month, category")
       .eq("month", selectedMonth);
     const { data: existing } = await applySpaceFilter(
       existingQuery,
@@ -543,8 +573,7 @@ export default function TabTwoScreen() {
       activeSpaceId,
     );
 
-    const existingTitles =
-      existing?.map((item: { title: string }) => item.title) || [];
+    const existingKeys = new Set((existing || []).map(getExpenseDuplicateKey));
 
     let sourceItems = templates || [];
 
@@ -564,7 +593,7 @@ export default function TabTwoScreen() {
     }
 
     const toInsert = sourceItems
-      .filter((item: any) => !existingTitles.includes(item.title))
+      .filter((item: any) => !existingKeys.has(getExpenseDuplicateKey(item)))
       .map((item: any) => ({
         title: item.title,
         amount: item.amount,
@@ -582,15 +611,34 @@ export default function TabTwoScreen() {
   };
 
   const loadAll = async () => {
-    await loadSectionTitles();
-    await loadIncome();
-    await loadCategories();
-    await generateFixedForMonth();
-    await loadFixedExpenses();
-    await loadExpenses();
+    if (loadInProgressRef.current) return;
+
+    loadInProgressRef.current = true;
+    setIsLoadingData(true);
+    setDataError("");
+
+    try {
+      await loadSectionTitles();
+      await loadIncome();
+      await loadCategories();
+      await generateFixedForMonth();
+      await loadFixedExpenses();
+      await loadExpenses();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cargar tus datos.";
+      setDataError(message);
+    } finally {
+      loadInProgressRef.current = false;
+      setHasLoadedData(true);
+      setIsLoadingData(false);
+    }
   };
 
   const loadAllRef = useRef(loadAll);
+  const loadInProgressRef = useRef(false);
   const loadMonthDataRef = useRef(loadAll);
 
   loadAllRef.current = loadAll;
@@ -662,7 +710,10 @@ export default function TabTwoScreen() {
     if (!user) return;
 
     const value = Number(salaryInput);
-    if (isNaN(value)) return;
+    if (isNaN(value) || value < 0) {
+      Alert.alert("Importe no valido", "Introduce un importe igual o mayor que 0.");
+      return;
+    }
 
     if (activeSpaceId) {
       await supabase.from("space_settings").upsert({
@@ -683,11 +734,20 @@ export default function TabTwoScreen() {
     }
 
     await loadAllRef.current();
+    showActionMessage("Ingresos actualizados.");
     setEditingSalary(false);
   };
 
   const handleAddExpense = async () => {
-    if (!title || !amount) return;
+    if (!title.trim()) {
+      Alert.alert("Falta el concepto", "Pon un nombre para el gasto.");
+      return;
+    }
+
+    if (!amount || Number(amount) <= 0) {
+      Alert.alert("Importe no valido", "El gasto debe ser mayor que 0.");
+      return;
+    }
 
     const user = await getCurrentUser();
 
@@ -723,13 +783,19 @@ export default function TabTwoScreen() {
     setShowAddVariable(false);
     setShowVariableSection(true);
     await loadAllRef.current();
+    showActionMessage("Gasto guardado.");
   };
 
   const handleAddSpaceIncome = async () => {
     const user = await getCurrentUser();
     const value = Number(spaceIncomeAmount);
 
-    if (!user || !activeSpaceId || !value || value <= 0) return;
+    if (!user || !activeSpaceId) return;
+
+    if (!value || value <= 0) {
+      Alert.alert("Importe no valido", "La aportacion debe ser mayor que 0.");
+      return;
+    }
 
     const incomeMonth = getMonthFromDate(spaceIncomeDate);
     const incomeDay = getDayFromDate(spaceIncomeDate);
@@ -773,10 +839,24 @@ export default function TabTwoScreen() {
     setSpaceIncomeNote("");
     setSpaceIncomeModalVisible(false);
     await loadAllRef.current();
+    showActionMessage("Aportacion registrada.");
   };
 
   const handleAddFixedExpense = async () => {
-    if (!fixedTitle || !fixedAmount || !fixedDate) return;
+    if (!fixedTitle.trim()) {
+      Alert.alert("Falta el concepto", "Pon un nombre para el gasto fijo.");
+      return;
+    }
+
+    if (!fixedAmount || Number(fixedAmount) <= 0) {
+      Alert.alert("Importe no valido", "El gasto fijo debe ser mayor que 0.");
+      return;
+    }
+
+    if (!fixedDate) {
+      Alert.alert("Falta la fecha", "Elige una fecha para el gasto fijo.");
+      return;
+    }
 
     const user = await getCurrentUser();
 
@@ -822,6 +902,7 @@ export default function TabTwoScreen() {
     setShowAddFixed(false);
     setShowFixedSection(true);
     await loadAllRef.current();
+    showActionMessage("Gasto fijo guardado.");
   };
 
   const openEditFixed = (item: any) => {
@@ -906,6 +987,7 @@ export default function TabTwoScreen() {
 
       closeEditModal();
       await loadAllRef.current();
+      showActionMessage("Gasto fijo actualizado.");
       await recordActivity(
         "fixed_expense_updated",
         "fixed_expense",
@@ -927,6 +1009,7 @@ export default function TabTwoScreen() {
 
     closeEditModal();
     await loadAllRef.current();
+    showActionMessage("Gasto actualizado.");
     await recordActivity(
       "transaction_updated",
       "transaction",
@@ -942,6 +1025,7 @@ export default function TabTwoScreen() {
       .eq("id", item.id);
 
     await loadAllRef.current();
+    showActionMessage(item.is_paid ? "Marcado como pendiente." : "Marcado como pagado.");
     await recordActivity(
       "fixed_expense_toggled",
       "fixed_expense",
@@ -966,6 +1050,7 @@ export default function TabTwoScreen() {
       await applySpaceFilter(templateDeleteQuery, user.id, activeSpaceId);
 
       await loadAllRef.current();
+      showActionMessage("Gasto fijo eliminado.");
       await recordActivity(
         "fixed_expense_deleted",
         "fixed_expense",
@@ -990,6 +1075,7 @@ export default function TabTwoScreen() {
     const executeDelete = async () => {
       await supabase.from("transactions").delete().eq("id", item.id);
       await loadAllRef.current();
+      showActionMessage("Gasto eliminado.");
       await recordActivity(
         "transaction_deleted",
         "transaction",
@@ -1034,15 +1120,37 @@ export default function TabTwoScreen() {
       );
       const sourceMonth = getMonthFromDate(sourceDate);
       const sourceDay = getDayFromDate(sourceDate);
+      const targetCategory = normalizeCategory(item.category);
+      const targetAmount = Number(item.amount || 0);
+
+      const duplicateQuery = supabase
+        .from("fixed_expenses")
+        .select("id")
+        .eq("title", item.title)
+        .eq("amount", targetAmount)
+        .eq("day_of_month", sourceDay)
+        .eq("month", sourceMonth)
+        .eq("category", targetCategory);
+      const { data: duplicateFixed } = await applySpaceFilter(
+        duplicateQuery,
+        user.id,
+        targetSpaceId,
+      );
+
+      if (duplicateFixed?.length) {
+        showActionMessage("Ese gasto fijo ya existe en el destino.");
+        setMovingExpenseKey(null);
+        return;
+      }
 
       await supabase.from("fixed_templates").insert([
         {
           title: item.title,
-          amount: Number(item.amount || 0),
+          amount: targetAmount,
           day_of_month: sourceDay,
           user_id: user.id,
           month: sourceMonth,
-          category: normalizeCategory(item.category),
+          category: targetCategory,
           space_id: targetSpaceId,
         },
       ]);
@@ -1050,12 +1158,12 @@ export default function TabTwoScreen() {
       await supabase.from("fixed_expenses").insert([
         {
           title: item.title,
-          amount: Number(item.amount || 0),
+          amount: targetAmount,
           day_of_month: sourceDay,
           user_id: user.id,
           month: sourceMonth,
           is_paid: false,
-          category: normalizeCategory(item.category),
+          category: targetCategory,
           space_id: targetSpaceId,
         },
       ]);
@@ -1066,18 +1174,44 @@ export default function TabTwoScreen() {
         item.id,
         `Se traspaso el gasto fijo ${item.title}.`,
       );
+      showActionMessage("Gasto fijo copiado al destino.");
       await loadAllRef.current();
     } else {
+      const targetCategory = normalizeCategory(item.category);
+      const targetAmount = Number(item.amount || 0);
+      const targetMonth = item.month || selectedMonth;
+      const targetDay = item.day_of_month || 1;
+      const duplicateQuery = supabase
+        .from("transactions")
+        .select("id")
+        .eq("title", item.title)
+        .eq("amount", targetAmount)
+        .eq("type", "expense")
+        .eq("month", targetMonth)
+        .eq("day_of_month", targetDay)
+        .eq("category", targetCategory);
+      const { data: duplicateVariable } = await applySpaceFilter(
+        duplicateQuery,
+        user.id,
+        targetSpaceId,
+      );
+
+      if (duplicateVariable?.length) {
+        showActionMessage("Ese gasto ya existe en el destino.");
+        setMovingExpenseKey(null);
+        return;
+      }
+
       await supabase.from("transactions").insert([
         {
           title: item.title,
-          amount: Number(item.amount || 0),
+          amount: targetAmount,
           type: "expense",
           user_id: user.id,
           created_at: new Date().toISOString(),
-          month: item.month || selectedMonth,
-          day_of_month: item.day_of_month || 1,
-          category: normalizeCategory(item.category),
+          month: targetMonth,
+          day_of_month: targetDay,
+          category: targetCategory,
           space_id: targetSpaceId,
         },
       ]);
@@ -1088,6 +1222,7 @@ export default function TabTwoScreen() {
         item.id,
         `Se traspaso el gasto ${item.title}.`,
       );
+      showActionMessage("Gasto copiado al destino.");
       await loadAllRef.current();
     }
 
@@ -1143,6 +1278,8 @@ export default function TabTwoScreen() {
     .reduce((sum, item) => sum + Number(item.amount), 0);
 
   const available = salary - fixedPaidTotal - totalExpenses;
+  const hasVisibleFinanceData =
+    salary > 0 || fixedExpenses.length > 0 || expenses.length > 0;
 
   const filteredFixedExpenses =
     fixedFilterCategory === "Todas"
@@ -1162,26 +1299,52 @@ export default function TabTwoScreen() {
     selected: string,
     onSelect: (category: string) => void,
   ) => (
-    <View style={styles.categoryList}>
-      {categories.map((category) => (
-        <Pressable
-          key={category}
-          style={[
-            styles.categoryButton,
-            selected === category && styles.categoryButtonActive,
-          ]}
-          onPress={() => onSelect(category)}
-        >
-          <Text
+    <View>
+      <View style={styles.categoryList}>
+        {categories.map((category) => (
+          <Pressable
+            key={category}
             style={[
-              styles.categoryButtonText,
-              selected === category && styles.categoryButtonTextActive,
+              styles.categoryButton,
+              selected === category && styles.categoryButtonActive,
             ]}
+            onPress={() => onSelect(category)}
           >
-            {category}
-          </Text>
+            <Text
+              style={[
+                styles.categoryButtonText,
+                selected === category && styles.categoryButtonTextActive,
+              ]}
+            >
+              {category}
+            </Text>
+          </Pressable>
+        ))}
+        <Pressable
+          style={styles.categoryAddButton}
+          onPress={() => setShowAddCategoryInModal(!showAddCategoryInModal)}
+        >
+          <Ionicons name="add" size={16} color={colors.primaryDark} />
+          <Text style={styles.categoryAddButtonText}>Crear categoría</Text>
         </Pressable>
-      ))}
+      </View>
+
+      {showAddCategoryInModal && (
+        <View style={styles.addCategoryBox}>
+          <TextInput
+            style={styles.categoryInput}
+            placeholder="Nueva categoría"
+            value={newCategory}
+            onChangeText={setNewCategory}
+          />
+          <Pressable
+            style={styles.saveCategoryButton}
+            onPress={() => createCategory(onSelect)}
+          >
+            <Text style={styles.saveCategoryButtonText}>Crear</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 
@@ -1395,6 +1558,12 @@ export default function TabTwoScreen() {
       >
         <View style={commonStyles.content}>
           <SpaceSwitcher />
+          <DataState
+            loading={isLoadingData && !hasLoadedData && !hasVisibleFinanceData}
+            error={dataError}
+            onRetry={() => loadAllRef.current()}
+          />
+          <ActionNotice message={actionMessage} />
 
           <View style={styles.monthBar}>
             <Pressable
@@ -1485,7 +1654,7 @@ export default function TabTwoScreen() {
             </View>
 
             <View style={styles.separator} />
-            {activeSpaceId && (
+            {Boolean(activeSpaceId) && (
               <>
                 <SummaryRow
                   label="Ingresos añadidos"
@@ -1508,7 +1677,7 @@ export default function TabTwoScreen() {
             />
           </View>
 
-          {activeSpaceId && (
+          {Boolean(activeSpaceId) && (
             <Pressable
               style={[styles.primaryButton, styles.incomeButton]}
               onPress={() => setSpaceIncomeModalVisible(true)}
@@ -1545,7 +1714,7 @@ export default function TabTwoScreen() {
             }
             styles={styles}
           >
-            {showAddFixed && (
+            {false && (
               <View style={styles.formBox}>
                 <TextInput
                   style={styles.input}
@@ -1575,6 +1744,16 @@ export default function TabTwoScreen() {
               </View>
             )}
 
+            {!showAddFixed && filteredFixedExpenses.length === 0 && (
+              <EmptyState
+                title="No hay gastos fijos este mes"
+                text="Añade alquiler, luz, suscripciones u otros gastos que se repiten."
+                actionLabel="Añadir fijo"
+                icon="calendar-outline"
+                onAction={() => setShowAddFixed(true)}
+              />
+            )}
+
             {filteredFixedExpenses.map((item: any) => {
               const currentCategory = normalizeCategory(item.category);
               const fullDate = getDateFromMonthAndDay(
@@ -1582,8 +1761,13 @@ export default function TabTwoScreen() {
                 item.day_of_month,
               );
               const moveKey = `fixed-${item.id}`;
-              const canManageItem = !activeSpaceId || item.user_id === currentUserId;
-              const canEditFixedItem = !activeSpaceId && canManageItem;
+              const permissionInput = {
+                activeSpaceId,
+                currentUserId,
+                ownerUserId: item.user_id,
+              };
+              const canEditFixedItem = canEditSharedFixedDetails(permissionInput);
+              const canMoveFixedItem = canMoveExpense(permissionInput);
 
               return (
                 <View key={moveKey}>
@@ -1624,7 +1808,7 @@ export default function TabTwoScreen() {
                       onPress={() => togglePaid(item)}
                       styles={styles}
                     />
-                    {canManageItem && (
+                    {canMoveFixedItem && (
                       <IconAction
                         icon="swap-horizontal-outline"
                         onPress={() =>
@@ -1645,7 +1829,7 @@ export default function TabTwoScreen() {
                     )}
                   </View>
                   </View>
-                  {canManageItem && renderMoveTargets(item, "fixed", moveKey)}
+                  {canMoveFixedItem && renderMoveTargets(item, "fixed", moveKey)}
                 </View>
               );
             })}
@@ -1675,7 +1859,7 @@ export default function TabTwoScreen() {
             }
             styles={styles}
           >
-            {showAddVariable && (
+            {false && (
               <View style={styles.formBox}>
                 <TextInput
                   style={styles.input}
@@ -1705,6 +1889,16 @@ export default function TabTwoScreen() {
               </View>
             )}
 
+            {!showAddVariable && filteredVariableExpenses.length === 0 && (
+              <EmptyState
+                title="No hay otros gastos"
+                text="Registra compras, ocio o movimientos puntuales de este mes."
+                actionLabel="Añadir gasto"
+                icon="card-outline"
+                onAction={() => setShowAddVariable(true)}
+              />
+            )}
+
             {filteredVariableExpenses.map((item: any) => {
               const currentCategory = normalizeCategory(item.category);
               const fullDate = getDateFromMonthAndDay(
@@ -1712,7 +1906,14 @@ export default function TabTwoScreen() {
                 item.day_of_month || 1,
               );
               const moveKey = `variable-${item.id}`;
-              const canManageItem = !activeSpaceId || item.user_id === currentUserId;
+              const permissionInput = {
+                activeSpaceId,
+                currentUserId,
+                ownerUserId: item.user_id,
+              };
+              const canEditVariableItem = canEditExpense(permissionInput);
+              const canDeleteVariableItem = canDeleteExpense(permissionInput);
+              const canMoveVariableItem = canMoveExpense(permissionInput);
 
               return (
                 <View key={moveKey}>
@@ -1737,14 +1938,14 @@ export default function TabTwoScreen() {
                   </View>
 
                   <View style={styles.rowActions}>
-                    {canManageItem && (
+                    {canEditVariableItem && (
                       <IconAction
                         icon="create-outline"
                         onPress={() => openEditVariable(item)}
                         styles={styles}
                       />
                     )}
-                    {canManageItem && (
+                    {canMoveVariableItem && (
                       <IconAction
                         icon="swap-horizontal-outline"
                         onPress={() =>
@@ -1755,7 +1956,7 @@ export default function TabTwoScreen() {
                         styles={styles}
                       />
                     )}
-                    {canManageItem && (
+                    {canDeleteVariableItem && (
                       <IconAction
                         icon="trash-outline"
                         danger
@@ -1765,13 +1966,139 @@ export default function TabTwoScreen() {
                     )}
                   </View>
                   </View>
-                  {canManageItem && renderMoveTargets(item, "variable", moveKey)}
+                  {canMoveVariableItem && renderMoveTargets(item, "variable", moveKey)}
                 </View>
               );
             })}
           </ExpenseSection>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showAddFixed}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddFixed(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>Añadir gasto fijo</Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  Se crea como pendiente y se arrastra al mes siguiente.
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setShowAddFixed(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Concepto"
+              value={fixedTitle}
+              onChangeText={setFixedTitle}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Cantidad"
+              value={fixedAmount}
+              keyboardType="numeric"
+              onChangeText={setFixedAmount}
+            />
+            <Text style={styles.inputLabel}>Fecha</Text>
+            {renderDateButton(fixedDate, () =>
+              openCalendar("fixedCreate", fixedDate),
+            )}
+            <Text style={styles.categoryTitle}>Categoría</Text>
+            {renderCategorySelector(fixedCategory, setFixedCategory)}
+
+            <View style={commonStyles.modalActions}>
+              <Pressable
+                style={commonStyles.modalCancelButton}
+                onPress={() => setShowAddFixed(false)}
+              >
+                <Text style={commonStyles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+
+              <Pressable
+                style={commonStyles.modalSaveButton}
+                onPress={handleAddFixedExpense}
+              >
+                <Text style={commonStyles.modalSaveText}>Guardar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showAddVariable}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAddVariable(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>Añadir gasto</Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  Registra un movimiento puntual de este mes.
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setShowAddVariable(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Concepto"
+              value={title}
+              onChangeText={setTitle}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Cantidad"
+              value={amount}
+              keyboardType="numeric"
+              onChangeText={setAmount}
+            />
+            <Text style={styles.inputLabel}>Fecha</Text>
+            {renderDateButton(variableDate, () =>
+              openCalendar("variableCreate", variableDate),
+            )}
+            <Text style={styles.categoryTitle}>Categoría</Text>
+            {renderCategorySelector(variableCategory, setVariableCategory)}
+
+            <View style={commonStyles.modalActions}>
+              <Pressable
+                style={commonStyles.modalCancelButton}
+                onPress={() => setShowAddVariable(false)}
+              >
+                <Text style={commonStyles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+
+              <Pressable
+                style={commonStyles.modalSaveButton}
+                onPress={handleAddExpense}
+              >
+                <Text style={commonStyles.modalSaveText}>Guardar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={spaceIncomeModalVisible}
@@ -1917,7 +2244,7 @@ export default function TabTwoScreen() {
                   />
                   <Pressable
                     style={styles.saveCategoryButton}
-                    onPress={createCategory}
+                    onPress={() => createCategory()}
                   >
                     <Text style={styles.saveCategoryButtonText}>Crear</Text>
                   </Pressable>
@@ -2482,6 +2809,24 @@ const createStyles = (isDesktop: boolean) =>
 
     categoryButtonTextActive: {
       color: colors.white,
+    },
+
+    categoryAddButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      backgroundColor: colors.primarySoft,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 999,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+    },
+
+    categoryAddButtonText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
     },
 
     categoryInput: {

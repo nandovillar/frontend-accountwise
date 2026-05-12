@@ -2,9 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ActionNotice } from "@/src/components/ActionNotice";
 import { AppTextInput } from "@/src/components/AppTextInput";
+import { DataState } from "@/src/components/DataState";
+import { EmptyState } from "@/src/components/EmptyState";
 import { KpiCard } from "@/src/components/KpiCard";
 import { ResultRow } from "@/src/components/ResultRow";
 import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
@@ -56,6 +59,11 @@ export default function SavingsScreen() {
 
   const [savings, setSavings] = useState<SavingItem[]>([]);
   const [selectedSaving, setSelectedSaving] = useState<SavingItem | null>(null);
+  const [actionMessage, setActionMessage] = useState("");
+  const [dataError, setDataError] = useState("");
+  const [hasLoadedData, setHasLoadedData] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const loadInProgressRef = useRef(false);
 
   const [formVisible, setFormVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -68,6 +76,11 @@ export default function SavingsScreen() {
 
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getNextYearDate());
+
+  const showActionMessage = (message: string) => {
+    setActionMessage(message);
+    setTimeout(() => setActionMessage(""), 2600);
+  };
 
   const calculateSaving = (
     startDateValue: string,
@@ -119,9 +132,20 @@ export default function SavingsScreen() {
   };
 
   const loadSavings = useCallback(async () => {
+    if (loadInProgressRef.current) return;
+
+    loadInProgressRef.current = true;
+    setIsLoadingData(true);
+    setDataError("");
+
     const user = await getCurrentUser();
 
-    if (!user) return;
+    if (!user) {
+      setHasLoadedData(true);
+      setIsLoadingData(false);
+      loadInProgressRef.current = false;
+      return;
+    }
 
     const savingsQuery = supabase
       .from("savings")
@@ -134,12 +158,33 @@ export default function SavingsScreen() {
     );
 
     if (error) {
-      Alert.alert("Error", "No se pudieron cargar los ahorros.");
+      setDataError("No se pudieron cargar los ahorros.");
+      setHasLoadedData(true);
+      setIsLoadingData(false);
+      loadInProgressRef.current = false;
       return;
     }
 
     setSavings(data || []);
+    setHasLoadedData(true);
+    setIsLoadingData(false);
+    loadInProgressRef.current = false;
   }, [activeSpaceId]);
+
+  const refreshSavings = useCallback(async () => {
+    try {
+      await loadSavings();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudieron cargar los ahorros.";
+      setDataError(message);
+      setHasLoadedData(true);
+      setIsLoadingData(false);
+      loadInProgressRef.current = false;
+    }
+  }, [loadSavings]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -179,6 +224,16 @@ export default function SavingsScreen() {
     const user = await getCurrentUser();
 
     if (!user) return;
+
+    if (!name.trim()) {
+      Alert.alert("Falta el nombre", "Pon un nombre para el objetivo.");
+      return;
+    }
+
+    if (Number(goal) <= 0) {
+      Alert.alert("Importe no valido", "El objetivo debe ser mayor que 0.");
+      return;
+    }
 
     const payload = {
       user_id: user.id,
@@ -228,6 +283,7 @@ export default function SavingsScreen() {
 
     await loadSavings();
     closeForm();
+    showActionMessage(editingId ? "Ahorro actualizado." : "Ahorro creado.");
   };
 
   const deleteSaving = async (item: SavingItem) => {
@@ -251,7 +307,8 @@ export default function SavingsScreen() {
         setSelectedSaving(null);
       }
 
-      await loadSavings();
+      await refreshSavings();
+      showActionMessage("Ahorro eliminado.");
       await recordActivity(
         "saving_deleted",
         "saving",
@@ -310,7 +367,7 @@ export default function SavingsScreen() {
         return;
       }
 
-      await loadSavings();
+      await refreshSavings();
     };
 
     init();
@@ -318,21 +375,22 @@ export default function SavingsScreen() {
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
         if (session?.user) {
-          await loadSavings();
+          await refreshSavings();
         }
       },
     );
 
     return () => subscription.subscription.unsubscribe();
-  }, [loadSavings]);
+  }, [refreshSavings]);
 
   useFocusEffect(
     useCallback(() => {
-      loadSavings();
-    }, [loadSavings]),
+      refreshSavings();
+    }, [refreshSavings]),
   );
 
   const totals = getTotals();
+  const hasVisibleSavingsData = savings.length > 0;
 
   const currentFormResult = calculateSaving(
     startDate,
@@ -359,6 +417,12 @@ export default function SavingsScreen() {
       >
         <View style={commonStyles.content}>
           <SpaceSwitcher />
+          <DataState
+            loading={isLoadingData && !hasLoadedData && !hasVisibleSavingsData}
+            error={dataError}
+            onRetry={refreshSavings}
+          />
+          <ActionNotice message={actionMessage} />
 
           <View style={styles.heroCard}>
             <View style={styles.heroTextBlock}>
@@ -416,19 +480,13 @@ export default function SavingsScreen() {
             </View>
 
             {savings.length === 0 ? (
-              <View style={styles.emptyBox}>
-                <Ionicons
-                  name="wallet-outline"
-                  size={28}
-                  color={colors.primaryDark}
-                />
-
-                <Text style={styles.emptyTitle}>No tienes ahorros todavía</Text>
-
-                <Text style={styles.emptyText}>
-                  Crea tu primer objetivo para ver el resumen y el progreso.
-                </Text>
-              </View>
+              <EmptyState
+                title="No tienes ahorros todavia"
+                text="Crea tu primer objetivo para ver el resumen y el progreso."
+                actionLabel="Crear objetivo"
+                icon="wallet-outline"
+                onAction={openCreateForm}
+              />
             ) : (
               savings.map((item) => {
                 const result = calculateSaving(

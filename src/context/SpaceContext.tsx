@@ -19,14 +19,24 @@ export type AppSpace = {
   role?: "owner" | "member";
 };
 
+export type SpaceActivity = {
+  id: string;
+  message: string;
+  created_at: string;
+  actor_user_id?: string;
+  type?: string;
+};
+
 type SpaceContextType = {
   activeSpace: AppSpace;
   activeSpaceId: string | null;
+  recentActivity: SpaceActivity[];
   spaces: AppSpace[];
   sharedAvailable: boolean;
   unreadCount: number;
   createSharedSpace: (name: string) => Promise<string | null>;
   inviteMemberByEmail: (email: string) => Promise<string | null>;
+  refreshActivity: () => Promise<void>;
   refreshSpaces: () => Promise<void>;
   recordActivity: (
     type: string,
@@ -48,11 +58,13 @@ const personalSpace: AppSpace = {
 const SpaceContext = createContext<SpaceContextType>({
   activeSpace: personalSpace,
   activeSpaceId: null,
+  recentActivity: [],
   spaces: [personalSpace],
   sharedAvailable: false,
   unreadCount: 0,
   createSharedSpace: async () => null,
   inviteMemberByEmail: async () => null,
+  refreshActivity: async () => {},
   refreshSpaces: async () => {},
   recordActivity: async () => {},
   selectSpace: async () => {},
@@ -67,6 +79,7 @@ export function SpaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [spaces, setSpaces] = useState<AppSpace[]>([personalSpace]);
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
+  const [recentActivity, setRecentActivity] = useState<SpaceActivity[]>([]);
   const [sharedAvailable, setSharedAvailable] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -101,10 +114,31 @@ export function SpaceProvider({ children }: { children: ReactNode }) {
     setUnreadCount(count || 0);
   }, [user]);
 
+  const loadActivityForSpace = useCallback(async (spaceId: string | null) => {
+    if (!user || !spaceId) {
+      setRecentActivity([]);
+      return;
+    }
+
+    const { data } = await supabase
+      .from("activity_events")
+      .select("id, message, created_at, actor_user_id, type")
+      .eq("space_id", spaceId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    setRecentActivity(data || []);
+  }, [user]);
+
+  const refreshActivity = useCallback(async () => {
+    await loadActivityForSpace(activeSpaceId);
+  }, [activeSpaceId, loadActivityForSpace]);
+
   const refreshSpaces = useCallback(async () => {
     if (!user) {
       setSpaces([personalSpace]);
       setActiveSpaceId(null);
+      setRecentActivity([]);
       setSharedAvailable(false);
       setUnreadCount(0);
       return;
@@ -118,6 +152,7 @@ export function SpaceProvider({ children }: { children: ReactNode }) {
     if (error) {
       setSpaces([personalSpace]);
       setActiveSpaceId(null);
+      setRecentActivity([]);
       setSharedAvailable(false);
       return;
     }
@@ -155,6 +190,7 @@ export function SpaceProvider({ children }: { children: ReactNode }) {
     }
 
     await loadUnreadCount(spaceId);
+    await loadActivityForSpace(spaceId);
   };
 
   const createSharedSpace = async (name: string) => {
@@ -248,6 +284,9 @@ export function SpaceProvider({ children }: { children: ReactNode }) {
       entity_id: entityId,
       message,
     });
+
+    await loadUnreadCount(activeSpaceId);
+    await refreshActivity();
   };
 
   const markActiveSpaceSeen = async () => {
@@ -260,6 +299,7 @@ export function SpaceProvider({ children }: { children: ReactNode }) {
     });
 
     setUnreadCount(0);
+    await refreshActivity();
   };
 
   useEffect(() => {
@@ -268,18 +308,21 @@ export function SpaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadUnreadCount(activeSpaceId);
-  }, [activeSpaceId, loadUnreadCount]);
+    loadActivityForSpace(activeSpaceId);
+  }, [activeSpaceId, loadActivityForSpace, loadUnreadCount]);
 
   return (
     <SpaceContext.Provider
       value={{
         activeSpace,
         activeSpaceId,
+        recentActivity,
         spaces,
         sharedAvailable,
         unreadCount,
         createSharedSpace,
         inviteMemberByEmail,
+        refreshActivity,
         refreshSpaces,
         recordActivity,
         selectSpace,

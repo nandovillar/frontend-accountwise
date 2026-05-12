@@ -2,8 +2,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { DataState } from "@/src/components/DataState";
 import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { supabase } from "@/src/lib/supabase";
@@ -48,6 +49,10 @@ export default function HomeScreen() {
   const [selectedMonth, setSelectedMonth] = useState(
     new Date().toISOString().slice(0, 7),
   );
+  const [dataError, setDataError] = useState("");
+  const [hasLoadedData, setHasLoadedData] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const loadInProgressRef = useRef(false);
 
   const [summary, setSummary] = useState<Summary>({
     salary: 0,
@@ -76,9 +81,20 @@ export default function HomeScreen() {
   };
 
   const loadMonthlySummary = useCallback(async () => {
+    if (loadInProgressRef.current) return;
+
+    loadInProgressRef.current = true;
+    setIsLoadingData(true);
+    setDataError("");
+
     const user = await getCurrentUser();
 
-    if (!user) return;
+    if (!user) {
+      setHasLoadedData(true);
+      setIsLoadingData(false);
+      loadInProgressRef.current = false;
+      return;
+    }
 
     let salary = 0;
 
@@ -220,7 +236,25 @@ export default function HomeScreen() {
       savings: totalSavings,
       categoryTotals,
     });
+    setHasLoadedData(true);
+    setIsLoadingData(false);
+    loadInProgressRef.current = false;
   }, [activeSpaceId, selectedMonth]);
+
+  const refreshMonthlySummary = useCallback(async () => {
+    try {
+      await loadMonthlySummary();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo cargar el resumen.";
+      setDataError(message);
+      setHasLoadedData(true);
+      setIsLoadingData(false);
+      loadInProgressRef.current = false;
+    }
+  }, [loadMonthlySummary]);
 
   useEffect(() => {
     const init = async () => {
@@ -231,7 +265,7 @@ export default function HomeScreen() {
         return;
       }
 
-      await loadMonthlySummary();
+      await refreshMonthlySummary();
     };
 
     init();
@@ -239,26 +273,28 @@ export default function HomeScreen() {
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
         if (session?.user) {
-          await loadMonthlySummary();
+          await refreshMonthlySummary();
         }
       },
     );
 
     return () => subscription.subscription.unsubscribe();
-  }, [loadMonthlySummary]);
-
-  useEffect(() => {
-    loadMonthlySummary();
-  }, [loadMonthlySummary]);
+  }, [refreshMonthlySummary]);
 
   useFocusEffect(
     useCallback(() => {
-      loadMonthlySummary();
-    }, [loadMonthlySummary]),
+      refreshMonthlySummary();
+    }, [refreshMonthlySummary]),
   );
 
   const totalExpenses = summary.fixedPaid + summary.variables;
   const available = summary.salary - totalExpenses;
+  const hasVisibleFinanceData =
+    summary.salary > 0 ||
+    summary.fixedPaid > 0 ||
+    summary.variables > 0 ||
+    summary.savings > 0 ||
+    summary.categoryTotals.length > 0;
 
   return (
     <View style={commonStyles.screen}>
@@ -274,6 +310,11 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={commonStyles.container}>
         <View style={commonStyles.content}>
           <SpaceSwitcher />
+          <DataState
+            loading={isLoadingData && !hasLoadedData && !hasVisibleFinanceData}
+            error={dataError}
+            onRetry={refreshMonthlySummary}
+          />
 
           <View style={styles.monthCard}>
             <Pressable

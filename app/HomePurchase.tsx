@@ -157,6 +157,7 @@ export default function HomePurchaseScreen() {
 
   const [saveNameModalVisible, setSaveNameModalVisible] = useState(false);
   const [newSimulationName, setNewSimulationName] = useState("");
+  const [simulatorModalVisible, setSimulatorModalVisible] = useState(false);
 
   const toNumber = (value: string | number) => {
     return Number(String(value).replace(",", ".")) || 0;
@@ -178,6 +179,24 @@ export default function HomePurchaseScreen() {
     salaryBonus: String(defaultSimulation.salary_bonus),
     lifeInsurance: String(defaultSimulation.life_insurance),
     homeInsurance: String(defaultSimulation.home_insurance),
+  });
+
+  const buildEmptySnapshot = (): FormSnapshot => ({
+    selectedSimulationId: null,
+    name: "Nueva simulaciÃ³n",
+    propertyPrice: "",
+    agencyPercent: "",
+    taxPercent: "",
+    financialFee: "",
+    notaryPercent: "",
+    downPayment: "",
+    pendingNotary: "",
+    years: "",
+    tin: "",
+    bonus: "",
+    salaryBonus: "",
+    lifeInsurance: "",
+    homeInsurance: "",
   });
 
   const buildSnapshotFromSimulation = (
@@ -252,18 +271,35 @@ export default function HomePurchaseScreen() {
   const totalBankCost = monthlyPayment * totalMonths;
   const totalInterest = Math.max(0, totalBankCost - mortgage);
 
-  const cleanToExample = () => {
-    const snapshot = buildDefaultSnapshot();
+  const cleanSimulationForm = () => {
+    const snapshot = buildEmptySnapshot();
     applySnapshot(snapshot);
   };
 
   const exitSimulator = () => {
-    router.replace("/savings");
+    setEditMode(null);
+    setSaveNameModalVisible(false);
+    setSimulatorModalVisible(false);
   };
 
   const loadSimulationIntoForm = (simulation: Simulation) => {
     const snapshot = buildSnapshotFromSimulation(simulation);
     applySnapshot(snapshot);
+  };
+
+  const openNewSimulation = () => {
+    applySnapshot(buildEmptySnapshot());
+    setSimulatorModalVisible(true);
+  };
+
+  const openExampleSimulation = () => {
+    applySnapshot(buildDefaultSnapshot());
+    setSimulatorModalVisible(true);
+  };
+
+  const openSavedSimulation = (simulation: Simulation) => {
+    loadSimulationIntoForm(simulation);
+    setSimulatorModalVisible(true);
   };
 
   const loadSimulations = useCallback(async () => {
@@ -410,7 +446,8 @@ export default function HomePurchaseScreen() {
         return;
       }
 
-      cleanToExample();
+      setSimulatorModalVisible(false);
+      applySnapshot(buildEmptySnapshot());
       await loadSimulations();
       await recordActivity(
         "home_simulation_deleted",
@@ -494,7 +531,7 @@ export default function HomePurchaseScreen() {
         return;
       }
 
-      const snapshot = buildDefaultSnapshot();
+      const snapshot = buildEmptySnapshot();
       applySnapshot(snapshot);
 
       await loadSimulations();
@@ -511,6 +548,140 @@ export default function HomePurchaseScreen() {
         <View style={commonStyles.content}>
           <SpaceSwitcher />
 
+          <View style={[commonStyles.card, styles.libraryCard]}>
+            <View style={styles.libraryHeader}>
+              <View style={styles.titleTextBlock}>
+                <Text style={commonStyles.smallText}>Hipoteca</Text>
+                <Text style={commonStyles.cardTitle}>
+                  Simulaciones guardadas
+                </Text>
+                <Text style={commonStyles.subtitle}>
+                  Abre una simulaciÃ³n propia o usa el ejemplo solo cuando lo
+                  necesites.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.libraryActions}>
+              <Pressable
+                style={[commonStyles.primaryButton, styles.libraryButton]}
+                onPress={openNewSimulation}
+              >
+                <Ionicons name="add" size={19} color={colors.white} />
+                <Text style={commonStyles.primaryButtonText}>
+                  Nueva simulaciÃ³n
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[commonStyles.secondaryButton, styles.libraryButton]}
+                onPress={openExampleSimulation}
+              >
+                <Ionicons
+                  name="sparkles-outline"
+                  size={18}
+                  color={colors.primaryDark}
+                />
+                <Text style={commonStyles.secondaryButtonText}>
+                  Ver ejemplo
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {simulations.length === 0 ? (
+            <View style={[commonStyles.card, styles.emptySimulationsCard]}>
+              <View style={styles.emptyIcon}>
+                <Ionicons
+                  name="file-tray-outline"
+                  size={24}
+                  color={colors.primaryDark}
+                />
+              </View>
+
+              <Text style={commonStyles.sectionTitle}>
+                AÃºn no tienes simulaciones
+              </Text>
+
+              <Text style={commonStyles.subtitle}>
+                Crea una nueva o abre el ejemplo para ver cÃ³mo quedarÃ­a un
+                caso completo.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.savedGrid}>
+              {simulations.map((simulation) => (
+                <Pressable
+                  key={simulation.id}
+                  style={styles.savedCard}
+                  onPress={() => openSavedSimulation(simulation)}
+                >
+                  <View style={styles.savedCardTop}>
+                    <Text style={styles.savedCardTitle} numberOfLines={1}>
+                      {simulation.name}
+                    </Text>
+
+                    <View style={styles.savedCardIcon}>
+                      <Ionicons
+                        name="open-outline"
+                        size={17}
+                        color={colors.primaryDark}
+                      />
+                    </View>
+                  </View>
+
+                  <Text style={styles.savedCardAmount}>
+                    {formatMoney(Number(simulation.property_price || 0))}
+                  </Text>
+
+                  <Text style={styles.savedCardSubtitle}>
+                    Pulsa para abrirla
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          <Modal
+            visible={simulatorModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={exitSimulator}
+          >
+            <View style={commonStyles.modalOverlay}>
+              <View style={styles.simulatorModalCard}>
+                <View style={commonStyles.modalHeader}>
+                  <View style={commonStyles.modalTitleBlock}>
+                    <Text style={commonStyles.modalTitle}>
+                      {selectedSimulationId
+                        ? "SimulaciÃ³n guardada"
+                        : name === defaultSimulation.name
+                          ? "SimulaciÃ³n de ejemplo"
+                          : "Nueva simulaciÃ³n"}
+                    </Text>
+
+                    <Text style={commonStyles.modalSubtitle}>
+                      Revisa los datos, ajusta importes y guarda los cambios.
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    style={commonStyles.closeButton}
+                    onPress={exitSimulator}
+                  >
+                    <Ionicons
+                      name="close"
+                      size={22}
+                      color={colors.primaryDark}
+                    />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={styles.simulatorModalScroll}
+                  contentContainerStyle={styles.simulatorModalContent}
+                  keyboardShouldPersistTaps="handled"
+                >
           <View style={[commonStyles.card, styles.titleCard]}>
             <View style={styles.titleTextBlock}>
               <Text style={commonStyles.smallText}>
@@ -604,7 +775,7 @@ export default function HomePurchaseScreen() {
             <View style={styles.secondaryActionsRow}>
               <Pressable
                 style={[commonStyles.secondaryButton, styles.halfButton]}
-                onPress={cleanToExample}
+                onPress={cleanSimulationForm}
               >
                 <Ionicons
                   name="refresh-outline"
@@ -640,54 +811,6 @@ export default function HomePurchaseScreen() {
               </Pressable>
             )}
           </View>
-
-          {simulations.length > 0 && (
-            <View style={commonStyles.card}>
-              <Text style={commonStyles.sectionTitle}>
-                Simulaciones guardadas
-              </Text>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.savedList}
-              >
-                {simulations.map((simulation) => (
-                  <Pressable
-                    key={simulation.id}
-                    style={[
-                      styles.savedItem,
-                      selectedSimulationId === simulation.id &&
-                        styles.savedItemActive,
-                    ]}
-                    onPress={() => loadSimulationIntoForm(simulation)}
-                  >
-                    <Text
-                      style={[
-                        styles.savedItemTitle,
-                        selectedSimulationId === simulation.id &&
-                          styles.savedItemTitleActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {simulation.name}
-                    </Text>
-
-                    <Text
-                      style={[
-                        styles.savedItemSubtitle,
-                        selectedSimulationId === simulation.id &&
-                          styles.savedItemSubtitleActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {formatMoney(Number(simulation.property_price || 0))}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
 
           <View style={commonStyles.card}>
             <SectionHeader
@@ -824,6 +947,10 @@ export default function HomePurchaseScreen() {
               styles={styles}
             />
           </View>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
         </View>
       </ScrollView>
 
@@ -1088,6 +1215,109 @@ function SectionHeader({
 
 const createStyles = (isDesktop: boolean) =>
   StyleSheet.create({
+    libraryCard: {
+      gap: isDesktop ? 16 : 12,
+    },
+
+    libraryHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+
+    libraryActions: {
+      flexDirection: isDesktop ? "row" : "column",
+      gap: 8,
+    },
+
+    libraryButton: {
+      flex: isDesktop ? 1 : undefined,
+      width: isDesktop ? undefined : "100%",
+    },
+
+    emptySimulationsCard: {
+      alignItems: "flex-start",
+      gap: 8,
+    },
+
+    emptyIcon: {
+      width: 46,
+      height: 46,
+      borderRadius: 16,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    savedGrid: {
+      gap: isDesktop ? 12 : 10,
+    },
+
+    savedCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: isDesktop ? 18 : 16,
+      padding: isDesktop ? 18 : 14,
+      gap: 8,
+    },
+
+    savedCardTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+
+    savedCardTitle: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: isDesktop ? 18 : 16,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    savedCardIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    savedCardAmount: {
+      fontSize: isDesktop ? 24 : 21,
+      color: colors.primaryDark,
+      fontWeight: "900",
+    },
+
+    savedCardSubtitle: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "800",
+    },
+
+    simulatorModalCard: {
+      width: isDesktop ? "72%" : "92%",
+      maxWidth: 760,
+      maxHeight: "88%",
+      backgroundColor: colors.background,
+      borderRadius: isDesktop ? 22 : 18,
+      padding: isDesktop ? 18 : 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    simulatorModalScroll: {
+      marginTop: isDesktop ? 8 : 6,
+    },
+
+    simulatorModalContent: {
+      gap: isDesktop ? 14 : 12,
+      paddingBottom: isDesktop ? 6 : 4,
+    },
+
     titleCard: {
       flexDirection: "row",
       alignItems: "center",
@@ -1212,47 +1442,6 @@ const createStyles = (isDesktop: boolean) =>
 
     halfButton: {
       flex: 1,
-    },
-
-    savedList: {
-      gap: 8,
-      marginTop: 10,
-    },
-
-    savedItem: {
-      width: isDesktop ? 170 : 140,
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 14,
-      padding: 10,
-    },
-
-    savedItemActive: {
-      backgroundColor: colors.primaryDark,
-      borderColor: colors.primaryDark,
-    },
-
-    savedItemTitle: {
-      fontSize: isDesktop ? 13 : 11,
-      fontWeight: "900",
-      color: colors.text,
-      marginBottom: 4,
-    },
-
-    savedItemTitleActive: {
-      color: colors.white,
-    },
-
-    savedItemSubtitle: {
-      fontSize: isDesktop ? 12 : 10,
-      color: colors.mutedText,
-      fontWeight: "700",
-    },
-
-    savedItemSubtitleActive: {
-      color: colors.white,
-      opacity: 0.9,
     },
 
     sectionHeader: {
