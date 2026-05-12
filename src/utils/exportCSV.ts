@@ -1,4 +1,4 @@
-import * as FileSystem from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 export async function exportExpensesToCSV(expenses: any[]) {
@@ -8,11 +8,9 @@ export async function exportExpensesToCSV(expenses: any[]) {
     csv += `${item.date},${item.category},${item.description},${item.amount}\n`;
   });
 
-  const fileUri = FileSystem.cacheDirectory + "gastos.csv";
+  const file = new File(Paths.cache, "gastos.csv");
 
-  await FileSystem.writeAsStringAsync(fileUri, csv, {
-    encoding: FileSystem.EncodingType.UTF8,
-  });
+  file.write(csv, { encoding: "utf8" });
 
-  await Sharing.shareAsync(fileUri);
+  await Sharing.shareAsync(file.uri);
 }

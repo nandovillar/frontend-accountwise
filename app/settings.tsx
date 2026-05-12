@@ -1,61 +1,53 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { AppBottomMenu } from "@/src/components/AppBottomMenu";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
+import { createCommonStyles } from "@/src/theme/commonStyles";
 
 import {
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
 export default function SettingsScreen() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+
+  const commonStyles = useMemo(
+    () => createCommonStyles(isDesktop),
+    [isDesktop],
+  );
+
+  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+
   const [email, setEmail] = useState("");
-  const [userId, setUserId] = useState("");
 
   const loadUser = async () => {
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (!session?.user) {
-      router.replace("/login");
-      return;
-    }
-
-    setEmail(session.user.email || "");
-    setUserId(session.user.id || "");
+    setEmail(user?.email || "");
   };
 
   const handleLogout = async () => {
-    const executeLogout = async () => {
-      const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
 
-      if (error) {
-        Alert.alert("Error", error.message);
-        return;
-      }
-
-      router.replace("/login");
-    };
-
-    if (Platform.OS === "web") {
-      const confirmed = window.confirm("¿Quieres cerrar sesión?");
-      if (confirmed) await executeLogout();
+    if (error) {
+      Alert.alert("Error", error.message);
       return;
     }
 
-    Alert.alert("Cerrar sesión", "¿Quieres cerrar sesión?", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Cerrar sesión", style: "destructive", onPress: executeLogout },
-    ]);
+    router.replace("/login");
   };
 
   useEffect(() => {
@@ -63,297 +55,189 @@ export default function SettingsScreen() {
   }, []);
 
   return (
-    <View style={styles.screen}>
+    <View style={commonStyles.screen}>
       <Header title="Ajustes" />
 
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.content}>
+      <ScrollView contentContainerStyle={commonStyles.container}>
+        <View style={commonStyles.content}>
           <View style={styles.heroCard}>
-            <View style={styles.heroIconBox}>
-              <Ionicons name="person-outline" size={28} color={colors.white} />
+            <View style={styles.heroIcon}>
+              <Ionicons
+                name="person-outline"
+                size={28}
+                color={colors.primaryDark}
+              />
             </View>
 
             <View style={styles.heroTextBlock}>
               <Text style={styles.heroLabel}>Cuenta activa</Text>
 
               <Text
-                style={styles.heroEmail}
+                style={styles.emailText}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.75}
               >
                 {email || "Usuario"}
               </Text>
-
-              <Text style={styles.heroSubtitle}>
-                Datos guardados por usuario
-              </Text>
             </View>
           </View>
 
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Cuenta</Text>
-            <Text style={styles.sectionSubtitle}>
-              Información básica de tu sesión actual.
+          <View style={commonStyles.card}>
+            <Text style={commonStyles.cardTitle}>Preferencias</Text>
+
+            <Text style={[commonStyles.subtitle, styles.description]}>
+              Desde aquí puedes revisar tu cuenta y acceder a opciones básicas
+              de la aplicación.
             </Text>
 
-            <View style={styles.infoBox}>
-              <InfoRow label="Email" value={email || "No disponible"} />
-              <InfoRow
-                label="Usuario"
-                value={userId ? `${userId.slice(0, 8)}...` : "No disponible"}
-              />
+            <View style={styles.optionRow}>
+              <View style={styles.optionIcon}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={20}
+                  color={colors.primaryDark}
+                />
+              </View>
+
+              <View style={styles.optionTextBlock}>
+                <Text style={styles.optionTitle}>Sesión protegida</Text>
+
+                <Text style={styles.optionDescription}>
+                  Tus gastos, ahorros y simulaciones se cargan usando tu
+                  usuario.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.optionRow}>
+              <View style={styles.optionIcon}>
+                <Ionicons
+                  name="color-palette-outline"
+                  size={20}
+                  color={colors.primaryDark}
+                />
+              </View>
+
+              <View style={styles.optionTextBlock}>
+                <Text style={styles.optionTitle}>Tema visual</Text>
+
+                <Text style={styles.optionDescription}>
+                  Tema turquesa con diseño financiero limpio.
+                </Text>
+              </View>
             </View>
           </View>
 
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Accesos rápidos</Text>
-            <Text style={styles.sectionSubtitle}>
-              Vuelve a las secciones principales de la app.
+          <View style={commonStyles.card}>
+            <Text style={commonStyles.cardTitle}>Acciones</Text>
+
+            <Text style={[commonStyles.subtitle, styles.description]}>
+              Cierra la sesión cuando termines de usar la aplicación.
             </Text>
 
-            <View style={styles.actionsGrid}>
-              <Pressable
-                style={styles.actionButton}
-                onPress={() => router.push("/")}
-              >
-                <Ionicons
-                  name="home-outline"
-                  size={20}
-                  color={colors.primaryDark}
-                />
-                <Text style={styles.actionButtonText}>Inicio</Text>
-              </Pressable>
+            <Pressable
+              style={[commonStyles.dangerButton, styles.logoutButton]}
+              onPress={handleLogout}
+            >
+              <Ionicons name="log-out-outline" size={18} color="#B91C1C" />
 
-              <Pressable
-                style={styles.actionButton}
-                onPress={() => router.push("/expenses")}
-              >
-                <Ionicons
-                  name="card-outline"
-                  size={20}
-                  color={colors.primaryDark}
-                />
-                <Text style={styles.actionButtonText}>Gastos</Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.actionButton}
-                onPress={() => router.push("/savings")}
-              >
-                <Ionicons
-                  name="wallet-outline"
-                  size={20}
-                  color={colors.primaryDark}
-                />
-                <Text style={styles.actionButtonText}>Ahorros</Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.actionButton}
-                onPress={() => router.push("/HomePurchase")}
-              >
-                <Ionicons
-                  name="home-outline"
-                  size={20}
-                  color={colors.primaryDark}
-                />
-                <Text style={styles.actionButtonText}>Casa</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Seguridad</Text>
-            <Text style={styles.sectionSubtitle}>
-              Puedes cerrar la sesión de este dispositivo.
-            </Text>
-
-            <Pressable style={styles.logoutButton} onPress={handleLogout}>
-              <Ionicons name="log-out-outline" size={20} color="#B91C1C" />
-              <Text style={styles.logoutButtonText}>Cerrar sesión</Text>
+              <Text style={commonStyles.dangerButtonText}>Cerrar sesión</Text>
             </Pressable>
           </View>
         </View>
       </ScrollView>
+
+      <AppBottomMenu active="settings" />
     </View>
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
+const createStyles = (isDesktop: boolean) =>
+  StyleSheet.create({
+    heroCard: {
+      backgroundColor: colors.primaryDark,
+      borderRadius: isDesktop ? 20 : 18,
+      padding: isDesktop ? 22 : 16,
+      marginBottom: isDesktop ? 16 : 12,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+    },
 
-      <Text
-        style={styles.infoValue}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.75}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
+    heroIcon: {
+      width: isDesktop ? 58 : 48,
+      height: isDesktop ? 58 : 48,
+      borderRadius: 999,
+      backgroundColor: colors.white,
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-const isWeb = Platform.OS === "web";
+    heroTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+    heroLabel: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
 
-  container: {
-    flexGrow: 1,
-    padding: isWeb ? 28 : 14,
-    paddingBottom: 36,
-    alignItems: "center",
-  },
+    emailText: {
+      fontSize: isDesktop ? 22 : 18,
+      fontWeight: "900",
+      color: colors.white,
+    },
 
-  content: {
-    width: "100%",
-    maxWidth: 940,
-  },
+    description: {
+      marginTop: 6,
+      marginBottom: 14,
+      lineHeight: isDesktop ? 20 : 17,
+    },
 
-  heroCard: {
-    backgroundColor: colors.primaryDark,
-    borderRadius: 20,
-    padding: isWeb ? 22 : 18,
-    marginBottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
+    optionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: isDesktop ? 13 : 11,
+      borderTopWidth: 1,
+      borderTopColor: colors.borderSoft,
+    },
 
-  heroIconBox: {
-    width: isWeb ? 56 : 48,
-    height: isWeb ? 56 : 48,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+    optionIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  heroTextBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
+    optionTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
 
-  heroLabel: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.white,
-    opacity: 0.85,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
+    optionTitle: {
+      fontSize: isDesktop ? 14 : 12,
+      fontWeight: "900",
+      color: colors.text,
+      marginBottom: 2,
+    },
 
-  heroEmail: {
-    fontSize: isWeb ? 24 : 19,
-    color: colors.white,
-    fontWeight: "900",
-  },
+    optionDescription: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      fontWeight: "600",
+      lineHeight: isDesktop ? 18 : 16,
+    },
 
-  heroSubtitle: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.white,
-    opacity: 0.9,
-    marginTop: 4,
-  },
-
-  sectionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: isWeb ? 16 : 13,
-    marginBottom: 14,
-  },
-
-  sectionTitle: {
-    fontSize: isWeb ? 18 : 16,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  sectionSubtitle: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    marginTop: 3,
-    marginBottom: 12,
-  },
-
-  infoBox: {
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-
-  infoRow: {
-    paddingVertical: isWeb ? 12 : 10,
-    paddingHorizontal: isWeb ? 12 : 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSoft,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  infoLabel: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    fontWeight: "800",
-  },
-
-  infoValue: {
-    flex: 1,
-    textAlign: "right",
-    fontSize: isWeb ? 13 : 11,
-    color: colors.text,
-    fontWeight: "800",
-  },
-
-  actionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-
-  actionButton: {
-    flexGrow: 1,
-    minWidth: isWeb ? 180 : "47%",
-    backgroundColor: colors.primarySoft,
-    borderRadius: 14,
-    paddingVertical: isWeb ? 14 : 12,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  actionButtonText: {
-    color: colors.primaryDark,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  logoutButton: {
-    backgroundColor: "#FEF2F2",
-    borderRadius: 14,
-    paddingVertical: isWeb ? 14 : 12,
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  logoutButtonText: {
-    color: "#B91C1C",
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-});
+    logoutButton: {
+      marginTop: 8,
+      width: "100%",
+    },
+  });

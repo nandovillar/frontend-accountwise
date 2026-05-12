@@ -1,21 +1,21 @@
 export const colors = {
-  background: "#F2FBFC",
+  background: "#F3FBFC",
   surface: "#FFFFFF",
   card: "#FFFFFF",
 
-  primary: "#0891B2",
-  primaryDark: "#155E75",
-  primarySoft: "#E0F7FA",
+  primary: "#06B6D4",
+  primaryDark: "#075E72",
+  primarySoft: "#DFFAFE",
 
-  text: "#111827",
+  text: "#0F172A",
   mutedText: "#64748B",
 
-  border: "#BEEBF3",
-  borderSoft: "#E6F7FA",
+  border: "#CFFAFE",
+  borderSoft: "#E5F8FA",
 
-  success: "#15803D",
-  danger: "#B91C1C",
-  warning: "#D97706",
+  success: "#16A34A",
+  danger: "#DC2626",
+  warning: "#F59E0B",
 
   white: "#FFFFFF",
 };

@@ -1,8 +1,21 @@
-import { supabase } from "@/src/lib/supabase";
-import { colors } from "@/src/theme/colors";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+
+import { supabase } from "@/src/lib/supabase";
+import { colors } from "@/src/theme/colors";
+import { createCommonStyles } from "@/src/theme/commonStyles";
+import {
+  addMonths,
+  getCurrentMonth,
+  getDateFromMonthAndDay,
+  getDayFromDate,
+  getMonthFromDate,
+  getTodayDate,
+} from "@/src/utils/dates";
+import { formatCompactMoney } from "@/src/utils/money";
 
 import {
   Alert,
@@ -13,6 +26,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -28,47 +42,39 @@ const defaultCategories = [
 ];
 
 type EditingType = "fixed" | "variable" | null;
+type ExpenseSectionType = "fixed" | "variable";
+
+const sectionTitleDefaults: Record<ExpenseSectionType, string> = {
+  fixed: "Gastos fijos",
+  variable: "Otros gastos",
+};
+
+const getSectionTitlesStorageKey = (userId: string) => {
+  return `accountwise:expense-section-titles:${userId}`;
+};
+
+const parseSectionTitles = (
+  value: string | null,
+): Partial<Record<ExpenseSectionType, string>> | null => {
+  if (!value) return null;
+
+  try {
+    return JSON.parse(value) as Partial<Record<ExpenseSectionType, string>>;
+  } catch {
+    return null;
+  }
+};
 
 export default function TabTwoScreen() {
-  const getTodayDate = () => {
-    const now = new Date();
-    return now.toISOString().slice(0, 10);
-  };
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
-  const getCurrentMonth = () => {
-    return getTodayDate().slice(0, 7);
-  };
+  const commonStyles = useMemo(
+    () => createCommonStyles(isDesktop),
+    [isDesktop],
+  );
 
-  const getDateFromMonthAndDay = (month: string, day: number | string) => {
-    return `${month}-${String(day || 1).padStart(2, "0")}`;
-  };
-
-  const getDayFromDate = (date: string) => {
-    return Number(date.slice(8, 10));
-  };
-
-  const getMonthFromDate = (date: string) => {
-    return date.slice(0, 7);
-  };
-
-  const addMonths = (monthValue: string, offset: number) => {
-    const [year, month] = monthValue.split("-").map(Number);
-
-    let newYear = year;
-    let newMonth = month + offset;
-
-    if (newMonth < 1) {
-      newMonth = 12;
-      newYear -= 1;
-    }
-
-    if (newMonth > 12) {
-      newMonth = 1;
-      newYear += 1;
-    }
-
-    return `${newYear}-${String(newMonth).padStart(2, "0")}`;
-  };
+  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
 
   const normalizeCategory = (category?: string) => {
     if (!category || category === "General") return "Otros";
@@ -108,11 +114,13 @@ export default function TabTwoScreen() {
   const [showFixedSection, setShowFixedSection] = useState(false);
   const [showVariableSection, setShowVariableSection] = useState(false);
 
-  const [fixedSectionTitle, setFixedSectionTitle] = useState("Gastos fijos");
+  const [fixedSectionTitle, setFixedSectionTitle] = useState(
+    sectionTitleDefaults.fixed,
+  );
   const [variableSectionTitle, setVariableSectionTitle] =
-    useState("Otros gastos");
+    useState(sectionTitleDefaults.variable);
   const [editingSectionTitle, setEditingSectionTitle] = useState<
-    "fixed" | "variable" | null
+    ExpenseSectionType | null
   >(null);
 
   const [editingType, setEditingType] = useState<EditingType>(null);
@@ -143,6 +151,78 @@ export default function TabTwoScreen() {
     ];
   };
 
+  const loadSectionTitles = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const storageKey = getSectionTitlesStorageKey(user.id);
+    const storedTitles = await AsyncStorage.getItem(
+      storageKey,
+    );
+    const localTitles = parseSectionTitles(storedTitles);
+
+    const { data: remoteTitles } = await supabase
+      .from("user_preferences")
+      .select("expense_fixed_title, expense_variable_title")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    const nextTitles = {
+      fixed:
+        remoteTitles?.expense_fixed_title ||
+        localTitles?.fixed ||
+        sectionTitleDefaults.fixed,
+      variable:
+        remoteTitles?.expense_variable_title ||
+        localTitles?.variable ||
+        sectionTitleDefaults.variable,
+    };
+
+    setFixedSectionTitle(nextTitles.fixed);
+    setVariableSectionTitle(nextTitles.variable);
+    await AsyncStorage.setItem(storageKey, JSON.stringify(nextTitles));
+  };
+
+  const saveSectionTitles = async (
+    titles: Record<ExpenseSectionType, string>,
+  ) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    await AsyncStorage.setItem(
+      getSectionTitlesStorageKey(user.id),
+      JSON.stringify(titles),
+    );
+
+    await supabase.from("user_preferences").upsert({
+      user_id: user.id,
+      expense_fixed_title: titles.fixed,
+      expense_variable_title: titles.variable,
+      updated_at: new Date().toISOString(),
+    });
+  };
+
+  const updateSectionTitle = (type: ExpenseSectionType, value: string) => {
+    const nextTitles = {
+      fixed: type === "fixed" ? value : fixedSectionTitle,
+      variable: type === "variable" ? value : variableSectionTitle,
+    };
+
+    if (type === "fixed") {
+      setFixedSectionTitle(value);
+    } else {
+      setVariableSectionTitle(value);
+    }
+
+    saveSectionTitles(nextTitles);
+  };
+
   const openCalendar = (
     target: "fixedCreate" | "variableCreate" | "edit",
     currentDate: string,
@@ -153,17 +233,9 @@ export default function TabTwoScreen() {
   };
 
   const selectCalendarDate = (date: string) => {
-    if (calendarTarget === "fixedCreate") {
-      setFixedDate(date);
-    }
-
-    if (calendarTarget === "variableCreate") {
-      setVariableDate(date);
-    }
-
-    if (calendarTarget === "edit") {
-      setEditDate(date);
-    }
+    if (calendarTarget === "fixedCreate") setFixedDate(date);
+    if (calendarTarget === "variableCreate") setVariableDate(date);
+    if (calendarTarget === "edit") setEditDate(date);
 
     setCalendarVisible(false);
     setCalendarTarget(null);
@@ -189,96 +261,11 @@ export default function TabTwoScreen() {
         "Avanzar mes",
         "Vas a avanzar a un mes posterior al mes siguiente. ¿Quieres continuar?",
         [
-          {
-            text: "Cancelar",
-            style: "cancel",
-            onPress: () => resolve(false),
-          },
-          {
-            text: "Continuar",
-            onPress: () => resolve(true),
-          },
+          { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
+          { text: "Continuar", onPress: () => resolve(true) },
         ],
       );
     });
-  };
-
-  const renderCalendar = () => {
-    const [year, month] = calendarMonth.split("-").map(Number);
-    const firstDay = new Date(year, month - 1, 1);
-    const lastDay = new Date(year, month, 0);
-    const totalDays = lastDay.getDate();
-
-    const firstWeekDay = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
-
-    const emptyDays = Array.from({ length: firstWeekDay });
-    const days = Array.from({ length: totalDays }, (_, index) => index + 1);
-
-    return (
-      <Modal
-        visible={calendarVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCalendarVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.calendarCard}>
-            <View style={styles.calendarHeader}>
-              <Pressable
-                style={styles.monthButton}
-                onPress={() => changeCalendarMonth(-1)}
-              >
-                <Text style={styles.monthButtonText}>‹</Text>
-              </Pressable>
-
-              <Text style={styles.calendarTitle}>{calendarMonth}</Text>
-
-              <Pressable
-                style={styles.monthButton}
-                onPress={() => changeCalendarMonth(1)}
-              >
-                <Text style={styles.monthButtonText}>›</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.weekRow}>
-              {["L", "M", "X", "J", "V", "S", "D"].map((day) => (
-                <Text key={day} style={styles.weekText}>
-                  {day}
-                </Text>
-              ))}
-            </View>
-
-            <View style={styles.daysGrid}>
-              {emptyDays.map((_, index) => (
-                <View key={`empty-${index}`} style={styles.dayButton} />
-              ))}
-
-              {days.map((day) => {
-                const date = `${calendarMonth}-${String(day).padStart(2, "0")}`;
-
-                return (
-                  <Pressable
-                    key={date}
-                    style={styles.dayButton}
-                    onPress={() => selectCalendarDate(date)}
-                  >
-                    <Text style={styles.dayButtonText}>{day}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Pressable
-              style={styles.cancelButton}
-              onPress={() => setCalendarVisible(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-    );
   };
 
   const loadProfile = async () => {
@@ -292,19 +279,15 @@ export default function TabTwoScreen() {
       .from("profiles")
       .select("*")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (!data) {
-      await supabase.from("profiles").insert({
-        id: user.id,
-        salary: 0,
-      });
-
+      await supabase.from("profiles").insert({ id: user.id, salary: 0 });
       setSalary(0);
       return;
     }
 
-    setSalary(Number(data.salary));
+    setSalary(Number(data.salary || 0));
   };
 
   const loadCategories = async () => {
@@ -326,12 +309,9 @@ export default function TabTwoScreen() {
     }
 
     if (!data || data.length === 0) {
-      await supabase.from("expense_categories").insert(
-        defaultCategories.map((name) => ({
-          user_id: user.id,
-          name,
-        })),
-      );
+      await supabase
+        .from("expense_categories")
+        .insert(defaultCategories.map((name) => ({ user_id: user.id, name })));
 
       setCategories(defaultCategories);
       return;
@@ -343,7 +323,6 @@ export default function TabTwoScreen() {
 
   const createCategory = async () => {
     const cleanName = newCategory.trim();
-
     if (!cleanName) return;
 
     if (categories.includes(cleanName)) {
@@ -371,7 +350,6 @@ export default function TabTwoScreen() {
     setEditCategory(cleanName);
     setNewCategory("");
     setShowAddCategoryInModal(false);
-
     await loadCategories();
   };
 
@@ -513,6 +491,7 @@ export default function TabTwoScreen() {
   };
 
   const loadAll = async () => {
+    await loadSectionTitles();
     await loadProfile();
     await loadCategories();
     await generateFixedForMonth();
@@ -536,9 +515,7 @@ export default function TabTwoScreen() {
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
-        if (session?.user) {
-          await loadAll();
-        }
+        if (session?.user) await loadAll();
       },
     );
 
@@ -549,7 +526,6 @@ export default function TabTwoScreen() {
     const init = async () => {
       setFixedExpenses([]);
       setExpenses([]);
-
       await generateFixedForMonth();
       await loadFixedExpenses();
       await loadExpenses();
@@ -581,14 +557,9 @@ export default function TabTwoScreen() {
     if (!user) return;
 
     const value = Number(salaryInput);
-
     if (isNaN(value)) return;
 
-    await supabase.from("profiles").upsert({
-      id: user.id,
-      salary: value,
-    });
-
+    await supabase.from("profiles").upsert({ id: user.id, salary: value });
     await loadProfile();
     setEditingSalary(false);
   };
@@ -624,7 +595,6 @@ export default function TabTwoScreen() {
     setVariableCategory("Otros");
     setShowAddVariable(false);
     setShowVariableSection(true);
-
     await loadExpenses();
   };
 
@@ -672,7 +642,6 @@ export default function TabTwoScreen() {
     setFixedCategory("Otros");
     setShowAddFixed(false);
     setShowFixedSection(true);
-
     await loadFixedExpenses();
   };
 
@@ -767,20 +736,18 @@ export default function TabTwoScreen() {
       return;
     }
 
-    if (editingType === "variable") {
-      await supabase
-        .from("transactions")
-        .update({
-          amount: newAmount,
-          month: newMonth,
-          day_of_month: newDay,
-          category: editCategory,
-        })
-        .eq("id", editingItem.id);
+    await supabase
+      .from("transactions")
+      .update({
+        amount: newAmount,
+        month: newMonth,
+        day_of_month: newDay,
+        category: editCategory,
+      })
+      .eq("id", editingItem.id);
 
-      closeEditModal();
-      await loadExpenses();
-    }
+    closeEditModal();
+    await loadExpenses();
   };
 
   const togglePaid = async (item: any) => {
@@ -801,7 +768,6 @@ export default function TabTwoScreen() {
       if (!user) return;
 
       await supabase.from("fixed_expenses").delete().eq("id", item.id);
-
       await supabase
         .from("fixed_templates")
         .delete()
@@ -846,12 +812,10 @@ export default function TabTwoScreen() {
     (sum, item) => sum + Number(item.amount),
     0,
   );
-
   const totalExpenses = expenses.reduce(
     (sum, item) => sum + Number(item.amount),
     0,
   );
-
   const fixedPaidTotal = fixedExpenses
     .filter((item) => item.is_paid)
     .reduce((sum, item) => sum + Number(item.amount), 0);
@@ -875,84 +839,75 @@ export default function TabTwoScreen() {
   const renderCategorySelector = (
     selected: string,
     onSelect: (category: string) => void,
-  ) => {
-    return (
-      <View style={styles.categoryList}>
-        {categories.map((category) => (
-          <Pressable
-            key={category}
+  ) => (
+    <View style={styles.categoryList}>
+      {categories.map((category) => (
+        <Pressable
+          key={category}
+          style={[
+            styles.categoryButton,
+            selected === category && styles.categoryButtonActive,
+          ]}
+          onPress={() => onSelect(category)}
+        >
+          <Text
             style={[
-              styles.categoryButton,
-              selected === category && styles.categoryButtonActive,
+              styles.categoryButtonText,
+              selected === category && styles.categoryButtonTextActive,
             ]}
-            onPress={() => onSelect(category)}
           >
-            <Text
-              style={[
-                styles.categoryButtonText,
-                selected === category && styles.categoryButtonTextActive,
-              ]}
-            >
-              {category}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    );
-  };
+            {category}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 
   const renderFilterSelector = (
     selected: string,
     onSelect: (category: string) => void,
-  ) => {
-    return (
-      <View style={styles.categoryList}>
-        {["Todas", ...categories].map((category) => (
-          <Pressable
-            key={category}
+  ) => (
+    <View style={styles.categoryList}>
+      {["Todas", ...categories].map((category) => (
+        <Pressable
+          key={category}
+          style={[
+            styles.categoryButton,
+            selected === category && styles.categoryButtonActive,
+          ]}
+          onPress={() => onSelect(category)}
+        >
+          <Text
             style={[
-              styles.categoryButton,
-              selected === category && styles.categoryButtonActive,
+              styles.categoryButtonText,
+              selected === category && styles.categoryButtonTextActive,
             ]}
-            onPress={() => onSelect(category)}
           >
-            <Text
-              style={[
-                styles.categoryButtonText,
-                selected === category && styles.categoryButtonTextActive,
-              ]}
-            >
-              {category}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    );
-  };
+            {category}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 
-  const renderCategoryBadge = (category: string) => {
-    return (
-      <View style={styles.categoryBadge}>
-        <Text style={styles.categoryBadgeText}>
-          {normalizeCategory(category)}
-        </Text>
-      </View>
-    );
-  };
+  const renderCategoryBadge = (category: string) => (
+    <View style={styles.categoryBadge}>
+      <Text style={styles.categoryBadgeText}>
+        {normalizeCategory(category)}
+      </Text>
+    </View>
+  );
 
-  const renderDateButton = (date: string, onPress: () => void) => {
-    return (
-      <Pressable style={styles.dateButton} onPress={onPress}>
-        <Text style={styles.dateButtonText}>{date}</Text>
-        <Text style={styles.dateButtonIcon}>📅</Text>
-      </Pressable>
-    );
-  };
+  const renderDateButton = (date: string, onPress: () => void) => (
+    <Pressable style={styles.dateButton} onPress={onPress}>
+      <Text style={styles.dateButtonText}>{date}</Text>
+      <Ionicons name="calendar-outline" size={16} color={colors.primaryDark} />
+    </Pressable>
+  );
 
   const renderEditableTitle = (
-    type: "fixed" | "variable",
+    type: ExpenseSectionType,
     value: string,
-    setValue: (value: string) => void,
   ) => {
     const isEditing = editingSectionTitle === type;
 
@@ -962,14 +917,13 @@ export default function TabTwoScreen() {
           <TextInput
             style={styles.editTitleInput}
             value={value}
-            onChangeText={setValue}
+            onChangeText={(nextValue) => updateSectionTitle(type, nextValue)}
           />
-
           <Pressable
             style={styles.titleIconButton}
             onPress={() => setEditingSectionTitle(null)}
           >
-            <Text style={styles.titleIconText}>✓</Text>
+            <Ionicons name="checkmark" size={16} color={colors.white} />
           </Pressable>
         </View>
       );
@@ -978,36 +932,130 @@ export default function TabTwoScreen() {
     return (
       <View style={styles.titleWithEdit}>
         <Text style={styles.sectionTitle}>{value}</Text>
-
         <Pressable
           style={styles.titleIconButtonSoft}
           onPress={() => setEditingSectionTitle(type)}
         >
-          <Text style={styles.titleIconTextSoft}>✏️</Text>
+          <Ionicons
+            name="create-outline"
+            size={14}
+            color={colors.primaryDark}
+          />
         </Pressable>
       </View>
     );
   };
 
+  const renderCalendar = () => {
+    const [year, month] = calendarMonth.split("-").map(Number);
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const totalDays = lastDay.getDate();
+    const firstWeekDay = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+    const emptyDays = Array.from({ length: firstWeekDay });
+    const days = Array.from({ length: totalDays }, (_, index) => index + 1);
+
+    return (
+      <Modal
+        visible={calendarVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCalendarVisible(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={styles.calendarCard}>
+            <View style={styles.calendarHeader}>
+              <Pressable
+                style={styles.monthButton}
+                onPress={() => changeCalendarMonth(-1)}
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={22}
+                  color={colors.primaryDark}
+                />
+              </Pressable>
+
+              <Text style={styles.calendarTitle}>{calendarMonth}</Text>
+
+              <Pressable
+                style={styles.monthButton}
+                onPress={() => changeCalendarMonth(1)}
+              >
+                <Ionicons
+                  name="chevron-forward"
+                  size={22}
+                  color={colors.primaryDark}
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.weekRow}>
+              {["L", "M", "X", "J", "V", "S", "D"].map((day) => (
+                <Text key={day} style={styles.weekText}>
+                  {day}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.daysGrid}>
+              {emptyDays.map((_, index) => (
+                <View key={`empty-${index}`} style={styles.dayButton} />
+              ))}
+
+              {days.map((day) => {
+                const date = `${calendarMonth}-${String(day).padStart(2, "0")}`;
+
+                return (
+                  <Pressable
+                    key={date}
+                    style={styles.dayButton}
+                    onPress={() => selectCalendarDate(date)}
+                  >
+                    <Text style={styles.dayButtonText}>{day}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Pressable
+              style={commonStyles.modalCancelButton}
+              onPress={() => setCalendarVisible(false)}
+            >
+              <Text style={commonStyles.modalCancelText}>Cancelar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
-    <View style={styles.screen}>
+    <View style={commonStyles.screen}>
       <Header title="Gastos" />
 
       <Pressable
-        style={styles.settingsButton}
+        style={commonStyles.settingsButton}
         onPress={() => router.push("/settings")}
       >
-        <Text style={styles.settingsButtonText}>☰</Text>
+        <Text style={commonStyles.settingsButtonText}>☰</Text>
       </Pressable>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={commonStyles.container}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={commonStyles.content}>
           <View style={styles.monthBar}>
             <Pressable
               onPress={() => changeMonth(-1)}
               style={styles.monthButton}
             >
-              <Text style={styles.monthButtonText}>‹</Text>
+              <Ionicons
+                name="chevron-back"
+                size={22}
+                color={colors.primaryDark}
+              />
             </Pressable>
 
             <Text style={styles.monthText}>{selectedMonth}</Text>
@@ -1016,17 +1064,30 @@ export default function TabTwoScreen() {
               onPress={() => changeMonth(1)}
               style={styles.monthButton}
             >
-              <Text style={styles.monthButtonText}>›</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={22}
+                color={colors.primaryDark}
+              />
             </Pressable>
           </View>
 
           <View style={styles.balanceCard}>
-            <View>
+            <View style={styles.balanceTextBlock}>
               <Text style={styles.balanceLabel}>Balance mensual</Text>
-              <Text style={styles.balanceSubText}>Disponible</Text>
+              <Text style={styles.balanceSubText}>
+                Disponible después de gastos
+              </Text>
             </View>
 
-            <Text style={styles.balanceAmount}>{available} €</Text>
+            <Text
+              style={styles.balanceAmount}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
+              {formatCompactMoney(available)}
+            </Text>
           </View>
 
           <View style={styles.summaryCard}>
@@ -1035,16 +1096,21 @@ export default function TabTwoScreen() {
 
               {!editingSalary ? (
                 <View style={styles.amountWithAction}>
-                  <Text style={styles.summaryAmount}>{salary} €</Text>
-
+                  <Text style={styles.summaryAmount}>
+                    {formatCompactMoney(salary)}
+                  </Text>
                   <Pressable
-                    style={styles.textAction}
+                    style={styles.iconButtonSoft}
                     onPress={() => {
                       setSalaryInput(String(salary));
                       setEditingSalary(true);
                     }}
                   >
-                    <Text style={styles.textActionIcon}>✏️</Text>
+                    <Ionicons
+                      name="create-outline"
+                      size={16}
+                      color={colors.primaryDark}
+                    />
                   </Pressable>
                 </View>
               ) : (
@@ -1055,303 +1121,220 @@ export default function TabTwoScreen() {
                     keyboardType="numeric"
                     onChangeText={setSalaryInput}
                   />
-
-                  <Pressable style={styles.textActionDark} onPress={saveSalary}>
-                    <Text style={styles.textActionDarkIcon}>💾</Text>
+                  <Pressable style={styles.iconButtonDark} onPress={saveSalary}>
+                    <Ionicons
+                      name="save-outline"
+                      size={15}
+                      color={colors.white}
+                    />
                   </Pressable>
                 </View>
               )}
             </View>
 
             <View style={styles.separator} />
-
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Fijos pagados</Text>
-              <Text style={styles.summaryAmount}>{fixedPaidTotal} €</Text>
-            </View>
-
+            <SummaryRow
+              label={fixedSectionTitle}
+              value={formatCompactMoney(fixedPaidTotal)}
+              styles={styles}
+            />
             <View style={styles.separator} />
-
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>{variableSectionTitle}</Text>
-              <Text style={styles.summaryAmount}>{totalExpenses} €</Text>
-            </View>
+            <SummaryRow
+              label={variableSectionTitle}
+              value={formatCompactMoney(totalExpenses)}
+              styles={styles}
+            />
           </View>
 
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Pressable
-                style={styles.sectionTitleButton}
-                onPress={() => setShowFixedSection(!showFixedSection)}
-              >
-                <Text style={styles.sectionArrow}>
-                  {showFixedSection ? "⌄" : "›"}
-                </Text>
-
-                <View>
-                  {renderEditableTitle(
-                    "fixed",
-                    fixedSectionTitle,
-                    setFixedSectionTitle,
-                  )}
-
-                  <Text style={styles.sectionSubtitle}>
-                    {fixedExpenses.length} gastos · Total: {totalFixed} €
-                  </Text>
-                </View>
-              </Pressable>
-
-              <Pressable
-                style={styles.addButton}
-                onPress={() => {
-                  setShowAddFixed(!showAddFixed);
-                  setShowFixedSection(true);
-                }}
-              >
-                <Text style={styles.addButtonText}>
-                  {showAddFixed ? "Cerrar" : "+ Añadir"}
-                </Text>
-              </Pressable>
-            </View>
-
-            {showFixedSection && (
-              <>
-                <Text style={styles.filterTitle}>Filtrar por categoría</Text>
-                {renderFilterSelector(
-                  fixedFilterCategory,
-                  setFixedFilterCategory,
+          <ExpenseSection
+            type="fixed"
+            isOpen={showFixedSection}
+            setIsOpen={setShowFixedSection}
+            title={fixedSectionTitle}
+            renderEditableTitle={renderEditableTitle}
+            count={fixedExpenses.length}
+            total={formatCompactMoney(totalFixed)}
+            showAdd={showAddFixed}
+            setShowAdd={setShowAddFixed}
+            filterTitle="Filtrar por categoría"
+            renderFilterSelector={() =>
+              renderFilterSelector(fixedFilterCategory, setFixedFilterCategory)
+            }
+            styles={styles}
+          >
+            {showAddFixed && (
+              <View style={styles.formBox}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Concepto"
+                  value={fixedTitle}
+                  onChangeText={setFixedTitle}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Cantidad"
+                  value={fixedAmount}
+                  keyboardType="numeric"
+                  onChangeText={setFixedAmount}
+                />
+                <Text style={styles.inputLabel}>Fecha</Text>
+                {renderDateButton(fixedDate, () =>
+                  openCalendar("fixedCreate", fixedDate),
                 )}
-
-                {showAddFixed && (
-                  <View style={styles.formBox}>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Concepto"
-                      value={fixedTitle}
-                      onChangeText={setFixedTitle}
-                    />
-
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Cantidad"
-                      value={fixedAmount}
-                      keyboardType="numeric"
-                      onChangeText={setFixedAmount}
-                    />
-
-                    <Text style={styles.inputLabel}>Fecha</Text>
-                    {renderDateButton(fixedDate, () =>
-                      openCalendar("fixedCreate", fixedDate),
-                    )}
-
-                    <Text style={styles.categoryTitle}>Categoría</Text>
-                    {renderCategorySelector(fixedCategory, setFixedCategory)}
-
-                    <Pressable
-                      style={styles.primaryButton}
-                      onPress={handleAddFixedExpense}
-                    >
-                      <Text style={styles.primaryButtonText}>Guardar fijo</Text>
-                    </Pressable>
-                  </View>
-                )}
-
-                {filteredFixedExpenses.map((item: any) => {
-                  const currentCategory = normalizeCategory(item.category);
-                  const fullDate = getDateFromMonthAndDay(
-                    item.month || selectedMonth,
-                    item.day_of_month,
-                  );
-
-                  return (
-                    <View key={item.id} style={styles.expenseRow}>
-                      <View style={styles.expenseInfo}>
-                        <View style={styles.expenseTopLine}>
-                          <Text
-                            style={[
-                              styles.expenseTitle,
-                              item.is_paid && styles.expensePaid,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {item.title}
-                          </Text>
-
-                          {renderCategoryBadge(currentCategory)}
-                        </View>
-
-                        <Text style={styles.expenseMeta}>
-                          {fullDate} · {item.amount} €
-                        </Text>
-                      </View>
-
-                      <View style={styles.rowActions}>
-                        <Pressable
-                          style={styles.smallAction}
-                          onPress={() => openEditFixed(item)}
-                        >
-                          <Text style={styles.smallActionIcon}>✏️</Text>
-                        </Pressable>
-
-                        <Pressable
-                          style={[
-                            styles.smallActionDark,
-                            item.is_paid && styles.smallActionMuted,
-                          ]}
-                          onPress={() => togglePaid(item)}
-                        >
-                          <Text
-                            style={[
-                              styles.smallActionIconDark,
-                              item.is_paid && styles.smallActionMutedText,
-                            ]}
-                          >
-                            {item.is_paid ? "↺" : "✓"}
-                          </Text>
-                        </Pressable>
-
-                        <Pressable
-                          style={styles.deleteAction}
-                          onPress={() => deleteFixed(item)}
-                        >
-                          <Text style={styles.deleteActionIcon}>🗑</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  );
-                })}
-              </>
+                <Text style={styles.categoryTitle}>Categoría</Text>
+                {renderCategorySelector(fixedCategory, setFixedCategory)}
+                <Pressable
+                  style={styles.primaryButton}
+                  onPress={handleAddFixedExpense}
+                >
+                  <Text style={styles.primaryButtonText}>Guardar fijo</Text>
+                </Pressable>
+              </View>
             )}
-          </View>
 
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Pressable
-                style={styles.sectionTitleButton}
-                onPress={() => setShowVariableSection(!showVariableSection)}
-              >
-                <Text style={styles.sectionArrow}>
-                  {showVariableSection ? "⌄" : "›"}
-                </Text>
+            {filteredFixedExpenses.map((item: any) => {
+              const currentCategory = normalizeCategory(item.category);
+              const fullDate = getDateFromMonthAndDay(
+                item.month || selectedMonth,
+                item.day_of_month,
+              );
 
-                <View>
-                  {renderEditableTitle(
-                    "variable",
-                    variableSectionTitle,
-                    setVariableSectionTitle,
-                  )}
-
-                  <Text style={styles.sectionSubtitle}>
-                    {expenses.length} gastos · Total: {totalExpenses} €
-                  </Text>
-                </View>
-              </Pressable>
-
-              <Pressable
-                style={styles.addButton}
-                onPress={() => {
-                  setShowAddVariable(!showAddVariable);
-                  setShowVariableSection(true);
-                  setVariableDate(getTodayDate());
-                }}
-              >
-                <Text style={styles.addButtonText}>
-                  {showAddVariable ? "Cerrar" : "+ Añadir"}
-                </Text>
-              </Pressable>
-            </View>
-
-            {showVariableSection && (
-              <>
-                <Text style={styles.filterTitle}>Filtrar por categoría</Text>
-                {renderFilterSelector(
-                  variableFilterCategory,
-                  setVariableFilterCategory,
-                )}
-
-                {showAddVariable && (
-                  <View style={styles.formBox}>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Concepto"
-                      value={title}
-                      onChangeText={setTitle}
-                    />
-
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Cantidad"
-                      value={amount}
-                      keyboardType="numeric"
-                      onChangeText={setAmount}
-                    />
-
-                    <Text style={styles.inputLabel}>Fecha</Text>
-                    {renderDateButton(variableDate, () =>
-                      openCalendar("variableCreate", variableDate),
-                    )}
-
-                    <Text style={styles.categoryTitle}>Categoría</Text>
-                    {renderCategorySelector(
-                      variableCategory,
-                      setVariableCategory,
-                    )}
-
-                    <Pressable
-                      style={styles.primaryButton}
-                      onPress={handleAddExpense}
-                    >
-                      <Text style={styles.primaryButtonText}>
-                        Guardar gasto
+              return (
+                <View key={item.id} style={styles.expenseRow}>
+                  <View style={styles.expenseInfo}>
+                    <View style={styles.expenseTopLine}>
+                      <Text
+                        style={[
+                          styles.expenseTitle,
+                          item.is_paid && styles.expensePaid,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.title}
                       </Text>
-                    </Pressable>
-                  </View>
-                )}
-
-                {filteredVariableExpenses.map((item: any) => {
-                  const currentCategory = normalizeCategory(item.category);
-                  const fullDate = getDateFromMonthAndDay(
-                    item.month || selectedMonth,
-                    item.day_of_month || 1,
-                  );
-
-                  return (
-                    <View key={item.id} style={styles.expenseRow}>
-                      <View style={styles.expenseInfo}>
-                        <View style={styles.expenseTopLine}>
-                          <Text style={styles.expenseTitle} numberOfLines={1}>
-                            {item.title}
-                          </Text>
-
-                          {renderCategoryBadge(currentCategory)}
-                        </View>
-
-                        <Text style={styles.expenseMeta}>
-                          {fullDate} · {item.amount} €
-                        </Text>
-                      </View>
-
-                      <View style={styles.rowActions}>
-                        <Pressable
-                          style={styles.smallAction}
-                          onPress={() => openEditVariable(item)}
-                        >
-                          <Text style={styles.smallActionIcon}>✏️</Text>
-                        </Pressable>
-
-                        <Pressable
-                          style={styles.deleteAction}
-                          onPress={() => deleteVariable(item)}
-                        >
-                          <Text style={styles.deleteActionIcon}>🗑</Text>
-                        </Pressable>
-                      </View>
+                      {renderCategoryBadge(currentCategory)}
                     </View>
-                  );
-                })}
-              </>
+
+                    <Text style={styles.expenseMeta}>
+                      {fullDate} · {formatCompactMoney(Number(item.amount || 0))}
+                    </Text>
+                  </View>
+
+                  <View style={styles.rowActions}>
+                    <IconAction
+                      icon="create-outline"
+                      onPress={() => openEditFixed(item)}
+                      styles={styles}
+                    />
+                    <IconAction
+                      icon={item.is_paid ? "refresh-outline" : "checkmark"}
+                      dark={!item.is_paid}
+                      onPress={() => togglePaid(item)}
+                      styles={styles}
+                    />
+                    <IconAction
+                      icon="trash-outline"
+                      danger
+                      onPress={() => deleteFixed(item)}
+                      styles={styles}
+                    />
+                  </View>
+                </View>
+              );
+            })}
+          </ExpenseSection>
+
+          <ExpenseSection
+            type="variable"
+            isOpen={showVariableSection}
+            setIsOpen={setShowVariableSection}
+            title={variableSectionTitle}
+            renderEditableTitle={renderEditableTitle}
+            count={expenses.length}
+            total={formatCompactMoney(totalExpenses)}
+            showAdd={showAddVariable}
+            setShowAdd={(value) => {
+              setShowAddVariable(value);
+              if (value) setVariableDate(getTodayDate());
+            }}
+            filterTitle="Filtrar por categoría"
+            renderFilterSelector={() =>
+              renderFilterSelector(
+                variableFilterCategory,
+                setVariableFilterCategory,
+              )
+            }
+            styles={styles}
+          >
+            {showAddVariable && (
+              <View style={styles.formBox}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Concepto"
+                  value={title}
+                  onChangeText={setTitle}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Cantidad"
+                  value={amount}
+                  keyboardType="numeric"
+                  onChangeText={setAmount}
+                />
+                <Text style={styles.inputLabel}>Fecha</Text>
+                {renderDateButton(variableDate, () =>
+                  openCalendar("variableCreate", variableDate),
+                )}
+                <Text style={styles.categoryTitle}>Categoría</Text>
+                {renderCategorySelector(variableCategory, setVariableCategory)}
+                <Pressable
+                  style={styles.primaryButton}
+                  onPress={handleAddExpense}
+                >
+                  <Text style={styles.primaryButtonText}>Guardar gasto</Text>
+                </Pressable>
+              </View>
             )}
-          </View>
+
+            {filteredVariableExpenses.map((item: any) => {
+              const currentCategory = normalizeCategory(item.category);
+              const fullDate = getDateFromMonthAndDay(
+                item.month || selectedMonth,
+                item.day_of_month || 1,
+              );
+
+              return (
+                <View key={item.id} style={styles.expenseRow}>
+                  <View style={styles.expenseInfo}>
+                    <View style={styles.expenseTopLine}>
+                      <Text style={styles.expenseTitle} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      {renderCategoryBadge(currentCategory)}
+                    </View>
+
+                    <Text style={styles.expenseMeta}>
+                      {fullDate} · {formatCompactMoney(Number(item.amount || 0))}
+                    </Text>
+                  </View>
+
+                  <View style={styles.rowActions}>
+                    <IconAction
+                      icon="create-outline"
+                      onPress={() => openEditVariable(item)}
+                      styles={styles}
+                    />
+                    <IconAction
+                      icon="trash-outline"
+                      danger
+                      onPress={() => deleteVariable(item)}
+                      styles={styles}
+                    />
+                  </View>
+                </View>
+              );
+            })}
+          </ExpenseSection>
         </View>
       </ScrollView>
 
@@ -1361,24 +1344,25 @@ export default function TabTwoScreen() {
         animationType="fade"
         onRequestClose={closeEditModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.editModalCard}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>
                   {editingType === "fixed"
                     ? "Editar gasto fijo"
                     : "Editar gasto"}
                 </Text>
-
-                <Text style={styles.modalSubtitle}>{editingItem?.title}</Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  {editingItem?.title}
+                </Text>
               </View>
 
               <Pressable
-                style={styles.modalCloseButton}
+                style={commonStyles.closeButton}
                 onPress={closeEditModal}
               >
-                <Text style={styles.modalCloseText}>×</Text>
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
               </Pressable>
             </View>
 
@@ -1404,9 +1388,13 @@ export default function TabTwoScreen() {
                   }
                 >
                   <Text style={styles.dropdownButtonText}>{editCategory}</Text>
-                  <Text style={styles.dropdownArrow}>
-                    {showEditCategoryDropdown ? "⌃" : "⌄"}
-                  </Text>
+                  <Ionicons
+                    name={
+                      showEditCategoryDropdown ? "chevron-up" : "chevron-down"
+                    }
+                    size={16}
+                    color={colors.primaryDark}
+                  />
                 </Pressable>
 
                 <Pressable
@@ -1415,7 +1403,7 @@ export default function TabTwoScreen() {
                     setShowAddCategoryInModal(!showAddCategoryInModal)
                   }
                 >
-                  <Text style={styles.addCategoryIconText}>+</Text>
+                  <Ionicons name="add" size={20} color={colors.white} />
                 </Pressable>
               </View>
 
@@ -1427,7 +1415,6 @@ export default function TabTwoScreen() {
                     value={newCategory}
                     onChangeText={setNewCategory}
                   />
-
                   <Pressable
                     style={styles.saveCategoryButton}
                     onPress={createCategory}
@@ -1467,13 +1454,19 @@ export default function TabTwoScreen() {
               )}
             </View>
 
-            <View style={styles.modalActions}>
-              <Pressable style={styles.cancelButton} onPress={closeEditModal}>
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
+            <View style={commonStyles.modalActions}>
+              <Pressable
+                style={commonStyles.modalCancelButton}
+                onPress={closeEditModal}
+              >
+                <Text style={commonStyles.modalCancelText}>Cancelar</Text>
               </Pressable>
 
-              <Pressable style={styles.saveButton} onPress={saveEdit}>
-                <Text style={styles.saveButtonText}>Guardar</Text>
+              <Pressable
+                style={commonStyles.modalSaveButton}
+                onPress={saveEdit}
+              >
+                <Text style={commonStyles.modalSaveText}>Guardar</Text>
               </Pressable>
             </View>
           </View>
@@ -1485,778 +1478,708 @@ export default function TabTwoScreen() {
   );
 }
 
-const isWeb = Platform.OS === "web";
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-
-  container: {
-    flexGrow: 1,
-    padding: isWeb ? 28 : 14,
-    paddingBottom: 42,
-    alignItems: "center",
-  },
-
-  content: {
-    width: "100%",
-    maxWidth: 940,
-  },
-
-  monthBar: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 14,
-  },
-
-  monthButton: {
-    width: isWeb ? 34 : 32,
-    height: isWeb ? 34 : 32,
-    borderRadius: 999,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  monthButtonText: {
-    fontSize: isWeb ? 24 : 22,
-    lineHeight: isWeb ? 26 : 24,
-    color: colors.primaryDark,
-    fontWeight: "900",
-  },
-
-  monthText: {
-    fontSize: isWeb ? 16 : 14,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  balanceCard: {
-    backgroundColor: colors.primary,
-    borderRadius: 16,
-    padding: isWeb ? 18 : 15,
-    marginBottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  balanceLabel: {
-    fontSize: isWeb ? 15 : 13,
-    fontWeight: "900",
-    color: colors.white,
-  },
-
-  balanceSubText: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.white,
-    opacity: 0.85,
-    marginTop: 3,
-  },
-
-  balanceAmount: {
-    fontSize: isWeb ? 28 : 24,
-    fontWeight: "900",
-    color: colors.white,
-  },
-
-  summaryCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-    marginBottom: 16,
-  },
-
-  summaryRow: {
-    paddingVertical: isWeb ? 13 : 11,
-    paddingHorizontal: isWeb ? 16 : 13,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  summaryLabel: {
-    fontSize: isWeb ? 14 : 12,
-    color: colors.mutedText,
-    fontWeight: "800",
-  },
-
-  summaryAmount: {
-    fontSize: isWeb ? 17 : 15,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  separator: {
-    height: 1,
-    backgroundColor: colors.borderSoft,
-  },
-
-  amountWithAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  textAction: {
-    width: isWeb ? 30 : 28,
-    height: isWeb ? 30 : 28,
-    borderRadius: 8,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  textActionIcon: {
-    fontSize: isWeb ? 12 : 10,
-  },
-
-  textActionDark: {
-    width: isWeb ? 30 : 28,
-    height: isWeb ? 30 : 28,
-    borderRadius: 8,
-    backgroundColor: colors.primaryDark,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  textActionDarkIcon: {
-    fontSize: isWeb ? 12 : 10,
-  },
-
-  sectionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: isWeb ? 16 : 13,
-    marginBottom: 18,
-  },
-
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-    gap: 10,
-  },
-
-  sectionTitleButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  sectionArrow: {
-    width: 18,
-    fontSize: isWeb ? 18 : 16,
-    fontWeight: "900",
-    color: colors.primaryDark,
-  },
-
-  sectionTitle: {
-    fontSize: isWeb ? 18 : 16,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  sectionSubtitle: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    marginTop: 2,
-  },
-
-  titleWithEdit: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  editTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  editTitleInput: {
-    minWidth: 120,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    fontSize: isWeb ? 15 : 13,
-    fontWeight: "800",
-    color: colors.text,
-    backgroundColor: colors.white,
-  },
-
-  titleIconButton: {
-    width: 26,
-    height: 26,
-    borderRadius: 7,
-    backgroundColor: colors.primaryDark,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  titleIconText: {
-    color: colors.white,
-    fontWeight: "900",
-    fontSize: 12,
-  },
-
-  titleIconButtonSoft: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  titleIconTextSoft: {
-    fontSize: 10,
-  },
-
-  addButton: {
-    backgroundColor: colors.primaryDark,
-    paddingVertical: isWeb ? 8 : 7,
-    paddingHorizontal: isWeb ? 12 : 10,
-    borderRadius: 10,
-  },
-
-  addButtonText: {
-    color: colors.white,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  formBox: {
-    backgroundColor: colors.background,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-  },
-
-  input: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: isWeb ? 11 : 9,
-    marginBottom: 8,
-    fontSize: isWeb ? 14 : 12,
-    color: colors.text,
-  },
-
-  inlineInput: {
-    width: isWeb ? 76 : 62,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: isWeb ? 7 : 5,
-    textAlign: "center",
-    backgroundColor: colors.white,
-    fontSize: isWeb ? 13 : 11,
-    color: colors.text,
-  },
-
-  inputLabel: {
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "800",
-    color: colors.mutedText,
-    marginBottom: 5,
-  },
-
-  dateButton: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: isWeb ? 11 : 9,
-    marginBottom: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  dateButtonText: {
-    fontSize: isWeb ? 14 : 12,
-    color: colors.text,
-    fontWeight: "700",
-  },
-
-  dateButtonIcon: {
-    fontSize: isWeb ? 14 : 12,
-  },
-
-  filterTitle: {
-    fontSize: isWeb ? 12 : 10,
-    fontWeight: "800",
-    color: colors.mutedText,
-    marginBottom: 8,
-  },
-
-  categoryTitle: {
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "800",
-    color: colors.text,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-
-  categoryList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 10,
-  },
-
-  categoryButton: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-
-  categoryButtonActive: {
-    backgroundColor: colors.primaryDark,
-    borderColor: colors.primaryDark,
-  },
-
-  categoryButtonText: {
-    fontSize: isWeb ? 12 : 10,
-    fontWeight: "700",
-    color: colors.mutedText,
-  },
-
-  categoryButtonTextActive: {
-    color: colors.white,
-  },
-
-  categoryInput: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: isWeb ? 10 : 8,
-    fontSize: isWeb ? 13 : 11,
-    color: colors.text,
-  },
-
-  dropdownBox: {
-    marginBottom: 10,
-  },
-
-  dropdownTopRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  dropdownButton: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: isWeb ? 10 : 8,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  dropdownButtonText: {
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "800",
-    color: colors.text,
-  },
-
-  dropdownArrow: {
-    fontSize: isWeb ? 15 : 13,
-    fontWeight: "900",
-    color: colors.primaryDark,
-  },
-
-  addCategoryIconButton: {
-    width: isWeb ? 40 : 36,
-    height: isWeb ? 40 : 36,
-    borderRadius: 10,
-    backgroundColor: colors.primaryDark,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  addCategoryIconText: {
-    color: colors.white,
-    fontSize: isWeb ? 20 : 17,
-    fontWeight: "900",
-  },
-
-  addCategoryBox: {
-    marginTop: 8,
-    flexDirection: "row",
-    gap: 8,
-  },
-
-  saveCategoryButton: {
-    backgroundColor: colors.primaryDark,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  saveCategoryButtonText: {
-    color: colors.white,
-    fontSize: isWeb ? 12 : 10,
-    fontWeight: "900",
-  },
-
-  dropdownOptions: {
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    overflow: "hidden",
-    backgroundColor: colors.white,
-  },
-
-  dropdownOption: {
-    paddingVertical: isWeb ? 10 : 8,
-    paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSoft,
-  },
-
-  dropdownOptionActive: {
-    backgroundColor: colors.primarySoft,
-  },
-
-  dropdownOptionText: {
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "700",
-    color: colors.mutedText,
-  },
-
-  dropdownOptionTextActive: {
-    color: colors.primaryDark,
-    fontWeight: "900",
-  },
-
-  primaryButton: {
-    backgroundColor: colors.primaryDark,
-    padding: isWeb ? 12 : 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-
-  primaryButtonText: {
-    color: colors.white,
-    fontWeight: "900",
-    fontSize: isWeb ? 14 : 12,
-  },
-
-  expenseRow: {
-    backgroundColor: "#F8FCFD",
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    borderRadius: 12,
-    paddingVertical: isWeb ? 9 : 8,
-    paddingHorizontal: isWeb ? 11 : 9,
-    marginBottom: 9,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  expenseInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  expenseTopLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  expenseTitle: {
-    flex: 1,
-    fontSize: isWeb ? 14 : 12,
-    fontWeight: "500",
-    color: colors.text,
-  },
-
-  categoryBadge: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: 999,
-    paddingVertical: 3,
-    paddingHorizontal: 7,
-    maxWidth: 110,
-  },
-
-  categoryBadgeText: {
-    color: colors.primaryDark,
-    fontSize: isWeb ? 10 : 8,
-    fontWeight: "800",
-  },
-
-  expensePaid: {
-    color: colors.mutedText,
-    textDecorationLine: "line-through",
-  },
-
-  expenseMeta: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    marginTop: 3,
-  },
-
-  rowActions: {
-    flexDirection: "row",
-    gap: 4,
-    alignItems: "center",
-  },
-
-  smallAction: {
-    width: isWeb ? 28 : 26,
-    height: isWeb ? 28 : 26,
-    borderRadius: 7,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  smallActionIcon: {
-    fontSize: isWeb ? 11 : 9,
-  },
-
-  smallActionDark: {
-    width: isWeb ? 28 : 26,
-    height: isWeb ? 28 : 26,
-    borderRadius: 7,
-    backgroundColor: colors.primaryDark,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  smallActionIconDark: {
-    color: colors.white,
-    fontSize: isWeb ? 12 : 10,
-    fontWeight: "900",
-  },
-
-  smallActionMuted: {
-    backgroundColor: colors.borderSoft,
-  },
-
-  smallActionMutedText: {
-    color: colors.mutedText,
-  },
-
-  deleteAction: {
-    width: isWeb ? 28 : 26,
-    height: isWeb ? 28 : 26,
-    borderRadius: 7,
-    backgroundColor: "#FEF2F2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  deleteActionIcon: {
-    fontSize: isWeb ? 11 : 9,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 18,
-  },
-
-  editModalCard: {
-    width: "100%",
-    maxWidth: 480,
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: isWeb ? 20 : 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 16,
-  },
-
-  modalTitle: {
-    fontSize: isWeb ? 20 : 17,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  modalSubtitle: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    marginTop: 3,
-  },
-
-  modalCloseButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  modalCloseText: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: colors.primaryDark,
-    lineHeight: 22,
-  },
-
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-  },
-
-  cancelButton: {
-    flex: 1,
-    backgroundColor: colors.primarySoft,
-    padding: isWeb ? 12 : 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-
-  cancelButtonText: {
-    color: colors.primaryDark,
-    fontWeight: "900",
-    fontSize: isWeb ? 13 : 11,
-  },
-
-  saveButton: {
-    flex: 1,
-    backgroundColor: colors.primaryDark,
-    padding: isWeb ? 12 : 10,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-
-  saveButtonText: {
-    color: colors.white,
-    fontWeight: "900",
-    fontSize: isWeb ? 13 : 11,
-  },
-
-  calendarCard: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: isWeb ? 20 : 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  calendarHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-
-  calendarTitle: {
-    fontSize: isWeb ? 18 : 16,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  weekRow: {
-    flexDirection: "row",
-    marginBottom: 8,
-  },
-
-  weekText: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: isWeb ? 12 : 10,
-    fontWeight: "900",
-    color: colors.mutedText,
-  },
-
-  daysGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: 12,
-  },
-
-  dayButton: {
-    width: "14.285%",
-    aspectRatio: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  dayButtonText: {
-    width: isWeb ? 34 : 30,
-    height: isWeb ? 34 : 30,
-    borderRadius: 999,
-    backgroundColor: colors.primarySoft,
-    color: colors.primaryDark,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-    textAlign: "center",
-    textAlignVertical: "center",
-    lineHeight: isWeb ? 34 : 30,
-  },
-
-  settingsButton: {
-    position: "absolute",
-    top: 24,
-    right: 24,
-    width: isWeb ? 42 : 38,
-    height: isWeb ? 42 : 38,
-    borderRadius: 999,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-    zIndex: 10,
-  },
-
-  settingsButtonText: {
-    fontSize: isWeb ? 22 : 20,
-    lineHeight: 24,
-    color: colors.text,
-    fontWeight: "900",
-  },
-});
+function SummaryRow({
+  label,
+  value,
+  styles,
+}: {
+  label: string;
+  value: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.summaryRow}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryAmount}>{value}</Text>
+    </View>
+  );
+}
+
+function IconAction({
+  icon,
+  dark,
+  danger,
+  onPress,
+  styles,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  dark?: boolean;
+  danger?: boolean;
+  onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <Pressable
+      style={[
+        styles.iconAction,
+        dark && styles.iconActionDark,
+        danger && styles.iconActionDanger,
+      ]}
+      onPress={onPress}
+    >
+      <Ionicons
+        name={icon}
+        size={16}
+        color={dark ? colors.white : danger ? "#B91C1C" : colors.primaryDark}
+      />
+    </Pressable>
+  );
+}
+
+function ExpenseSection({
+  isOpen,
+  setIsOpen,
+  type,
+  title,
+  renderEditableTitle,
+  count,
+  total,
+  showAdd,
+  setShowAdd,
+  filterTitle,
+  renderFilterSelector,
+  children,
+  styles,
+}: {
+  isOpen: boolean;
+  setIsOpen: (value: boolean) => void;
+  type: ExpenseSectionType;
+  title: string;
+  renderEditableTitle: (
+    type: ExpenseSectionType,
+    value: string,
+  ) => ReactNode;
+  count: number;
+  total: string;
+  showAdd: boolean;
+  setShowAdd: (value: boolean) => void;
+  filterTitle: string;
+  renderFilterSelector: () => React.ReactNode;
+  children: ReactNode;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.sectionCard}>
+      <View style={styles.sectionHeader}>
+        <Pressable
+          style={styles.sectionTitleButton}
+          onPress={() => setIsOpen(!isOpen)}
+        >
+          <Ionicons
+            name={isOpen ? "chevron-down" : "chevron-forward"}
+            size={20}
+            color={colors.primaryDark}
+          />
+
+          <View style={styles.sectionTextBlock}>
+            {renderEditableTitle(type, title)}
+            <Text style={styles.sectionSubtitle}>
+              {count} gastos · Total: {total}
+            </Text>
+          </View>
+        </Pressable>
+
+        <Pressable
+          style={styles.addButton}
+          onPress={() => {
+            setShowAdd(!showAdd);
+            setIsOpen(true);
+          }}
+        >
+          <Ionicons
+            name={showAdd ? "close" : "add"}
+            size={19}
+            color={colors.white}
+          />
+        </Pressable>
+      </View>
+
+      {isOpen && (
+        <>
+          <Text style={styles.filterTitle}>{filterTitle}</Text>
+          {renderFilterSelector()}
+          {children}
+        </>
+      )}
+    </View>
+  );
+}
+
+const createStyles = (isDesktop: boolean) =>
+  StyleSheet.create({
+    monthBar: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      padding: isDesktop ? 10 : 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: isDesktop ? 14 : 12,
+    },
+
+    monthButton: {
+      width: isDesktop ? 40 : 36,
+      height: isDesktop ? 40 : 36,
+      borderRadius: 999,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    monthText: {
+      fontSize: isDesktop ? 17 : 15,
+      fontWeight: "900",
+      color: colors.text,
+    },
+
+    balanceCard: {
+      backgroundColor: colors.primaryDark,
+      borderRadius: isDesktop ? 20 : 18,
+      padding: isDesktop ? 22 : 16,
+      marginBottom: isDesktop ? 14 : 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+
+    balanceTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    balanceLabel: {
+      fontSize: isDesktop ? 14 : 12,
+      fontWeight: "900",
+      color: colors.white,
+    },
+
+    balanceSubText: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.white,
+      opacity: 0.85,
+      marginTop: 3,
+      fontWeight: "700",
+    },
+
+    balanceAmount: {
+      maxWidth: isDesktop ? 260 : 150,
+      fontSize: isDesktop ? 32 : 24,
+      fontWeight: "900",
+      color: colors.white,
+      textAlign: "right",
+    },
+
+    summaryCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: "hidden",
+      marginBottom: 16,
+    },
+
+    summaryRow: {
+      paddingVertical: isDesktop ? 13 : 11,
+      paddingHorizontal: isDesktop ? 16 : 13,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+    },
+
+    summaryLabel: {
+      flex: 1,
+      fontSize: isDesktop ? 14 : 12,
+      color: colors.mutedText,
+      fontWeight: "800",
+    },
+
+    summaryAmount: {
+      fontSize: isDesktop ? 17 : 15,
+      fontWeight: "900",
+      color: colors.text,
+      textAlign: "right",
+    },
+
+    separator: {
+      height: 1,
+      backgroundColor: colors.borderSoft,
+    },
+
+    amountWithAction: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
+    iconButtonSoft: {
+      width: 30,
+      height: 30,
+      borderRadius: 9,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    iconButtonDark: {
+      width: 30,
+      height: 30,
+      borderRadius: 9,
+      backgroundColor: colors.primaryDark,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    sectionCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: isDesktop ? 16 : 13,
+      marginBottom: 16,
+    },
+
+    sectionHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 10,
+    },
+
+    sectionTitleButton: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      minWidth: 0,
+    },
+
+    sectionTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    sectionTitle: {
+      fontSize: isDesktop ? 18 : 16,
+      fontWeight: "900",
+      color: colors.text,
+    },
+
+    sectionSubtitle: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      marginTop: 2,
+    },
+
+    titleWithEdit: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+
+    editTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+
+    editTitleInput: {
+      minWidth: 120,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingVertical: 5,
+      paddingHorizontal: 8,
+      fontSize: isDesktop ? 15 : 13,
+      fontWeight: "800",
+      color: colors.text,
+      backgroundColor: colors.white,
+    },
+
+    titleIconButton: {
+      width: 26,
+      height: 26,
+      borderRadius: 7,
+      backgroundColor: colors.primaryDark,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    titleIconButtonSoft: {
+      width: 24,
+      height: 24,
+      borderRadius: 7,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    addButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 11,
+      backgroundColor: colors.primaryDark,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    formBox: {
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      padding: 10,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+    },
+
+    input: {
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: isDesktop ? 11 : 9,
+      marginBottom: 8,
+      fontSize: isDesktop ? 14 : 12,
+      color: colors.text,
+    },
+
+    inlineInput: {
+      width: isDesktop ? 82 : 68,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: isDesktop ? 7 : 5,
+      textAlign: "center",
+      backgroundColor: colors.white,
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.text,
+    },
+
+    inputLabel: {
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "800",
+      color: colors.mutedText,
+      marginBottom: 5,
+    },
+
+    dateButton: {
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: isDesktop ? 11 : 9,
+      marginBottom: 8,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+
+    dateButtonText: {
+      fontSize: isDesktop ? 14 : 12,
+      color: colors.text,
+      fontWeight: "700",
+    },
+
+    filterTitle: {
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "800",
+      color: colors.mutedText,
+      marginTop: 12,
+      marginBottom: 8,
+    },
+
+    categoryTitle: {
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "800",
+      color: colors.text,
+      marginTop: 8,
+      marginBottom: 8,
+    },
+
+    categoryList: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      marginBottom: 10,
+    },
+
+    categoryButton: {
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 999,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+    },
+
+    categoryButtonActive: {
+      backgroundColor: colors.primaryDark,
+      borderColor: colors.primaryDark,
+    },
+
+    categoryButtonText: {
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "700",
+      color: colors.mutedText,
+    },
+
+    categoryButtonTextActive: {
+      color: colors.white,
+    },
+
+    categoryInput: {
+      flex: 1,
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: isDesktop ? 10 : 8,
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.text,
+    },
+
+    dropdownBox: {
+      marginBottom: 10,
+    },
+
+    dropdownTopRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+
+    dropdownButton: {
+      flex: 1,
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingVertical: isDesktop ? 10 : 8,
+      paddingHorizontal: 10,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+
+    dropdownButtonText: {
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "800",
+      color: colors.text,
+    },
+
+    addCategoryIconButton: {
+      width: isDesktop ? 40 : 36,
+      height: isDesktop ? 40 : 36,
+      borderRadius: 10,
+      backgroundColor: colors.primaryDark,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    addCategoryBox: {
+      marginTop: 8,
+      flexDirection: "row",
+      gap: 8,
+    },
+
+    saveCategoryButton: {
+      backgroundColor: colors.primaryDark,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    saveCategoryButtonText: {
+      color: colors.white,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
+    dropdownOptions: {
+      marginTop: 6,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      overflow: "hidden",
+      backgroundColor: colors.white,
+    },
+
+    dropdownOption: {
+      paddingVertical: isDesktop ? 10 : 8,
+      paddingHorizontal: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSoft,
+    },
+
+    dropdownOptionActive: {
+      backgroundColor: colors.primarySoft,
+    },
+
+    dropdownOptionText: {
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "700",
+      color: colors.mutedText,
+    },
+
+    dropdownOptionTextActive: {
+      color: colors.primaryDark,
+      fontWeight: "900",
+    },
+
+    primaryButton: {
+      backgroundColor: colors.primaryDark,
+      padding: isDesktop ? 12 : 10,
+      borderRadius: 10,
+      alignItems: "center",
+    },
+
+    primaryButtonText: {
+      color: colors.white,
+      fontWeight: "900",
+      fontSize: isDesktop ? 14 : 12,
+    },
+
+    expenseRow: {
+      backgroundColor: "#F8FCFD",
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      borderRadius: 12,
+      paddingVertical: isDesktop ? 9 : 8,
+      paddingHorizontal: isDesktop ? 11 : 9,
+      marginBottom: 9,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
+    expenseInfo: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    expenseTopLine: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
+    expenseTitle: {
+      flex: 1,
+      fontSize: isDesktop ? 14 : 12,
+      fontWeight: "500",
+      color: colors.text,
+    },
+
+    categoryBadge: {
+      backgroundColor: colors.primarySoft,
+      borderRadius: 999,
+      paddingVertical: 3,
+      paddingHorizontal: 7,
+      maxWidth: 110,
+    },
+
+    categoryBadgeText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 10 : 8,
+      fontWeight: "800",
+    },
+
+    expensePaid: {
+      color: colors.mutedText,
+      textDecorationLine: "line-through",
+    },
+
+    expenseMeta: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      marginTop: 3,
+    },
+
+    rowActions: {
+      flexDirection: "row",
+      gap: 4,
+      alignItems: "center",
+    },
+
+    iconAction: {
+      width: isDesktop ? 30 : 28,
+      height: isDesktop ? 30 : 28,
+      borderRadius: 8,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    iconActionDark: {
+      backgroundColor: colors.primaryDark,
+    },
+
+    iconActionDanger: {
+      backgroundColor: "#FEF2F2",
+    },
+
+    calendarCard: {
+      width: "100%",
+      maxWidth: 420,
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      padding: isDesktop ? 20 : 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    calendarHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 14,
+    },
+
+    calendarTitle: {
+      fontSize: isDesktop ? 18 : 16,
+      fontWeight: "900",
+      color: colors.text,
+    },
+
+    weekRow: {
+      flexDirection: "row",
+      marginBottom: 8,
+    },
+
+    weekText: {
+      flex: 1,
+      textAlign: "center",
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+      color: colors.mutedText,
+    },
+
+    daysGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      marginBottom: 12,
+    },
+
+    dayButton: {
+      width: "14.285%",
+      aspectRatio: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    dayButtonText: {
+      width: isDesktop ? 34 : 30,
+      height: isDesktop ? 34 : 30,
+      borderRadius: 999,
+      backgroundColor: colors.primarySoft,
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+      textAlign: "center",
+      textAlignVertical: "center",
+      lineHeight: isDesktop ? 34 : 30,
+    },
+  });

@@ -3,8 +3,15 @@ import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 
+import { AppBottomMenu } from "@/src/components/AppBottomMenu";
+import { AppTextInput } from "@/src/components/AppTextInput";
+import { KpiCard } from "@/src/components/KpiCard";
+import { ResultRow } from "@/src/components/ResultRow";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
+import { createCommonStyles } from "@/src/theme/commonStyles";
+import { getCurrentUser } from "@/src/utils/auth";
+import { formatCompactMoney, formatMoney } from "@/src/utils/money";
 
 import {
   Alert,
@@ -14,7 +21,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -80,12 +86,19 @@ const defaultSimulation = {
 export default function HomePurchaseScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
+
+  const commonStyles = useMemo(
+    () => createCommonStyles(isDesktop),
+    [isDesktop],
+  );
+
   const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
 
   const [simulations, setSimulations] = useState<Simulation[]>([]);
   const [selectedSimulationId, setSelectedSimulationId] = useState<
     string | null
   >(null);
+
   const [originalSnapshot, setOriginalSnapshot] = useState<FormSnapshot | null>(
     null,
   );
@@ -147,25 +160,6 @@ export default function HomePurchaseScreen() {
 
   const toNumber = (value: string | number) => {
     return Number(String(value).replace(",", ".")) || 0;
-  };
-
-  const formatMoney = (value: number) => {
-    return `${value.toLocaleString("es-ES", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })} €`;
-  };
-
-  const formatKpiMoney = (value: number) => {
-    return `${Math.round(value).toLocaleString("es-ES")} €`;
-  };
-
-  const getCurrentUser = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    return session?.user ?? null;
   };
 
   const buildDefaultSnapshot = (): FormSnapshot => ({
@@ -255,6 +249,7 @@ export default function HomePurchaseScreen() {
   const remainingPercent = Math.max(0, 100 - coveredPercent);
 
   const totalMonths = toNumber(years) * 12;
+
   const bonusTotal =
     toNumber(bonus) +
     toNumber(salaryBonus) +
@@ -293,6 +288,7 @@ export default function HomePurchaseScreen() {
 
   const loadSimulations = async () => {
     const user = await getCurrentUser();
+
     if (!user) return;
 
     const { data, error } = await supabase
@@ -315,6 +311,7 @@ export default function HomePurchaseScreen() {
 
   const getPayload = async (simulationName: string) => {
     const user = await getCurrentUser();
+
     if (!user) return null;
 
     return {
@@ -345,6 +342,7 @@ export default function HomePurchaseScreen() {
     }
 
     const payload = await getPayload(name);
+
     if (!payload) return;
 
     const { error } = await supabase
@@ -375,6 +373,7 @@ export default function HomePurchaseScreen() {
     }
 
     const payload = await getPayload(finalName);
+
     if (!payload) return;
 
     const { data, error } = await supabase
@@ -396,6 +395,7 @@ export default function HomePurchaseScreen() {
 
     setSaveNameModalVisible(false);
     setNewSimulationName("");
+
     await loadSimulations();
     Alert.alert("Guardado", "Simulación guardada correctamente.");
   };
@@ -404,6 +404,7 @@ export default function HomePurchaseScreen() {
     if (!selectedSimulationId) return;
 
     const user = await getCurrentUser();
+
     if (!user) return;
 
     const executeDelete = async () => {
@@ -436,6 +437,7 @@ export default function HomePurchaseScreen() {
 
   const openEdit = (mode: EditMode) => {
     setEditMode(mode);
+
     setDraftName(name);
     setDraftPropertyPrice(propertyPrice);
     setDraftAgencyPercent(agencyPercent);
@@ -506,28 +508,21 @@ export default function HomePurchaseScreen() {
   }, []);
 
   return (
-    <View style={styles.screen}>
+    <View style={commonStyles.screen}>
       <Header title="Simulador de casa" />
 
-      <Pressable
-        style={styles.settingsButton}
-        onPress={() => router.push("/settings")}
-      >
-        <Text style={styles.settingsButtonText}>☰</Text>
-      </Pressable>
-
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.content}>
-          <View style={styles.titleCard}>
+      <ScrollView contentContainerStyle={commonStyles.container}>
+        <View style={commonStyles.content}>
+          <View style={[commonStyles.card, styles.titleCard]}>
             <View style={styles.titleTextBlock}>
-              <Text style={styles.titleLabel}>
+              <Text style={commonStyles.smallText}>
                 {selectedSimulationId
                   ? "Simulación guardada"
                   : "Simulación de ejemplo"}
               </Text>
 
               <Text
-                style={styles.titleText}
+                style={[commonStyles.cardTitle, styles.titleText]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.7}
@@ -535,7 +530,7 @@ export default function HomePurchaseScreen() {
                 {name}
               </Text>
 
-              <Text style={styles.titleSubtitle}>
+              <Text style={commonStyles.subtitle}>
                 Precio base: {formatMoney(price)}
               </Text>
             </View>
@@ -577,25 +572,31 @@ export default function HomePurchaseScreen() {
           <View style={styles.kpiGrid}>
             <KpiCard
               label="Entrada"
-              value={formatKpiMoney(down)}
+              value={formatCompactMoney(down)}
               styles={styles}
             />
+
             <KpiCard
               label="Hipoteca"
-              value={formatKpiMoney(mortgage)}
+              value={formatCompactMoney(mortgage)}
               styles={styles}
             />
+
             <KpiCard
               label="Cuota"
-              value={formatKpiMoney(monthlyPayment)}
+              value={formatCompactMoney(monthlyPayment)}
               styles={styles}
             />
           </View>
 
-          <View style={styles.actionsCard}>
-            <Pressable style={styles.primaryButton} onPress={saveSimulation}>
+          <View style={[commonStyles.card, styles.actionsCard]}>
+            <Pressable
+              style={[commonStyles.primaryButton, styles.fullButton]}
+              onPress={saveSimulation}
+            >
               <Ionicons name="save-outline" size={18} color={colors.white} />
-              <Text style={styles.primaryButtonText}>
+
+              <Text style={commonStyles.primaryButtonText}>
                 {selectedSimulationId
                   ? "Guardar cambios"
                   : "Guardar simulación"}
@@ -604,7 +605,7 @@ export default function HomePurchaseScreen() {
 
             <View style={styles.secondaryActionsRow}>
               <Pressable
-                style={styles.secondaryButton}
+                style={[commonStyles.secondaryButton, styles.halfButton]}
                 onPress={cleanToExample}
               >
                 <Ionicons
@@ -612,30 +613,41 @@ export default function HomePurchaseScreen() {
                   size={17}
                   color={colors.primaryDark}
                 />
-                <Text style={styles.secondaryButtonText}>Limpiar</Text>
+
+                <Text style={commonStyles.secondaryButtonText}>Limpiar</Text>
               </Pressable>
 
-              <Pressable style={styles.secondaryButton} onPress={exitSimulator}>
+              <Pressable
+                style={[commonStyles.secondaryButton, styles.halfButton]}
+                onPress={exitSimulator}
+              >
                 <Ionicons
                   name="exit-outline"
                   size={17}
                   color={colors.primaryDark}
                 />
-                <Text style={styles.secondaryButtonText}>Salir</Text>
+
+                <Text style={commonStyles.secondaryButtonText}>Salir</Text>
               </Pressable>
             </View>
 
             {selectedSimulationId && (
-              <Pressable style={styles.dangerButton} onPress={deleteSimulation}>
+              <Pressable
+                style={[commonStyles.dangerButton, styles.fullButton]}
+                onPress={deleteSimulation}
+              >
                 <Ionicons name="trash-outline" size={17} color="#B91C1C" />
-                <Text style={styles.dangerButtonText}>Eliminar</Text>
+
+                <Text style={commonStyles.dangerButtonText}>Eliminar</Text>
               </Pressable>
             )}
           </View>
 
           {simulations.length > 0 && (
-            <View style={styles.savedCard}>
-              <Text style={styles.savedTitle}>Simulaciones guardadas</Text>
+            <View style={commonStyles.card}>
+              <Text style={commonStyles.sectionTitle}>
+                Simulaciones guardadas
+              </Text>
 
               <ScrollView
                 horizontal
@@ -679,7 +691,7 @@ export default function HomePurchaseScreen() {
             </View>
           )}
 
-          <View style={styles.sectionCard}>
+          <View style={commonStyles.card}>
             <SectionHeader
               icon="home-outline"
               title="Costes del inmueble"
@@ -693,26 +705,31 @@ export default function HomePurchaseScreen() {
               value={formatMoney(price)}
               styles={styles}
             />
+
             <ResultRow
               label={`Agencia (${agencyPercent}%)`}
               value={formatMoney(agency)}
               styles={styles}
             />
+
             <ResultRow
               label={`ITP / IVA (${taxPercent}%)`}
               value={formatMoney(tax)}
               styles={styles}
             />
+
             <ResultRow
               label="Comisión financiera"
               value={formatMoney(financial)}
               styles={styles}
             />
+
             <ResultRow
               label={`Notaría + Registro (${notaryPercent}%)`}
               value={formatMoney(notary)}
               styles={styles}
             />
+
             <ResultRow
               label="Total inmueble"
               value={formatMoney(totalProperty)}
@@ -721,7 +738,7 @@ export default function HomePurchaseScreen() {
             />
           </View>
 
-          <View style={styles.sectionCard}>
+          <View style={commonStyles.card}>
             <SectionHeader
               icon="cash-outline"
               title="Entrada e hipoteca"
@@ -735,21 +752,25 @@ export default function HomePurchaseScreen() {
               value={formatMoney(down)}
               styles={styles}
             />
+
             <ResultRow
               label="Hipoteca"
               value={formatMoney(mortgage)}
               styles={styles}
             />
+
             <ResultRow
               label="% cubierto"
               value={`${coveredPercent.toFixed(2)}%`}
               styles={styles}
             />
+
             <ResultRow
               label="% restante"
               value={`${remainingPercent.toFixed(2)}%`}
               styles={styles}
             />
+
             <ResultRow
               label="Notaría pendiente"
               value={formatMoney(toNumber(pendingNotary))}
@@ -757,7 +778,7 @@ export default function HomePurchaseScreen() {
             />
           </View>
 
-          <View style={styles.sectionCard}>
+          <View style={commonStyles.card}>
             <SectionHeader
               icon="business-outline"
               title="Banco"
@@ -767,32 +788,38 @@ export default function HomePurchaseScreen() {
             />
 
             <ResultRow label="Años" value={years} styles={styles} />
+
             <ResultRow
               label="TIN inicial"
               value={`${toNumber(tin).toFixed(2)}%`}
               styles={styles}
             />
+
             <ResultRow
               label="Bonificación total"
               value={`${bonusTotal.toFixed(2)}%`}
               styles={styles}
             />
+
             <ResultRow
               label="TIN final"
               value={`${finalTin.toFixed(2)}%`}
               styles={styles}
             />
+
             <ResultRow
               label="Cuota mensual"
               value={formatMoney(monthlyPayment)}
               strong
               styles={styles}
             />
+
             <ResultRow
               label="Intereses estimados"
               value={formatMoney(totalInterest)}
               styles={styles}
             />
+
             <ResultRow
               label="Total pagado al banco"
               value={formatMoney(totalBankCost)}
@@ -802,29 +829,7 @@ export default function HomePurchaseScreen() {
         </View>
       </ScrollView>
 
-      <View style={styles.bottomBar}>
-        <BottomItem
-          label="Inicio"
-          icon="home-outline"
-          onPress={() => router.push("/")}
-          styles={styles}
-        />
-
-        <BottomItem
-          label="Gastos"
-          icon="card-outline"
-          onPress={() => router.push("/expenses")}
-          styles={styles}
-        />
-
-        <BottomItem
-          label="Ahorros"
-          icon="wallet-outline"
-          active
-          onPress={() => router.push("/savings")}
-          styles={styles}
-        />
-      </View>
+      <AppBottomMenu active="savings" />
 
       <Modal
         visible={editMode !== null}
@@ -832,142 +837,158 @@ export default function HomePurchaseScreen() {
         animationType="fade"
         onRequestClose={closeEdit}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalTitleBlock}>
-                <Text style={styles.modalTitle}>
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCard}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>
                   {editMode === "main" && "Editar simulación"}
                   {editMode === "property" && "Editar costes"}
                   {editMode === "mortgage" && "Editar entrada"}
                   {editMode === "bank" && "Editar banco"}
                 </Text>
 
-                <Text style={styles.modalSubtitle}>
+                <Text style={commonStyles.modalSubtitle}>
                   Si cancelas, no se aplica ningún cambio
                 </Text>
               </View>
 
-              <Pressable style={styles.closeButton} onPress={closeEdit}>
+              <Pressable style={commonStyles.closeButton} onPress={closeEdit}>
                 <Ionicons name="close" size={22} color={colors.primaryDark} />
               </Pressable>
             </View>
 
             <ScrollView
-              style={styles.modalScroll}
+              style={commonStyles.modalScroll}
               keyboardShouldPersistTaps="handled"
             >
               {editMode === "main" && (
-                <Input
+                <AppTextInput
                   label="Nombre de la simulación"
                   value={draftName}
                   onChange={setDraftName}
                   keyboardType="default"
-                  styles={styles}
+                  commonStyles={commonStyles}
                 />
               )}
 
               {editMode === "property" && (
                 <>
-                  <Input
+                  <AppTextInput
                     label="Precio del inmueble (€)"
                     value={draftPropertyPrice}
                     onChange={setDraftPropertyPrice}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="Agencia (%)"
                     value={draftAgencyPercent}
                     onChange={setDraftAgencyPercent}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="ITP / IVA (%)"
                     value={draftTaxPercent}
                     onChange={setDraftTaxPercent}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="Comisión financiera (€)"
                     value={draftFinancialFee}
                     onChange={setDraftFinancialFee}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="Notaría + Registro (%)"
                     value={draftNotaryPercent}
                     onChange={setDraftNotaryPercent}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
                 </>
               )}
 
               {editMode === "mortgage" && (
                 <>
-                  <Input
+                  <AppTextInput
                     label="Entrada (€)"
                     value={draftDownPayment}
                     onChange={setDraftDownPayment}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="Notaría pendiente (€)"
                     value={draftPendingNotary}
                     onChange={setDraftPendingNotary}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
                 </>
               )}
 
               {editMode === "bank" && (
                 <>
-                  <Input
+                  <AppTextInput
                     label="Años"
                     value={draftYears}
                     onChange={setDraftYears}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="TIN (%)"
                     value={draftTin}
                     onChange={setDraftTin}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="Bonificación base (%)"
                     value={draftBonus}
                     onChange={setDraftBonus}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="Bonificación nómina (%)"
                     value={draftSalaryBonus}
                     onChange={setDraftSalaryBonus}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="Seguro vida (%)"
                     value={draftLifeInsurance}
                     onChange={setDraftLifeInsurance}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
-                  <Input
+
+                  <AppTextInput
                     label="Seguro hogar (%)"
                     value={draftHomeInsurance}
                     onChange={setDraftHomeInsurance}
-                    styles={styles}
+                    commonStyles={commonStyles}
                   />
                 </>
               )}
             </ScrollView>
 
-            <View style={styles.modalActions}>
-              <Pressable style={styles.modalCancelButton} onPress={closeEdit}>
-                <Text style={styles.modalCancelText}>Cancelar</Text>
+            <View style={commonStyles.modalActions}>
+              <Pressable
+                style={commonStyles.modalCancelButton}
+                onPress={closeEdit}
+              >
+                <Text style={commonStyles.modalCancelText}>Cancelar</Text>
               </Pressable>
 
-              <Pressable style={styles.modalSaveButton} onPress={saveEdit}>
-                <Text style={styles.modalSaveText}>Aplicar</Text>
+              <Pressable
+                style={commonStyles.modalSaveButton}
+                onPress={saveEdit}
+              >
+                <Text style={commonStyles.modalSaveText}>Aplicar</Text>
               </Pressable>
             </View>
           </View>
@@ -980,102 +1001,51 @@ export default function HomePurchaseScreen() {
         animationType="fade"
         onRequestClose={() => setSaveNameModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCardSmall}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalTitleBlock}>
-                <Text style={styles.modalTitle}>Guardar simulación</Text>
-                <Text style={styles.modalSubtitle}>
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>Guardar simulación</Text>
+
+                <Text style={commonStyles.modalSubtitle}>
                   Ponle un nombre para encontrarla después
                 </Text>
               </View>
 
               <Pressable
-                style={styles.closeButton}
+                style={commonStyles.closeButton}
                 onPress={() => setSaveNameModalVisible(false)}
               >
                 <Ionicons name="close" size={22} color={colors.primaryDark} />
               </Pressable>
             </View>
 
-            <Input
+            <AppTextInput
               label="Nombre"
               value={newSimulationName}
               onChange={setNewSimulationName}
               keyboardType="default"
-              styles={styles}
+              commonStyles={commonStyles}
             />
 
-            <View style={styles.modalActions}>
+            <View style={commonStyles.modalActions}>
               <Pressable
-                style={styles.modalCancelButton}
+                style={commonStyles.modalCancelButton}
                 onPress={() => setSaveNameModalVisible(false)}
               >
-                <Text style={styles.modalCancelText}>Cancelar</Text>
+                <Text style={commonStyles.modalCancelText}>Cancelar</Text>
               </Pressable>
 
               <Pressable
-                style={styles.modalSaveButton}
+                style={commonStyles.modalSaveButton}
                 onPress={confirmSaveNewSimulation}
               >
-                <Text style={styles.modalSaveText}>Guardar</Text>
+                <Text style={commonStyles.modalSaveText}>Guardar</Text>
               </Pressable>
             </View>
           </View>
         </View>
       </Modal>
-    </View>
-  );
-}
-
-function BottomItem({
-  label,
-  icon,
-  active,
-  onPress,
-  styles,
-}: {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  active?: boolean;
-  onPress: () => void;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  return (
-    <Pressable style={styles.bottomItem} onPress={onPress}>
-      <Ionicons
-        name={icon}
-        size={22}
-        color={active ? colors.primaryDark : colors.mutedText}
-      />
-      <Text style={[styles.bottomText, active && styles.bottomTextActive]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  styles,
-}: {
-  label: string;
-  value: string;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  return (
-    <View style={styles.kpiCard}>
-      <Text style={styles.kpiLabel}>{label}</Text>
-
-      <Text
-        style={styles.kpiValue}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.6}
-      >
-        {value}
-      </Text>
     </View>
   );
 }
@@ -1118,114 +1088,9 @@ function SectionHeader({
   );
 }
 
-function ResultRow({
-  label,
-  value,
-  strong,
-  styles,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  return (
-    <View style={styles.resultRow}>
-      <Text style={styles.resultLabel} numberOfLines={1}>
-        {label}
-      </Text>
-
-      <Text
-        style={[styles.resultValue, strong && styles.resultValueStrong]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function Input({
-  label,
-  value,
-  onChange,
-  keyboardType = "numeric",
-  styles,
-}: {
-  label: string;
-  value: string;
-  onChange: (text: string) => void;
-  keyboardType?: "numeric" | "default";
-  styles: ReturnType<typeof createStyles>;
-}) {
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={styles.inputLabel}>{label}</Text>
-
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChange}
-        keyboardType={keyboardType}
-      />
-    </View>
-  );
-}
-
 const createStyles = (isDesktop: boolean) =>
   StyleSheet.create({
-    screen: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-
-    container: {
-      flexGrow: 1,
-      paddingHorizontal: isDesktop ? 28 : 14,
-      paddingTop: isDesktop ? 28 : 14,
-      paddingBottom: isDesktop ? 100 : 92,
-      alignItems: "center",
-    },
-
-    content: {
-      width: "100%",
-      maxWidth: 980,
-    },
-
-    settingsButton: {
-      position: "absolute",
-      top: isDesktop ? 24 : 20,
-      right: isDesktop ? 24 : 18,
-      width: isDesktop ? 42 : 38,
-      height: isDesktop ? 42 : 38,
-      borderRadius: 999,
-      backgroundColor: colors.white,
-      alignItems: "center",
-      justifyContent: "center",
-      shadowColor: "#000",
-      shadowOpacity: 0.06,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 3 },
-      elevation: 2,
-      zIndex: 20,
-    },
-
-    settingsButtonText: {
-      fontSize: isDesktop ? 22 : 20,
-      lineHeight: 24,
-      color: colors.text,
-      fontWeight: "900",
-    },
-
     titleCard: {
-      backgroundColor: colors.surface,
-      borderRadius: isDesktop ? 18 : 16,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: isDesktop ? 18 : 14,
-      marginBottom: isDesktop ? 14 : 12,
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
@@ -1236,23 +1101,8 @@ const createStyles = (isDesktop: boolean) =>
       minWidth: 0,
     },
 
-    titleLabel: {
-      fontSize: isDesktop ? 12 : 10,
-      color: colors.mutedText,
-      fontWeight: "800",
-      marginBottom: 3,
-    },
-
     titleText: {
-      fontSize: isDesktop ? 22 : 18,
-      color: colors.text,
-      fontWeight: "900",
-    },
-
-    titleSubtitle: {
-      fontSize: isDesktop ? 13 : 11,
-      color: colors.mutedText,
-      marginTop: 3,
+      marginVertical: 3,
     },
 
     iconEditButton: {
@@ -1349,31 +1199,12 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     actionsCard: {
-      backgroundColor: colors.surface,
-      borderRadius: isDesktop ? 16 : 14,
-      borderWidth: 1,
-      borderColor: colors.border,
       padding: isDesktop ? 10 : 9,
-      marginBottom: isDesktop ? 14 : 12,
       gap: 8,
     },
 
-    primaryButton: {
+    fullButton: {
       width: "100%",
-      backgroundColor: colors.primaryDark,
-      borderRadius: 12,
-      paddingVertical: isDesktop ? 12 : 10,
-      paddingHorizontal: 10,
-      alignItems: "center",
-      justifyContent: "center",
-      flexDirection: "row",
-      gap: 6,
-    },
-
-    primaryButtonText: {
-      color: colors.white,
-      fontSize: isDesktop ? 13 : 11,
-      fontWeight: "900",
     },
 
     secondaryActionsRow: {
@@ -1381,60 +1212,13 @@ const createStyles = (isDesktop: boolean) =>
       gap: 8,
     },
 
-    secondaryButton: {
+    halfButton: {
       flex: 1,
-      backgroundColor: colors.primarySoft,
-      borderRadius: 12,
-      paddingVertical: isDesktop ? 12 : 10,
-      paddingHorizontal: 8,
-      alignItems: "center",
-      justifyContent: "center",
-      flexDirection: "row",
-      gap: 5,
-    },
-
-    secondaryButtonText: {
-      color: colors.primaryDark,
-      fontSize: isDesktop ? 13 : 11,
-      fontWeight: "900",
-    },
-
-    dangerButton: {
-      width: "100%",
-      backgroundColor: "#FEF2F2",
-      borderRadius: 12,
-      paddingVertical: isDesktop ? 12 : 10,
-      paddingHorizontal: 8,
-      alignItems: "center",
-      justifyContent: "center",
-      flexDirection: "row",
-      gap: 5,
-    },
-
-    dangerButtonText: {
-      color: "#B91C1C",
-      fontSize: isDesktop ? 13 : 11,
-      fontWeight: "900",
-    },
-
-    savedCard: {
-      backgroundColor: colors.surface,
-      borderRadius: isDesktop ? 16 : 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: isDesktop ? 13 : 11,
-      marginBottom: isDesktop ? 14 : 12,
-    },
-
-    savedTitle: {
-      fontSize: isDesktop ? 15 : 13,
-      fontWeight: "900",
-      color: colors.text,
-      marginBottom: 10,
     },
 
     savedList: {
       gap: 8,
+      marginTop: 10,
     },
 
     savedItem: {
@@ -1471,15 +1255,6 @@ const createStyles = (isDesktop: boolean) =>
     savedItemSubtitleActive: {
       color: colors.white,
       opacity: 0.9,
-    },
-
-    sectionCard: {
-      backgroundColor: colors.surface,
-      borderRadius: isDesktop ? 18 : 16,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: isDesktop ? 16 : 12,
-      marginBottom: isDesktop ? 14 : 12,
     },
 
     sectionHeader: {
@@ -1562,167 +1337,5 @@ const createStyles = (isDesktop: boolean) =>
       fontSize: isDesktop ? 14 : 12,
       fontWeight: "900",
       color: colors.primaryDark,
-    },
-
-    bottomBar: {
-      position: "absolute",
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: isDesktop ? 72 : 64,
-      paddingTop: 5,
-      paddingBottom: isDesktop ? 10 : 7,
-      backgroundColor: colors.white,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-around",
-      zIndex: 15,
-      elevation: 8,
-      shadowColor: "#000",
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: -4 },
-    },
-
-    bottomItem: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-
-    bottomText: {
-      fontSize: isDesktop ? 12 : 10,
-      color: colors.mutedText,
-      fontWeight: "800",
-      marginTop: 2,
-    },
-
-    bottomTextActive: {
-      color: colors.primaryDark,
-    },
-
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: "rgba(15, 23, 42, 0.55)",
-      justifyContent: "center",
-      alignItems: "center",
-      padding: isDesktop ? 18 : 14,
-    },
-
-    modalCard: {
-      width: "100%",
-      maxWidth: 520,
-      maxHeight: "86%",
-      backgroundColor: colors.surface,
-      borderRadius: 20,
-      padding: isDesktop ? 20 : 15,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-
-    modalCardSmall: {
-      width: "100%",
-      maxWidth: 420,
-      backgroundColor: colors.surface,
-      borderRadius: 20,
-      padding: isDesktop ? 20 : 15,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-
-    modalHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      gap: 12,
-      marginBottom: 14,
-    },
-
-    modalTitleBlock: {
-      flex: 1,
-      minWidth: 0,
-    },
-
-    modalTitle: {
-      fontSize: isDesktop ? 20 : 17,
-      fontWeight: "900",
-      color: colors.text,
-    },
-
-    modalSubtitle: {
-      fontSize: isDesktop ? 13 : 11,
-      color: colors.mutedText,
-      marginTop: 3,
-    },
-
-    closeButton: {
-      width: 30,
-      height: 30,
-      borderRadius: 999,
-      backgroundColor: colors.primarySoft,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-
-    modalScroll: {
-      maxHeight: isDesktop ? 430 : 390,
-    },
-
-    modalActions: {
-      flexDirection: "row",
-      gap: 10,
-      marginTop: 14,
-    },
-
-    modalCancelButton: {
-      flex: 1,
-      backgroundColor: colors.primarySoft,
-      padding: isDesktop ? 12 : 10,
-      borderRadius: 11,
-      alignItems: "center",
-    },
-
-    modalCancelText: {
-      color: colors.primaryDark,
-      fontSize: isDesktop ? 13 : 11,
-      fontWeight: "900",
-    },
-
-    modalSaveButton: {
-      flex: 1,
-      backgroundColor: colors.primaryDark,
-      padding: isDesktop ? 12 : 10,
-      borderRadius: 11,
-      alignItems: "center",
-    },
-
-    modalSaveText: {
-      color: colors.white,
-      fontSize: isDesktop ? 13 : 11,
-      fontWeight: "900",
-    },
-
-    inputGroup: {
-      marginBottom: 11,
-    },
-
-    inputLabel: {
-      fontSize: isDesktop ? 13 : 11,
-      color: colors.mutedText,
-      fontWeight: "800",
-      marginBottom: 5,
-    },
-
-    input: {
-      backgroundColor: colors.white,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 11,
-      paddingVertical: isDesktop ? 11 : 9,
-      paddingHorizontal: 11,
-      fontSize: isDesktop ? 14 : 12,
-      color: colors.text,
     },
   });

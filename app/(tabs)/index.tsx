@@ -1,28 +1,51 @@
-import { supabase } from "@/src/lib/supabase";
+import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+
+import { supabase } from "@/src/lib/supabase";
+import { colors } from "@/src/theme/colors";
+import { createCommonStyles } from "@/src/theme/commonStyles";
+import { getCurrentUser } from "@/src/utils/auth";
+import { formatCompactMoney } from "@/src/utils/money";
+
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+
+type Summary = {
+  salary: number;
+  fixedPaid: number;
+  variables: number;
+  savings: number;
+};
 
 export default function HomeScreen() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+
+  const commonStyles = useMemo(
+    () => createCommonStyles(isDesktop),
+    [isDesktop],
+  );
+
+  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+
   const [selectedMonth, setSelectedMonth] = useState(
     new Date().toISOString().slice(0, 7),
   );
 
-  const [summary, setSummary] = useState({
+  const [summary, setSummary] = useState<Summary>({
     salary: 0,
     fixedPaid: 0,
     variables: 0,
     savings: 0,
   });
-
-  const getCurrentUser = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    return session?.user ?? null;
-  };
 
   const changeMonth = (offset: number) => {
     const [year, month] = selectedMonth.split("-").map(Number);
@@ -96,21 +119,24 @@ export default function HomeScreen() {
         const start = new Date(saving.start_date);
         const end = new Date(saving.end_date);
 
-        const totalMonths =
+        const totalMonths = Math.max(
+          0,
           (end.getFullYear() - start.getFullYear()) * 12 +
-          (end.getMonth() - start.getMonth());
+            (end.getMonth() - start.getMonth()),
+        );
 
         const rawPassed =
           (now.getFullYear() - start.getFullYear()) * 12 +
           (now.getMonth() - start.getMonth());
 
-        const passedMonths = Math.max(0, Math.min(totalMonths, rawPassed));
+        const passedMonths =
+          now < start ? 0 : Math.min(totalMonths, Math.max(0, rawPassed));
 
-        const ahorradoActual =
+        const currentSaved =
           Number(saving.contributed || 0) +
           passedMonths * Number(saving.monthly_amount || 0);
 
-        totalSavings += ahorradoActual;
+        totalSavings += currentSaved;
       });
     }
 
@@ -123,20 +149,18 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    const checkSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    const init = async () => {
+      const user = await getCurrentUser();
 
-      if (!session) {
-        setTimeout(checkSession, 200);
+      if (!user) {
+        router.replace("/login");
         return;
       }
 
       await loadMonthlySummary();
     };
 
-    checkSession();
+    init();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
@@ -153,146 +177,400 @@ export default function HomeScreen() {
     loadMonthlySummary();
   }, [selectedMonth]);
 
+  const totalExpenses = summary.fixedPaid + summary.variables;
+  const available = summary.salary - totalExpenses;
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={commonStyles.screen}>
       <Header title="Inicio" />
 
       <Pressable
-        style={styles.settingsButton}
+        style={commonStyles.settingsButton}
         onPress={() => router.push("/settings")}
       >
-        <Text style={styles.settingsButtonText}>☰</Text>
+        <Text style={commonStyles.settingsButtonText}>☰</Text>
       </Pressable>
 
-      <View style={styles.card}>
-        <Text style={styles.logo}>AccountWise</Text>
+      <ScrollView contentContainerStyle={commonStyles.container}>
+        <View style={commonStyles.content}>
+          <View style={styles.heroCard}>
+            <View style={styles.heroTextBlock}>
+              <Text style={styles.heroLabel}>AccountWise</Text>
 
-        <Text style={styles.title}>Resumen mensual</Text>
+              <Text style={styles.heroTitle}>Resumen mensual</Text>
 
-        <View style={styles.monthRow}>
-          <Text style={styles.monthArrow} onPress={() => changeMonth(-1)}>
-            ◀
-          </Text>
+              <Text style={styles.heroSubtitle}>
+                Vista rápida de ingresos, gastos y ahorro.
+              </Text>
+            </View>
 
-          <Text style={styles.monthText}>{selectedMonth}</Text>
+            <View style={styles.heroIcon}>
+              <Ionicons
+                name="analytics-outline"
+                size={28}
+                color={colors.white}
+              />
+            </View>
+          </View>
 
-          <Text style={styles.monthArrow} onPress={() => changeMonth(1)}>
-            ▶
-          </Text>
+          <View style={styles.monthCard}>
+            <Pressable
+              style={styles.monthButton}
+              onPress={() => changeMonth(-1)}
+            >
+              <Ionicons
+                name="chevron-back"
+                size={22}
+                color={colors.primaryDark}
+              />
+            </Pressable>
+
+            <Text style={styles.monthText}>{selectedMonth}</Text>
+
+            <Pressable
+              style={styles.monthButton}
+              onPress={() => changeMonth(1)}
+            >
+              <Ionicons
+                name="chevron-forward"
+                size={22}
+                color={colors.primaryDark}
+              />
+            </Pressable>
+          </View>
+
+          <View style={styles.balanceCard}>
+            <View style={styles.balanceTextBlock}>
+              <Text style={styles.balanceLabel}>Disponible</Text>
+
+              <Text style={styles.balanceSubtitle}>
+                Sueldo menos gastos del mes
+              </Text>
+            </View>
+
+            <Text
+              style={styles.balanceAmount}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
+              {formatCompactMoney(available)}
+            </Text>
+          </View>
+
+          <View style={styles.kpiGrid}>
+            <SummaryCard
+              label="Ingresos"
+              value={formatCompactMoney(summary.salary)}
+              icon="trending-up-outline"
+              styles={styles}
+            />
+
+            <SummaryCard
+              label="Gastos"
+              value={formatCompactMoney(totalExpenses)}
+              icon="trending-down-outline"
+              styles={styles}
+            />
+
+            <SummaryCard
+              label="Ahorros"
+              value={formatCompactMoney(summary.savings)}
+              icon="cash-outline"
+              styles={styles}
+            />
+          </View>
+
+          <View style={commonStyles.card}>
+            <Text style={commonStyles.cardTitle}>Detalle del mes</Text>
+
+            <View style={styles.detailList}>
+              <DetailRow
+                label="Sueldo"
+                value={formatCompactMoney(summary.salary)}
+                styles={styles}
+              />
+
+              <DetailRow
+                label="Gastos fijos pagados"
+                value={formatCompactMoney(summary.fixedPaid)}
+                styles={styles}
+              />
+
+              <DetailRow
+                label="Otros gastos"
+                value={formatCompactMoney(summary.variables)}
+                styles={styles}
+              />
+
+              <DetailRow
+                label="Disponible tras gastos"
+                value={formatCompactMoney(available)}
+                strong
+                styles={styles}
+              />
+            </View>
+          </View>
         </View>
-
-        <View style={styles.summaryBox}>
-          <Text style={styles.summaryLabel}>Ingresos</Text>
-          <Text style={styles.summaryAmount}>{summary.salary} €</Text>
-        </View>
-
-        <View style={styles.summaryBox}>
-          <Text style={styles.summaryLabel}>Gastos</Text>
-          <Text style={styles.summaryAmount}>
-            {summary.fixedPaid + summary.variables} €
-          </Text>
-        </View>
-
-        <View style={styles.summaryBox}>
-          <Text style={styles.summaryLabel}>Ahorros</Text>
-          <Text style={styles.summaryAmount}>
-            {summary.savings.toFixed(0)} €
-          </Text>
-        </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    flex: 1,
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: "#FFFFFF",
-    padding: 28,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
-    height: "100%",
-  },
+function SummaryCard({
+  label,
+  value,
+  icon,
+  styles,
+}: {
+  label: string;
+  value: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.summaryCard}>
+      <View style={styles.summaryIcon}>
+        <Ionicons name={icon} size={15} color={colors.primaryDark} />
+      </View>
 
-  logo: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#1F2937",
-    marginBottom: 18,
-  },
+      <Text style={styles.summaryLabel}>{label}</Text>
 
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111827",
-    textAlign: "center",
-    marginBottom: 12,
-  },
+      <Text
+        style={styles.summaryAmount}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
 
-  monthRow: {
-    width: "100%",
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 10,
-    alignItems: "center",
-    marginBottom: 8,
-  },
+function DetailRow({
+  label,
+  value,
+  strong,
+  styles,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel} numberOfLines={1}>
+        {label}
+      </Text>
 
-  monthArrow: {
-    fontSize: 16,
-  },
+      <Text
+        style={[styles.detailValue, strong && styles.detailValueStrong]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
 
-  monthText: {
-    fontSize: 15,
-    color: "#111827",
-  },
+const createStyles = (isDesktop: boolean) =>
+  StyleSheet.create({
+    heroCard: {
+      backgroundColor: colors.primaryDark,
+      borderRadius: isDesktop ? 20 : 18,
+      padding: isDesktop ? 22 : 16,
+      marginBottom: isDesktop ? 14 : 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 14,
+      minHeight: isDesktop ? 128 : 108,
+    },
 
-  settingsButton: {
-    position: "absolute",
-    top: 24,
-    right: 24,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-    zIndex: 10,
-  },
+    heroTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
 
-  settingsButtonText: {
-    marginBottom: 25,
-    fontSize: 22,
-  },
+    heroLabel: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
 
-  summaryBox: {
-    width: "100%",
-    backgroundColor: "#F9FAFB",
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 12,
-  },
+    heroTitle: {
+      fontSize: isDesktop ? 28 : 23,
+      color: colors.white,
+      fontWeight: "900",
+      marginBottom: 4,
+    },
 
-  summaryLabel: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginBottom: 4,
-  },
+    heroSubtitle: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "600",
+    },
 
-  summaryAmount: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#111827",
-  },
-});
+    heroIcon: {
+      width: isDesktop ? 58 : 48,
+      height: isDesktop ? 58 : 48,
+      borderRadius: 999,
+      backgroundColor: "rgba(255,255,255,0.16)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    monthCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: isDesktop ? 10 : 8,
+      marginBottom: isDesktop ? 14 : 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+
+    monthButton: {
+      width: isDesktop ? 40 : 36,
+      height: isDesktop ? 40 : 36,
+      borderRadius: 999,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    monthText: {
+      fontSize: isDesktop ? 17 : 15,
+      fontWeight: "900",
+      color: colors.text,
+    },
+
+    balanceCard: {
+      backgroundColor: colors.primaryDark,
+      borderRadius: isDesktop ? 20 : 18,
+      padding: isDesktop ? 22 : 16,
+      marginBottom: isDesktop ? 14 : 12,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+    },
+
+    balanceTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    balanceLabel: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
+
+    balanceSubtitle: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.white,
+      opacity: 0.8,
+      fontWeight: "600",
+    },
+
+    balanceAmount: {
+      maxWidth: isDesktop ? 260 : 150,
+      fontSize: isDesktop ? 34 : 25,
+      color: colors.white,
+      fontWeight: "900",
+      textAlign: "right",
+    },
+
+    kpiGrid: {
+      flexDirection: "row",
+      gap: isDesktop ? 10 : 8,
+      marginBottom: isDesktop ? 14 : 12,
+      justifyContent: "center",
+      alignItems: "stretch",
+    },
+
+    summaryCard: {
+      flex: 1,
+      minWidth: 0,
+      backgroundColor: colors.surface,
+      borderRadius: isDesktop ? 16 : 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: isDesktop ? 15 : 12,
+      paddingHorizontal: isDesktop ? 15 : 8,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    summaryIcon: {
+      width: isDesktop ? 34 : 30,
+      height: isDesktop ? 34 : 30,
+      borderRadius: 10,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: isDesktop ? 10 : 7,
+    },
+
+    summaryLabel: {
+      fontSize: isDesktop ? 12 : 9,
+      color: colors.mutedText,
+      fontWeight: "800",
+      marginBottom: 4,
+      textAlign: "center",
+    },
+
+    summaryAmount: {
+      fontSize: isDesktop ? 19 : 14,
+      color: colors.text,
+      fontWeight: "900",
+      textAlign: "center",
+      width: "100%",
+    },
+
+    detailList: {
+      marginTop: 10,
+    },
+
+    detailRow: {
+      paddingVertical: isDesktop ? 11 : 9,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSoft,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+
+    detailLabel: {
+      flex: 1,
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      fontWeight: "800",
+    },
+
+    detailValue: {
+      maxWidth: "55%",
+      fontSize: isDesktop ? 14 : 12,
+      color: colors.text,
+      fontWeight: "900",
+      textAlign: "right",
+    },
+
+    detailValueStrong: {
+      color: colors.primaryDark,
+    },
+  });

@@ -1,10 +1,34 @@
-import { supabase } from "@/src/lib/supabase";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+
+import { AppTextInput } from "@/src/components/AppTextInput";
+import { useAuth } from "@/src/context/AuthContext";
+import { supabase } from "@/src/lib/supabase";
+import { colors } from "@/src/theme/colors";
+import { createCommonStyles } from "@/src/theme/commonStyles";
+
+type AuthMode = "login" | "signup";
 
 export default function LoginScreen() {
-  const [mode, setMode] = useState<"login" | "signup" | null>(null);
+  const { refreshSession } = useAuth();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+  const commonStyles = useMemo(
+    () => createCommonStyles(isDesktop),
+    [isDesktop],
+  );
+  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+
+  const [mode, setMode] = useState<AuthMode>("login");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -13,13 +37,21 @@ export default function LoginScreen() {
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
 
-  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
 
-  // -----------------------------
-  // LOGIN
-  // -----------------------------
+  const showMessage = (text: string, error = true) => {
+    setMessage(text);
+    setIsError(error);
+  };
+
+  const clearMessage = () => {
+    setMessage("");
+    setIsError(false);
+  };
+
   const handleLogin = async () => {
-    setError("");
+    clearMessage();
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -27,19 +59,16 @@ export default function LoginScreen() {
     });
 
     if (error) {
-      setError("Email o contraseña incorrectos");
+      showMessage("Email o contraseña incorrectos");
       return;
     }
 
-    // 👇 Redirigir al usuario logado
+    await refreshSession();
     router.replace("/(tabs)");
   };
 
-  // -----------------------------
-  // SIGNUP
-  // -----------------------------
   const handleSignup = async () => {
-    setError("");
+    clearMessage();
 
     const { data, error: signupError } = await supabase.auth.signUp({
       email: signupEmail,
@@ -47,11 +76,11 @@ export default function LoginScreen() {
     });
 
     if (signupError) {
-      if (signupError.message.includes("already registered")) {
-        setError("Este email ya está registrado");
-      } else {
-        setError("Error al crear la cuenta");
-      }
+      showMessage(
+        signupError.message.includes("already registered")
+          ? "Este email ya está registrado"
+          : "Error al crear la cuenta",
+      );
       return;
     }
 
@@ -61,16 +90,15 @@ export default function LoginScreen() {
         full_name: name,
       });
     }
+
+    showMessage("Cuenta creada. Revisa tu email si Supabase pide confirmación.", false);
   };
 
-  // -----------------------------
-  // RESET PASSWORD
-  // -----------------------------
   const handleResetPassword = async () => {
-    setError("");
+    clearMessage();
 
     if (!email) {
-      setError("Introduce tu email para recuperar la contraseña");
+      showMessage("Introduce tu email para recuperar la contraseña");
       return;
     }
 
@@ -78,208 +106,342 @@ export default function LoginScreen() {
       redirectTo: "https://frontend-accountwise.vercel.app/reset-password",
     });
 
-    if (error) {
-      setError("No se pudo enviar el email de recuperación");
-    } else {
-      setError("Te hemos enviado un email para restablecer tu contraseña");
-    }
+    showMessage(
+      error
+        ? "No se pudo enviar el email de recuperación"
+        : "Te hemos enviado un email para restablecer tu contraseña",
+      !!error,
+    );
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Bienvenido</Text>
-      <Text style={styles.subtitle}>Gestiona tus finanzas fácilmente</Text>
+    <View style={commonStyles.screen}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.content}>
+          <View style={styles.heroCard}>
+            <View style={styles.heroTextBlock}>
+              <Text style={styles.heroLabel}>AccountWise</Text>
+              <Text style={styles.heroTitle}>Bienvenido</Text>
+              <Text style={styles.heroSubtitle}>
+                Gestiona tus finanzas con el mismo panel desde cualquier lugar.
+              </Text>
+            </View>
 
-      <View style={styles.switchRow}>
-        <Pressable
-          style={[styles.switchButton, mode === "login" && styles.activeButton]}
-          onPress={() => setMode("login")}
-        >
-          <Text style={styles.switchText}>Iniciar sesión</Text>
-        </Pressable>
+            <View style={styles.heroIcon}>
+              <Ionicons name="wallet-outline" size={28} color={colors.white} />
+            </View>
+          </View>
 
-        <Pressable
-          style={[
-            styles.switchButton,
-            mode === "signup" && styles.activeButton,
-          ]}
-          onPress={() => setMode("signup")}
-        >
-          <Text style={styles.switchText}>Crear cuenta</Text>
-        </Pressable>
-      </View>
+          <View style={commonStyles.card}>
+            <View style={styles.modeSwitch}>
+              <AuthModeButton
+                label="Iniciar sesión"
+                active={mode === "login"}
+                onPress={() => {
+                  setMode("login");
+                  clearMessage();
+                }}
+                styles={styles}
+              />
 
-      {error !== "" && <Text style={styles.error}>{error}</Text>}
+              <AuthModeButton
+                label="Crear cuenta"
+                active={mode === "signup"}
+                onPress={() => {
+                  setMode("signup");
+                  clearMessage();
+                }}
+                styles={styles}
+              />
+            </View>
 
-      {mode === "login" && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Iniciar sesión</Text>
+            {message !== "" && (
+              <View
+                style={[
+                  styles.messageBox,
+                  isError ? styles.errorBox : styles.successBox,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.messageText,
+                    isError ? styles.errorText : styles.successText,
+                  ]}
+                >
+                  {message}
+                </Text>
+              </View>
+            )}
 
-          <Input
-            label="Email"
-            value={email}
-            onChange={setEmail}
-            secure={false}
-          />
-          <Input
-            label="Contraseña"
-            value={password}
-            onChange={setPassword}
-            secure
-          />
+            {mode === "login" ? (
+              <View>
+                <Text style={commonStyles.cardTitle}>Acceso</Text>
+                <Text style={[commonStyles.subtitle, styles.cardSubtitle]}>
+                  Entra con tu cuenta para sincronizar tus gastos y objetivos.
+                </Text>
 
-          <Pressable style={styles.button} onPress={handleLogin}>
-            <Text style={styles.buttonText}>Entrar</Text>
-          </Pressable>
+                <AppTextInput
+                  label="Email"
+                  value={email}
+                  onChange={setEmail}
+                  keyboardType="default"
+                  commonStyles={commonStyles}
+                />
 
-          <Pressable onPress={handleResetPassword} style={{ marginTop: 10 }}>
-            <Text style={{ color: "#085175", fontSize: 12 }}>
-              ¿Olvidaste tu contraseña?
-            </Text>
-          </Pressable>
+                <AppTextInput
+                  label="Contraseña"
+                  value={password}
+                  onChange={setPassword}
+                  keyboardType="default"
+                  secureTextEntry
+                  commonStyles={commonStyles}
+                />
+
+                <Pressable
+                  style={[commonStyles.primaryButton, styles.fullButton]}
+                  onPress={handleLogin}
+                >
+                  <Ionicons
+                    name="log-in-outline"
+                    size={18}
+                    color={colors.white}
+                  />
+                  <Text style={commonStyles.primaryButtonText}>Entrar</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.forgotButton}
+                  onPress={handleResetPassword}
+                >
+                  <Text style={styles.forgotText}>
+                    ¿Olvidaste tu contraseña?
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View>
+                <Text style={commonStyles.cardTitle}>Crear cuenta</Text>
+                <Text style={[commonStyles.subtitle, styles.cardSubtitle]}>
+                  Crea tu perfil para guardar tus preferencias y datos.
+                </Text>
+
+                <AppTextInput
+                  label="Nombre"
+                  value={name}
+                  onChange={setName}
+                  keyboardType="default"
+                  commonStyles={commonStyles}
+                />
+
+                <AppTextInput
+                  label="Email"
+                  value={signupEmail}
+                  onChange={setSignupEmail}
+                  keyboardType="default"
+                  commonStyles={commonStyles}
+                />
+
+                <AppTextInput
+                  label="Contraseña"
+                  value={signupPassword}
+                  onChange={setSignupPassword}
+                  keyboardType="default"
+                  secureTextEntry
+                  commonStyles={commonStyles}
+                />
+
+                <Pressable
+                  style={[commonStyles.primaryButton, styles.fullButton]}
+                  onPress={handleSignup}
+                >
+                  <Ionicons
+                    name="person-add-outline"
+                    size={18}
+                    color={colors.white}
+                  />
+                  <Text style={commonStyles.primaryButtonText}>
+                    Crear cuenta
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
         </View>
-      )}
-
-      {mode === "signup" && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Crear cuenta</Text>
-
-          <Input
-            label="Email"
-            value={signupEmail}
-            onChange={setSignupEmail}
-            secure={false}
-          />
-          <Input
-            label="Contraseña"
-            value={signupPassword}
-            onChange={setSignupPassword}
-            secure
-          />
-
-          <Pressable style={styles.button} onPress={handleSignup}>
-            <Text style={styles.buttonText}>Crear cuenta</Text>
-          </Pressable>
-        </View>
-      )}
+      </ScrollView>
     </View>
   );
 }
 
-// -----------------------------
-// INPUT COMPONENT
-// -----------------------------
-interface InputProps {
+function AuthModeButton({
+  label,
+  active,
+  onPress,
+  styles,
+}: {
   label: string;
-  value: string;
-  onChange: (text: string) => void;
-  secure?: boolean;
-}
-
-function Input({ label, value, onChange, secure }: InputProps) {
+  active: boolean;
+  onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
+}) {
   return (
-    <View style={{ marginBottom: 10 }}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChange}
-        secureTextEntry={secure}
-      />
-    </View>
+    <Pressable
+      style={[styles.modeButton, active && styles.modeButtonActive]}
+      onPress={onPress}
+    >
+      <Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
-// -----------------------------
-// STYLES
-// -----------------------------
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    justifyContent: "flex-start",
-    backgroundColor: "#F4F7FA",
-  },
+const createStyles = (isDesktop: boolean) =>
+  StyleSheet.create({
+    container: {
+      flexGrow: 1,
+      paddingHorizontal: isDesktop ? 24 : 16,
+      paddingVertical: isDesktop ? 36 : 20,
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  title: {
-    fontSize: 28,
-    fontWeight: "800",
-    textAlign: "center",
-    marginTop: 40,
-  },
+    content: {
+      width: "100%",
+      maxWidth: 520,
+    },
 
-  subtitle: {
-    fontSize: 16,
-    textAlign: "center",
-    color: "#6B7280",
-    marginBottom: 30,
-  },
+    heroCard: {
+      backgroundColor: colors.primaryDark,
+      borderRadius: isDesktop ? 20 : 18,
+      padding: isDesktop ? 22 : 16,
+      marginBottom: isDesktop ? 14 : 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 14,
+      minHeight: isDesktop ? 128 : 112,
+    },
 
-  switchRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 20,
-    gap: 10,
-  },
+    heroTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
 
-  switchButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: "#E5E7EB",
-    borderRadius: 8,
-  },
+    heroLabel: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
 
-  activeButton: {
-    backgroundColor: "#2563EB",
-  },
+    heroTitle: {
+      fontSize: isDesktop ? 28 : 23,
+      color: colors.white,
+      fontWeight: "900",
+      marginBottom: 4,
+    },
 
-  switchText: {
-    color: "#111",
-    fontWeight: "600",
-  },
+    heroSubtitle: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "600",
+    },
 
-  card: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 12,
-  },
+    heroIcon: {
+      width: isDesktop ? 58 : 48,
+      height: isDesktop ? 58 : 48,
+      borderRadius: 999,
+      backgroundColor: "rgba(255,255,255,0.16)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 12,
-  },
+    modeSwitch: {
+      flexDirection: "row",
+      backgroundColor: colors.primarySoft,
+      borderRadius: 13,
+      padding: 4,
+      marginBottom: 16,
+      gap: 4,
+    },
 
-  label: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
+    modeButton: {
+      flex: 1,
+      borderRadius: 10,
+      paddingVertical: isDesktop ? 10 : 9,
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  input: {
-    backgroundColor: "#F9FAFB",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 8,
-    padding: 10,
-  },
+    modeButtonActive: {
+      backgroundColor: colors.primaryDark,
+    },
 
-  button: {
-    backgroundColor: "#16A34A",
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 10,
-  },
+    modeButtonText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+    },
 
-  buttonText: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "700",
-  },
+    modeButtonTextActive: {
+      color: colors.white,
+    },
 
-  error: {
-    color: "#DC2626",
-    textAlign: "center",
-    marginBottom: 10,
-    fontWeight: "600",
-  },
-});
+    cardSubtitle: {
+      marginTop: 4,
+      marginBottom: 16,
+    },
+
+    messageBox: {
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      marginBottom: 16,
+      borderWidth: 1,
+    },
+
+    errorBox: {
+      backgroundColor: "#FEF2F2",
+      borderColor: "#FECACA",
+    },
+
+    successBox: {
+      backgroundColor: "#F0FDF4",
+      borderColor: "#BBF7D0",
+    },
+
+    messageText: {
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+
+    errorText: {
+      color: colors.danger,
+    },
+
+    successText: {
+      color: colors.success,
+    },
+
+    fullButton: {
+      width: "100%",
+      marginTop: 4,
+    },
+
+    forgotButton: {
+      alignItems: "center",
+      paddingVertical: 12,
+    },
+
+    forgotText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+    },
+  });

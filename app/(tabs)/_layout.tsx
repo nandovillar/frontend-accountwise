@@ -1,7 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import React from "react";
-import { Platform } from "react-native";
 
 import { colors } from "@/src/theme/colors";
 
@@ -15,27 +13,21 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.mutedText,
 
         tabBarStyle: {
-          height: Platform.OS === "web" ? 72 : 66,
-          paddingTop: 6,
-          paddingBottom: Platform.OS === "web" ? 10 : 8,
+          height: 68,
           backgroundColor: colors.white,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          elevation: 8,
-          shadowColor: "#000",
-          shadowOpacity: 0.08,
-          shadowRadius: 12,
-          shadowOffset: { width: 0, height: -4 },
+          paddingTop: 6,
+          paddingBottom: 8,
         },
 
         tabBarLabelStyle: {
-          fontSize: Platform.OS === "web" ? 12 : 10,
+          fontSize: 11,
           fontWeight: "800",
-          marginTop: 2,
         },
 
         tabBarIconStyle: {
-          marginTop: 2,
+          marginBottom: 2,
         },
       }}
     >
@@ -43,12 +35,8 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Inicio",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
-              size={24}
-              color={color}
-            />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="home-outline" size={24} color={color} />
           ),
         }}
       />
@@ -57,12 +45,8 @@ export default function TabLayout() {
         name="expenses"
         options={{
           title: "Gastos",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "card" : "card-outline"}
-              size={24}
-              color={color}
-            />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="card-outline" size={24} color={color} />
           ),
         }}
       />
@@ -71,12 +55,8 @@ export default function TabLayout() {
         name="savings"
         options={{
           title: "Ahorros",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? "wallet" : "wallet-outline"}
-              size={24}
-              color={color}
-            />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="wallet-outline" size={24} color={color} />
           ),
         }}
       />

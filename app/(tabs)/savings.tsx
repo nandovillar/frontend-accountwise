@@ -1,10 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { AppTextInput } from "@/src/components/AppTextInput";
+import { KpiCard } from "@/src/components/KpiCard";
+import { ResultRow } from "@/src/components/ResultRow";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
+import { createCommonStyles } from "@/src/theme/commonStyles";
+import { getCurrentUser } from "@/src/utils/auth";
+import { getNextYearDate, getTodayDate } from "@/src/utils/dates";
+import { formatCompactMoney, formatMoney } from "@/src/utils/money";
 
 import {
   Alert,
@@ -14,11 +21,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
-type Saving = {
+type SavingItem = {
   id: string;
   user_id: string;
   name: string;
@@ -27,16 +34,23 @@ type Saving = {
   end_date: string;
   monthly_amount: number;
   contributed: number;
-  borrowed: string | null;
+  borrowed?: string;
   created_at?: string;
 };
 
-const defaultStartDate = "2026-05-01";
-const defaultEndDate = "2026-12-01";
-
 export default function SavingsScreen() {
-  const [savings, setSavings] = useState<Saving[]>([]);
-  const [selectedSaving, setSelectedSaving] = useState<Saving | null>(null);
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+
+  const commonStyles = useMemo(
+    () => createCommonStyles(isDesktop),
+    [isDesktop],
+  );
+
+  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+
+  const [savings, setSavings] = useState<SavingItem[]>([]);
+  const [selectedSaving, setSelectedSaving] = useState<SavingItem | null>(null);
 
   const [formVisible, setFormVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -45,29 +59,10 @@ export default function SavingsScreen() {
   const [goal, setGoal] = useState("");
   const [monthly, setMonthly] = useState("");
   const [contributed, setContributed] = useState("");
-  const [borrowedValue, setBorrowedValue] = useState("");
+  const [borrowed, setBorrowed] = useState("");
 
-  const [startDate, setStartDate] = useState(defaultStartDate);
-  const [endDate, setEndDate] = useState(defaultEndDate);
-
-  const toNumber = (value: string | number) => {
-    return Number(String(value).replace(",", ".")) || 0;
-  };
-
-  const formatMoney = (value: number) => {
-    return `${value.toLocaleString("es-ES", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })} €`;
-  };
-
-  const getCurrentUser = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    return session?.user ?? null;
-  };
+  const [startDate, setStartDate] = useState(getTodayDate());
+  const [endDate, setEndDate] = useState(getNextYearDate());
 
   const calculateSaving = (
     startDateValue: string,
@@ -83,97 +78,39 @@ export default function SavingsScreen() {
     const totalMonths = Math.max(
       0,
       (end.getFullYear() - start.getFullYear()) * 12 +
-        (end.getMonth() - start.getMonth()) +
-        1,
+        (end.getMonth() - start.getMonth()),
     );
 
+    const rawPassed =
+      (now.getFullYear() - start.getFullYear()) * 12 +
+      (now.getMonth() - start.getMonth());
+
     const passedMonths =
-      now < start
-        ? 0
-        : Math.min(
-            totalMonths,
-            (now.getFullYear() - start.getFullYear()) * 12 +
-              (now.getMonth() - start.getMonth()) +
-              1,
-          );
+      now < start ? 0 : Math.min(totalMonths, Math.max(0, rawPassed));
 
     const remainingMonths = Math.max(0, totalMonths - passedMonths);
-
     const currentSaved = contributedValue + passedMonths * monthlyValue;
     const pending = Math.max(0, goalValue - currentSaved);
-
-    const neededMonthly =
-      remainingMonths > 0 ? pending / remainingMonths : pending;
-
     const forecastSaved = contributedValue + totalMonths * monthlyValue;
     const completed = currentSaved >= goalValue && goalValue > 0;
+
+    const neededMonthly =
+      remainingMonths > 0 ? Math.max(0, pending / remainingMonths) : 0;
+
+    const progress =
+      goalValue > 0 ? Math.min(100, (currentSaved / goalValue) * 100) : 0;
 
     return {
       totalMonths,
       passedMonths,
       remainingMonths,
       currentSaved,
-      neededMonthly,
       pending,
       forecastSaved,
       completed,
+      neededMonthly,
+      progress,
     };
-  };
-
-  const totals = savings.reduce(
-    (acc, item) => {
-      const result = calculateSaving(
-        item.start_date,
-        item.end_date,
-        Number(item.monthly_amount || 0),
-        Number(item.contributed || 0),
-        Number(item.goal || 0),
-      );
-
-      return {
-        goal: acc.goal + Number(item.goal || 0),
-        current: acc.current + result.currentSaved,
-        pending: acc.pending + result.pending,
-      };
-    },
-    { goal: 0, current: 0, pending: 0 },
-  );
-
-  const resetForm = () => {
-    setEditingId(null);
-    setName("");
-    setGoal("");
-    setMonthly("");
-    setContributed("");
-    setBorrowedValue("");
-    setStartDate(defaultStartDate);
-    setEndDate(defaultEndDate);
-  };
-
-  const openCreateForm = () => {
-    resetForm();
-    setSelectedSaving(null);
-    setFormVisible(true);
-  };
-
-  const openEditForm = (item: Saving) => {
-    setSelectedSaving(null);
-
-    setEditingId(item.id);
-    setName(item.name || "");
-    setGoal(String(item.goal || ""));
-    setMonthly(String(item.monthly_amount || ""));
-    setContributed(String(item.contributed || ""));
-    setBorrowedValue(item.borrowed || "");
-    setStartDate(item.start_date || defaultStartDate);
-    setEndDate(item.end_date || defaultEndDate);
-
-    setFormVisible(true);
-  };
-
-  const closeForm = () => {
-    resetForm();
-    setFormVisible(false);
   };
 
   const loadSavings = async () => {
@@ -195,28 +132,54 @@ export default function SavingsScreen() {
     setSavings(data || []);
   };
 
+  const resetForm = () => {
+    setEditingId(null);
+    setName("");
+    setGoal("");
+    setMonthly("");
+    setContributed("");
+    setBorrowed("");
+    setStartDate(getTodayDate());
+    setEndDate(getNextYearDate());
+  };
+
+  const openCreateForm = () => {
+    resetForm();
+    setFormVisible(true);
+  };
+
+  const openEditForm = (item: SavingItem) => {
+    setEditingId(item.id);
+    setName(item.name);
+    setGoal(String(item.goal ?? 0));
+    setMonthly(String(item.monthly_amount ?? 0));
+    setContributed(String(item.contributed ?? 0));
+    setBorrowed(item.borrowed || "");
+    setStartDate(item.start_date || getTodayDate());
+    setEndDate(item.end_date || getNextYearDate());
+    setSelectedSaving(null);
+    setFormVisible(true);
+  };
+
+  const closeForm = () => {
+    resetForm();
+    setFormVisible(false);
+  };
+
   const saveSaving = async () => {
     const user = await getCurrentUser();
 
     if (!user) return;
 
-    if (!goal || !monthly) {
-      Alert.alert(
-        "Faltan datos",
-        "Rellena al menos objetivo y ahorro mensual.",
-      );
-      return;
-    }
-
     const payload = {
       user_id: user.id,
       name: name.trim() || "Ahorro sin nombre",
-      goal: toNumber(goal),
+      goal: Number(goal) || 0,
       start_date: startDate,
       end_date: endDate,
-      monthly_amount: toNumber(monthly),
-      contributed: toNumber(contributed),
-      borrowed: borrowedValue,
+      monthly_amount: Number(monthly) || 0,
+      contributed: Number(contributed) || 0,
+      borrowed: borrowed.trim(),
     };
 
     if (editingId) {
@@ -243,7 +206,7 @@ export default function SavingsScreen() {
     closeForm();
   };
 
-  const deleteSaving = async (item: Saving) => {
+  const deleteSaving = async (item: SavingItem) => {
     const user = await getCurrentUser();
 
     if (!user) return;
@@ -269,7 +232,11 @@ export default function SavingsScreen() {
 
     if (Platform.OS === "web") {
       const confirmed = window.confirm(`¿Eliminar "${item.name}"?`);
-      if (confirmed) await executeDelete();
+
+      if (confirmed) {
+        await executeDelete();
+      }
+
       return;
     }
 
@@ -279,21 +246,44 @@ export default function SavingsScreen() {
     ]);
   };
 
-  useEffect(() => {
-    const checkSession = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+  const getTotals = () => {
+    return savings.reduce(
+      (acc, item) => {
+        const result = calculateSaving(
+          item.start_date,
+          item.end_date,
+          Number(item.monthly_amount || 0),
+          Number(item.contributed || 0),
+          Number(item.goal || 0),
+        );
 
-      if (!session) {
-        setTimeout(checkSession, 200);
+        return {
+          goals: acc.goals + Number(item.goal || 0),
+          saved: acc.saved + result.currentSaved,
+          pending: acc.pending + result.pending,
+        };
+      },
+      {
+        goals: 0,
+        saved: 0,
+        pending: 0,
+      },
+    );
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      const user = await getCurrentUser();
+
+      if (!user) {
+        router.replace("/login");
         return;
       }
 
       await loadSavings();
     };
 
-    checkSession();
+    init();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
@@ -306,162 +296,99 @@ export default function SavingsScreen() {
     return () => subscription.subscription.unsubscribe();
   }, []);
 
+  const totals = getTotals();
+
+  const currentFormResult = calculateSaving(
+    startDate,
+    endDate,
+    Number(monthly) || 0,
+    Number(contributed) || 0,
+    Number(goal) || 0,
+  );
+
   return (
-    <View style={styles.screen}>
-      <Header title="Ahorro" />
+    <View style={commonStyles.screen}>
+      <Header title="Ahorros" />
 
       <Pressable
-        style={styles.settingsButton}
+        style={commonStyles.settingsButton}
         onPress={() => router.push("/settings")}
       >
-        <Text style={styles.settingsButtonText}>☰</Text>
+        <Text style={commonStyles.settingsButtonText}>☰</Text>
       </Pressable>
 
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={commonStyles.container}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={commonStyles.content}>
           <View style={styles.heroCard}>
             <View style={styles.heroTextBlock}>
-              <Text style={styles.heroLabel}>Ahorros totales</Text>
+              <Text style={styles.heroLabel}>Ahorros</Text>
 
               <Text
                 style={styles.heroAmount}
                 numberOfLines={1}
                 adjustsFontSizeToFit
-                minimumFontScale={0.7}
+                minimumFontScale={0.6}
               >
-                {formatMoney(totals.current)}
+                {formatCompactMoney(totals.saved)}
               </Text>
 
-              <Text
-                style={styles.heroSubtitle}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.75}
-              >
-                Pendiente: {formatMoney(totals.pending)}
+              <Text style={styles.heroSubtitle}>
+                Ahorrado actualmente entre todos tus objetivos
               </Text>
             </View>
 
-            <View style={styles.heroIconBox}>
+            <View style={styles.heroIcon}>
               <Ionicons name="wallet-outline" size={28} color={colors.white} />
             </View>
           </View>
 
           <View style={styles.kpiGrid}>
-            <KpiCard label="Objetivo" value={formatMoney(totals.goal)} />
-            <KpiCard label="Actual" value={formatMoney(totals.current)} />
-            <KpiCard label="Pendiente" value={formatMoney(totals.pending)} />
+            <KpiCard
+              label="Objetivos"
+              value={formatCompactMoney(totals.goals)}
+              styles={styles}
+            />
+
+            <KpiCard
+              label="Pendiente"
+              value={formatCompactMoney(totals.pending)}
+              styles={styles}
+            />
+
+            <KpiCard
+              label="Planes"
+              value={String(savings.length)}
+              styles={styles}
+            />
           </View>
 
-          <View style={styles.actionsCard}>
-            <Pressable style={styles.primaryButton} onPress={openCreateForm}>
-              <Ionicons
-                name="add-circle-outline"
-                size={18}
-                color={colors.white}
-              />
-              <Text style={styles.primaryButtonText}>Nuevo ahorro</Text>
-            </Pressable>
-
-            <Pressable
-              style={styles.secondaryButton}
-              onPress={() => router.push("/HomePurchase")}
-            >
-              <Ionicons
-                name="home-outline"
-                size={18}
-                color={colors.primaryDark}
-              />
-              <Text style={styles.secondaryButtonText}>Simulador casa</Text>
-            </Pressable>
-          </View>
-
-          {selectedSaving && (
-            <View style={styles.detailCard}>
-              <View style={styles.detailHeader}>
-                <View>
-                  <Text style={styles.detailTitle}>{selectedSaving.name}</Text>
-                  <Text style={styles.detailSubtitle}>
-                    Detalle del objetivo
-                  </Text>
-                </View>
-
-                <Pressable
-                  style={styles.iconButtonSoft}
-                  onPress={() => setSelectedSaving(null)}
-                >
-                  <Ionicons name="close" size={20} color={colors.primaryDark} />
-                </Pressable>
+          <View style={commonStyles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderText}>
+                <Text style={commonStyles.smallText}>Listado</Text>
+                <Text style={commonStyles.cardTitle}>Mis objetivos</Text>
               </View>
 
-              {(() => {
-                const result = calculateSaving(
-                  selectedSaving.start_date,
-                  selectedSaving.end_date,
-                  Number(selectedSaving.monthly_amount || 0),
-                  Number(selectedSaving.contributed || 0),
-                  Number(selectedSaving.goal || 0),
-                );
-
-                return (
-                  <View style={styles.resultBox}>
-                    <ResultRow
-                      label="Objetivo"
-                      value={formatMoney(Number(selectedSaving.goal || 0))}
-                    />
-                    <ResultRow
-                      label="Ahorro actual"
-                      value={formatMoney(result.currentSaved)}
-                    />
-                    <ResultRow
-                      label="Pendiente"
-                      value={formatMoney(result.pending)}
-                    />
-                    <ResultRow
-                      label="Ahorro mensual"
-                      value={formatMoney(
-                        Number(selectedSaving.monthly_amount || 0),
-                      )}
-                    />
-                    <ResultRow
-                      label="Necesario mensual"
-                      value={formatMoney(result.neededMonthly)}
-                    />
-                    <ResultRow
-                      label="Meses restantes"
-                      value={`${result.remainingMonths}`}
-                    />
-                    <ResultRow
-                      label="Estado"
-                      value={result.completed ? "Cumplido" : "En progreso"}
-                      strong
-                    />
-                  </View>
-                );
-              })()}
-            </View>
-          )}
-
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Mis ahorros</Text>
-                <Text style={styles.sectionSubtitle}>
-                  {savings.length} objetivos guardados
-                </Text>
-              </View>
+              <Pressable style={styles.addButton} onPress={openCreateForm}>
+                <Ionicons name="add" size={21} color={colors.white} />
+              </Pressable>
             </View>
 
             {savings.length === 0 ? (
               <View style={styles.emptyBox}>
                 <Ionicons
-                  name="file-tray-outline"
+                  name="wallet-outline"
                   size={28}
-                  color={colors.mutedText}
+                  color={colors.primaryDark}
                 />
+
                 <Text style={styles.emptyTitle}>No tienes ahorros todavía</Text>
+
                 <Text style={styles.emptyText}>
-                  Crea tu primer objetivo para ver el progreso aquí.
+                  Crea tu primer objetivo para ver el resumen y el progreso.
                 </Text>
               </View>
             ) : (
@@ -474,58 +401,61 @@ export default function SavingsScreen() {
                   Number(item.goal || 0),
                 );
 
-                const progress =
-                  Number(item.goal || 0) > 0
-                    ? Math.min(
-                        100,
-                        (result.currentSaved / Number(item.goal)) * 100,
-                      )
-                    : 0;
-
                 return (
                   <View key={item.id} style={styles.savingRow}>
-                    <Pressable
-                      style={styles.savingMain}
-                      onPress={() => setSelectedSaving(item)}
-                    >
-                      <View style={styles.savingTopLine}>
+                    <View style={styles.savingTopRow}>
+                      <View style={styles.savingTextBlock}>
                         <Text style={styles.savingName} numberOfLines={1}>
                           {item.name}
                         </Text>
 
-                        <Text
-                          style={styles.savingAmount}
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.75}
-                        >
-                          {formatMoney(result.currentSaved)}
+                        <Text style={styles.savingStatus}>
+                          {result.completed ? "Cumplido" : "En progreso"} ·{" "}
+                          {result.progress.toFixed(0)}%
                         </Text>
                       </View>
 
                       <Text
-                        style={styles.savingMeta}
+                        style={styles.savingAmount}
                         numberOfLines={1}
                         adjustsFontSizeToFit
-                        minimumFontScale={0.8}
+                        minimumFontScale={0.65}
                       >
-                        Objetivo {formatMoney(Number(item.goal || 0))} ·{" "}
-                        {progress.toFixed(0)}%
+                        {formatCompactMoney(result.currentSaved)}
                       </Text>
+                    </View>
 
-                      <View style={styles.progressTrack}>
-                        <View
-                          style={[
-                            styles.progressFill,
-                            { width: `${progress}%` },
-                          ]}
-                        />
-                      </View>
-                    </Pressable>
+                    <View style={styles.progressTrack}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          { width: `${result.progress}%` },
+                        ]}
+                      />
+                    </View>
 
-                    <View style={styles.rowActions}>
+                    <View style={styles.infoLine}>
+                      <InfoPill
+                        label="Objetivo"
+                        value={formatCompactMoney(Number(item.goal || 0))}
+                      />
+
+                      <InfoPill
+                        label="Mensual"
+                        value={formatCompactMoney(
+                          Number(item.monthly_amount || 0),
+                        )}
+                      />
+
+                      <InfoPill
+                        label="Pendiente"
+                        value={formatCompactMoney(result.pending)}
+                      />
+                    </View>
+
+                    <View style={styles.actionsRowRight}>
                       <Pressable
-                        style={styles.iconButtonSoft}
+                        style={styles.iconButton}
                         onPress={() => setSelectedSaving(item)}
                       >
                         <Ionicons
@@ -536,7 +466,7 @@ export default function SavingsScreen() {
                       </Pressable>
 
                       <Pressable
-                        style={styles.iconButtonSoft}
+                        style={styles.iconButton}
                         onPress={() => openEditForm(item)}
                       >
                         <Ionicons
@@ -547,7 +477,7 @@ export default function SavingsScreen() {
                       </Pressable>
 
                       <Pressable
-                        style={styles.iconButtonDanger}
+                        style={styles.deleteIconButton}
                         onPress={() => deleteSaving(item)}
                       >
                         <Ionicons
@@ -562,6 +492,21 @@ export default function SavingsScreen() {
               })
             )}
           </View>
+
+          <Pressable
+            style={[commonStyles.secondaryButton, styles.homeButton]}
+            onPress={() => router.push("/HomePurchase")}
+          >
+            <Ionicons
+              name="home-outline"
+              size={18}
+              color={colors.primaryDark}
+            />
+
+            <Text style={commonStyles.secondaryButtonText}>
+              Simulador de casa
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
 
@@ -571,128 +516,267 @@ export default function SavingsScreen() {
         animationType="fade"
         onRequestClose={closeForm}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalTitle}>
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCard}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>
                   {editingId ? "Editar ahorro" : "Nuevo ahorro"}
                 </Text>
-                <Text style={styles.modalSubtitle}>
-                  Completa los datos del objetivo
+
+                <Text style={commonStyles.modalSubtitle}>
+                  Si cancelas, no se guarda ningún cambio
                 </Text>
               </View>
 
-              <Pressable style={styles.closeButton} onPress={closeForm}>
+              <Pressable style={commonStyles.closeButton} onPress={closeForm}>
                 <Ionicons name="close" size={22} color={colors.primaryDark} />
               </Pressable>
             </View>
 
             <ScrollView
-              style={styles.modalScroll}
+              style={commonStyles.modalScroll}
               keyboardShouldPersistTaps="handled"
             >
-              <Input
+              <AppTextInput
                 label="Nombre del ahorro"
                 value={name}
                 onChange={setName}
                 keyboardType="default"
-                placeholder="Ej: Verano"
+                commonStyles={commonStyles}
               />
 
-              <Input
+              <AppTextInput
                 label="Objetivo (€)"
                 value={goal}
                 onChange={setGoal}
-                placeholder="Ej: 1500"
+                commonStyles={commonStyles}
               />
 
-              <Input
-                label="Fecha inicio"
-                value={startDate}
-                onChange={setStartDate}
-                keyboardType="default"
-                placeholder="YYYY-MM-DD"
-              />
+              <View style={styles.dateGrid}>
+                <View style={styles.dateColumn}>
+                  <AppTextInput
+                    label="Fecha inicio"
+                    value={startDate}
+                    onChange={setStartDate}
+                    keyboardType="default"
+                    commonStyles={commonStyles}
+                  />
+                </View>
 
-              <Input
-                label="Fecha fin"
-                value={endDate}
-                onChange={setEndDate}
-                keyboardType="default"
-                placeholder="YYYY-MM-DD"
-              />
+                <View style={styles.dateColumn}>
+                  <AppTextInput
+                    label="Fecha fin"
+                    value={endDate}
+                    onChange={setEndDate}
+                    keyboardType="default"
+                    commonStyles={commonStyles}
+                  />
+                </View>
+              </View>
 
-              <Input
+              <AppTextInput
                 label="Ahorro mensual (€)"
                 value={monthly}
                 onChange={setMonthly}
-                placeholder="Ej: 200"
+                commonStyles={commonStyles}
               />
 
-              <Input
-                label="Aportado (€)"
+              <AppTextInput
+                label="Aportado hasta ahora (€)"
                 value={contributed}
                 onChange={setContributed}
-                placeholder="Ej: 500"
+                commonStyles={commonStyles}
               />
 
-              <Input
-                label="Prestado"
-                value={borrowedValue}
-                onChange={setBorrowedValue}
+              <AppTextInput
+                label="Prestado / notas"
+                value={borrowed}
+                onChange={setBorrowed}
                 keyboardType="default"
-                placeholder="Opcional"
+                commonStyles={commonStyles}
               />
 
-              {(() => {
-                const result = calculateSaving(
-                  startDate,
-                  endDate,
-                  toNumber(monthly),
-                  toNumber(contributed),
-                  toNumber(goal),
-                );
+              <View style={styles.summaryBox}>
+                <Text style={styles.summaryTitle}>Resumen</Text>
 
-                return (
-                  <View style={styles.previewBox}>
-                    <ResultRow
-                      label="Objetivo"
-                      value={formatMoney(toNumber(goal))}
-                    />
-                    <ResultRow
-                      label="Ahorro actual"
-                      value={formatMoney(result.currentSaved)}
-                    />
-                    <ResultRow
-                      label="Pendiente"
-                      value={formatMoney(result.pending)}
-                    />
-                    <ResultRow
-                      label="Necesario mensual"
-                      value={formatMoney(result.neededMonthly)}
-                    />
-                    <ResultRow
-                      label="Estado"
-                      value={result.completed ? "Cumplido" : "En progreso"}
-                      strong
-                    />
-                  </View>
-                );
-              })()}
+                <ResultRow
+                  label="Objetivo"
+                  value={formatMoney(Number(goal) || 0)}
+                  styles={styles}
+                />
+
+                <ResultRow
+                  label="Ahorro actual"
+                  value={formatMoney(currentFormResult.currentSaved)}
+                  styles={styles}
+                />
+
+                <ResultRow
+                  label="Pendiente"
+                  value={formatMoney(currentFormResult.pending)}
+                  strong
+                  styles={styles}
+                />
+
+                <ResultRow
+                  label="Mensual necesario"
+                  value={formatMoney(currentFormResult.neededMonthly)}
+                  styles={styles}
+                />
+              </View>
             </ScrollView>
 
-            <View style={styles.modalActions}>
-              <Pressable style={styles.modalCancelButton} onPress={closeForm}>
-                <Text style={styles.modalCancelText}>Cancelar</Text>
+            <View style={commonStyles.modalActions}>
+              <Pressable
+                style={commonStyles.modalCancelButton}
+                onPress={closeForm}
+              >
+                <Text style={commonStyles.modalCancelText}>Cancelar</Text>
               </Pressable>
 
-              <Pressable style={styles.modalSaveButton} onPress={saveSaving}>
-                <Text style={styles.modalSaveText}>
-                  {editingId ? "Guardar cambios" : "Guardar ahorro"}
+              <Pressable
+                style={commonStyles.modalSaveButton}
+                onPress={saveSaving}
+              >
+                <Text style={commonStyles.modalSaveText}>
+                  {editingId ? "Guardar cambios" : "Guardar"}
                 </Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!selectedSaving}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedSaving(null)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>
+                  {selectedSaving?.name}
+                </Text>
+
+                <Text style={commonStyles.modalSubtitle}>
+                  Detalle del objetivo
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setSelectedSaving(null)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            {selectedSaving &&
+              (() => {
+                const result = calculateSaving(
+                  selectedSaving.start_date,
+                  selectedSaving.end_date,
+                  Number(selectedSaving.monthly_amount || 0),
+                  Number(selectedSaving.contributed || 0),
+                  Number(selectedSaving.goal || 0),
+                );
+
+                return (
+                  <View>
+                    <View style={styles.detailHero}>
+                      <Text style={styles.detailHeroLabel}>Ahorrado</Text>
+
+                      <Text
+                        style={styles.detailHeroAmount}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.65}
+                      >
+                        {formatCompactMoney(result.currentSaved)}
+                      </Text>
+
+                      <Text style={styles.detailHeroSubtitle}>
+                        {result.progress.toFixed(0)}% del objetivo
+                      </Text>
+                    </View>
+
+                    <ResultRow
+                      label="Objetivo"
+                      value={formatMoney(Number(selectedSaving.goal || 0))}
+                      styles={styles}
+                    />
+
+                    <ResultRow
+                      label="Pendiente"
+                      value={formatMoney(result.pending)}
+                      strong
+                      styles={styles}
+                    />
+
+                    <ResultRow
+                      label="Ahorro mensual"
+                      value={formatMoney(
+                        Number(selectedSaving.monthly_amount || 0),
+                      )}
+                      styles={styles}
+                    />
+
+                    <ResultRow
+                      label="Mensual necesario"
+                      value={formatMoney(result.neededMonthly)}
+                      styles={styles}
+                    />
+
+                    <ResultRow
+                      label="Meses restantes"
+                      value={String(result.remainingMonths)}
+                      styles={styles}
+                    />
+
+                    <ResultRow
+                      label="Estado"
+                      value={result.completed ? "Cumplido" : "En progreso"}
+                      styles={styles}
+                    />
+
+                    <View style={commonStyles.modalActions}>
+                      <Pressable
+                        style={commonStyles.secondaryButton}
+                        onPress={() => openEditForm(selectedSaving)}
+                      >
+                        <Ionicons
+                          name="create-outline"
+                          size={18}
+                          color={colors.primaryDark}
+                        />
+
+                        <Text style={commonStyles.secondaryButtonText}>
+                          Editar
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={commonStyles.dangerButton}
+                        onPress={() => deleteSaving(selectedSaving)}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={18}
+                          color="#B91C1C"
+                        />
+
+                        <Text style={commonStyles.dangerButtonText}>
+                          Eliminar
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })()}
           </View>
         </View>
       </Modal>
@@ -700,543 +784,347 @@ export default function SavingsScreen() {
   );
 }
 
-function KpiCard({ label, value }: { label: string; value: string }) {
+function InfoPill({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.kpiCard}>
-      <Text style={styles.kpiLabel}>{label}</Text>
+    <View style={infoPillStyles.pill}>
+      <Text style={infoPillStyles.pillLabel}>{label}</Text>
 
-      <Text
-        style={styles.kpiValue}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.6}
-      >
+      <Text style={infoPillStyles.pillValue} numberOfLines={1}>
         {value}
       </Text>
     </View>
   );
 }
 
-function ResultRow({
-  label,
-  value,
-  strong,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <View style={styles.resultRow}>
-      <Text style={styles.resultLabel}>{label}</Text>
-      <Text
-        style={[styles.resultValue, strong && styles.resultValueStrong]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.75}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function Input({
-  label,
-  value,
-  onChange,
-  placeholder,
-  keyboardType = "numeric",
-}: {
-  label: string;
-  value: string;
-  onChange: (text: string) => void;
-  placeholder?: string;
-  keyboardType?: "numeric" | "default";
-}) {
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={styles.inputLabel}>{label}</Text>
-
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChange}
-        placeholder={placeholder}
-        keyboardType={keyboardType}
-        placeholderTextColor={colors.mutedText}
-      />
-    </View>
-  );
-}
-
-const isWeb = Platform.OS === "web";
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-
-  container: {
+const infoPillStyles = StyleSheet.create({
+  pill: {
     flexGrow: 1,
-    padding: isWeb ? 28 : 14,
-    paddingBottom: 36,
-    alignItems: "center",
-  },
-
-  content: {
-    width: "100%",
-    maxWidth: 940,
-  },
-
-  settingsButton: {
-    position: "absolute",
-    top: 24,
-    right: 24,
-    width: isWeb ? 42 : 38,
-    height: isWeb ? 42 : 38,
-    borderRadius: 999,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-    zIndex: 20,
-  },
-
-  settingsButtonText: {
-    fontSize: isWeb ? 22 : 20,
-    lineHeight: 24,
-    color: colors.text,
-    fontWeight: "900",
-  },
-
-  heroCard: {
-    backgroundColor: colors.primaryDark,
-    borderRadius: 20,
-    padding: isWeb ? 22 : 18,
-    marginBottom: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 14,
-  },
-
-  heroTextBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  heroLabel: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.white,
-    opacity: 0.85,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
-
-  heroAmount: {
-    fontSize: isWeb ? 34 : 29,
-    color: colors.white,
-    fontWeight: "900",
-  },
-
-  heroSubtitle: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.white,
-    opacity: 0.9,
-    marginTop: 4,
-  },
-
-  heroIconBox: {
-    width: isWeb ? 56 : 48,
-    height: isWeb ? 56 : 48,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  kpiGrid: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 14,
-  },
-
-  kpiCard: {
-    flex: 1,
-    minWidth: 0,
+    minWidth: 90,
     backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: isWeb ? 15 : 12,
-  },
-
-  kpiLabel: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
-
-  kpiValue: {
-    fontSize: isWeb ? 19 : 16,
-    color: colors.text,
-    fontWeight: "900",
-  },
-
-  actionsCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 10,
-    marginBottom: 14,
-    flexDirection: isWeb ? "row" : "column",
-    gap: 8,
-  },
-
-  primaryButton: {
-    flex: 1,
-    backgroundColor: colors.primaryDark,
     borderRadius: 12,
-    padding: isWeb ? 12 : 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-
-  primaryButtonText: {
-    color: colors.white,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  secondaryButton: {
-    flex: 1,
-    backgroundColor: colors.primarySoft,
-    borderRadius: 12,
-    padding: isWeb ? 12 : 10,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-
-  secondaryButtonText: {
-    color: colors.primaryDark,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  detailCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: isWeb ? 16 : 13,
-    marginBottom: 14,
-  },
-
-  detailHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-    gap: 10,
-  },
-
-  detailTitle: {
-    fontSize: isWeb ? 18 : 15,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  detailSubtitle: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    marginTop: 3,
-  },
-
-  resultBox: {
+    paddingVertical: 8,
+    paddingHorizontal: 9,
     borderWidth: 1,
     borderColor: colors.borderSoft,
-    borderRadius: 14,
-    overflow: "hidden",
   },
 
-  sectionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: isWeb ? 16 : 13,
-    marginBottom: 14,
-  },
-
-  sectionHeader: {
-    marginBottom: 12,
-  },
-
-  sectionTitle: {
-    fontSize: isWeb ? 18 : 16,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  sectionSubtitle: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    marginTop: 3,
-  },
-
-  emptyBox: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 28,
-    gap: 6,
-  },
-
-  emptyTitle: {
-    fontSize: isWeb ? 15 : 13,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  emptyText: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    textAlign: "center",
-  },
-
-  savingRow: {
-    backgroundColor: "#F8FCFD",
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    borderRadius: 14,
-    padding: isWeb ? 12 : 10,
-    marginBottom: 10,
-  },
-
-  savingMain: {
-    marginBottom: 10,
-  },
-
-  savingTopLine: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 10,
-    alignItems: "center",
-  },
-
-  savingName: {
-    flex: 1,
-    fontSize: isWeb ? 15 : 13,
-    fontWeight: "800",
-    color: colors.text,
-  },
-
-  savingAmount: {
-    maxWidth: "45%",
-    fontSize: isWeb ? 15 : 13,
-    fontWeight: "900",
-    color: colors.primaryDark,
-    textAlign: "right",
-  },
-
-  savingMeta: {
-    fontSize: isWeb ? 12 : 10,
-    color: colors.mutedText,
-    marginTop: 4,
-    marginBottom: 8,
-  },
-
-  progressTrack: {
-    height: 8,
-    backgroundColor: colors.primarySoft,
-    borderRadius: 999,
-    overflow: "hidden",
-  },
-
-  progressFill: {
-    height: "100%",
-    backgroundColor: colors.primaryDark,
-    borderRadius: 999,
-  },
-
-  rowActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 6,
-  },
-
-  iconButtonSoft: {
-    width: isWeb ? 34 : 30,
-    height: isWeb ? 34 : 30,
-    borderRadius: 10,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  iconButtonDanger: {
-    width: isWeb ? 34 : 30,
-    height: isWeb ? 34 : 30,
-    borderRadius: 10,
-    backgroundColor: "#FEF2F2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  resultRow: {
-    paddingVertical: isWeb ? 11 : 9,
-    paddingHorizontal: isWeb ? 12 : 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSoft,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  resultLabel: {
-    flex: 1,
-    fontSize: isWeb ? 13 : 11,
+  pillLabel: {
+    fontSize: 9,
     color: colors.mutedText,
     fontWeight: "800",
+    marginBottom: 2,
   },
 
-  resultValue: {
-    flexShrink: 1,
-    fontSize: isWeb ? 13 : 11,
+  pillValue: {
+    fontSize: 11,
     color: colors.text,
-    fontWeight: "800",
-    textAlign: "right",
-  },
-
-  resultValueStrong: {
-    fontWeight: "900",
-    color: colors.primaryDark,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 18,
-  },
-
-  modalCard: {
-    width: "100%",
-    maxWidth: 520,
-    maxHeight: "88%",
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: isWeb ? 20 : 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 14,
-  },
-
-  modalTitle: {
-    fontSize: isWeb ? 20 : 17,
-    fontWeight: "900",
-    color: colors.text,
-  },
-
-  modalSubtitle: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    marginTop: 3,
-  },
-
-  closeButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  modalScroll: {
-    maxHeight: isWeb ? 430 : 390,
-  },
-
-  inputGroup: {
-    marginBottom: 11,
-  },
-
-  inputLabel: {
-    fontSize: isWeb ? 13 : 11,
-    color: colors.mutedText,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
-
-  input: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 11,
-    paddingVertical: isWeb ? 11 : 9,
-    paddingHorizontal: 11,
-    fontSize: isWeb ? 14 : 12,
-    color: colors.text,
-  },
-
-  previewBox: {
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-    borderRadius: 14,
-    overflow: "hidden",
-    marginTop: 4,
-  },
-
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 14,
-  },
-
-  modalCancelButton: {
-    flex: 1,
-    backgroundColor: colors.primarySoft,
-    padding: isWeb ? 12 : 10,
-    borderRadius: 11,
-    alignItems: "center",
-  },
-
-  modalCancelText: {
-    color: colors.primaryDark,
-    fontSize: isWeb ? 13 : 11,
-    fontWeight: "900",
-  },
-
-  modalSaveButton: {
-    flex: 1,
-    backgroundColor: colors.primaryDark,
-    padding: isWeb ? 12 : 10,
-    borderRadius: 11,
-    alignItems: "center",
-  },
-
-  modalSaveText: {
-    color: colors.white,
-    fontSize: isWeb ? 13 : 11,
     fontWeight: "900",
   },
 });
+
+const createStyles = (isDesktop: boolean) =>
+  StyleSheet.create({
+    heroCard: {
+      backgroundColor: colors.primaryDark,
+      borderRadius: isDesktop ? 20 : 18,
+      padding: isDesktop ? 22 : 16,
+      marginBottom: isDesktop ? 14 : 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 14,
+      minHeight: isDesktop ? 132 : 112,
+    },
+
+    heroTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    heroLabel: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
+
+    heroAmount: {
+      fontSize: isDesktop ? 34 : 28,
+      color: colors.white,
+      fontWeight: "900",
+    },
+
+    heroSubtitle: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "600",
+      marginTop: 4,
+    },
+
+    heroIcon: {
+      width: isDesktop ? 58 : 48,
+      height: isDesktop ? 58 : 48,
+      borderRadius: 999,
+      backgroundColor: "rgba(255,255,255,0.16)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    kpiGrid: {
+      flexDirection: "row",
+      gap: isDesktop ? 10 : 6,
+      marginBottom: isDesktop ? 14 : 12,
+    },
+
+    kpiCard: {
+      flex: 1,
+      minWidth: 0,
+      backgroundColor: colors.surface,
+      borderRadius: isDesktop ? 16 : 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: isDesktop ? 15 : 9,
+      paddingHorizontal: isDesktop ? 15 : 8,
+    },
+
+    kpiLabel: {
+      fontSize: isDesktop ? 12 : 9,
+      color: colors.mutedText,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
+
+    kpiValue: {
+      fontSize: isDesktop ? 19 : 14,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    cardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      marginBottom: 14,
+    },
+
+    cardHeaderText: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    addButton: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      backgroundColor: colors.primaryDark,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    emptyBox: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: isDesktop ? 30 : 22,
+      paddingHorizontal: 14,
+      backgroundColor: colors.background,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+    },
+
+    emptyTitle: {
+      fontSize: isDesktop ? 16 : 14,
+      color: colors.text,
+      fontWeight: "900",
+      marginTop: 10,
+      marginBottom: 4,
+      textAlign: "center",
+    },
+
+    emptyText: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      textAlign: "center",
+      fontWeight: "600",
+    },
+
+    savingRow: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      borderRadius: 16,
+      padding: isDesktop ? 14 : 12,
+      marginBottom: 10,
+    },
+
+    savingTopRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 12,
+      marginBottom: 10,
+    },
+
+    savingTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    savingName: {
+      fontSize: isDesktop ? 15 : 13,
+      fontWeight: "900",
+      color: colors.text,
+      marginBottom: 2,
+    },
+
+    savingStatus: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "700",
+    },
+
+    savingAmount: {
+      maxWidth: isDesktop ? 180 : 120,
+      fontSize: isDesktop ? 18 : 15,
+      fontWeight: "900",
+      color: colors.primaryDark,
+      textAlign: "right",
+    },
+
+    progressTrack: {
+      height: 8,
+      backgroundColor: colors.borderSoft,
+      borderRadius: 999,
+      overflow: "hidden",
+      marginBottom: 10,
+    },
+
+    progressFill: {
+      height: "100%",
+      backgroundColor: colors.primaryDark,
+      borderRadius: 999,
+    },
+
+    infoLine: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 10,
+    },
+
+    actionsRowRight: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      gap: 8,
+    },
+
+    iconButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    deleteIconButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: "#FEF2F2",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    homeButton: {
+      marginBottom: 14,
+    },
+
+    dateGrid: {
+      flexDirection: isDesktop ? "row" : "column",
+      gap: isDesktop ? 12 : 0,
+    },
+
+    dateColumn: {
+      flex: 1,
+    },
+
+    summaryBox: {
+      backgroundColor: colors.background,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      padding: isDesktop ? 14 : 12,
+      marginTop: 6,
+    },
+
+    summaryTitle: {
+      fontSize: isDesktop ? 15 : 13,
+      color: colors.text,
+      fontWeight: "900",
+      marginBottom: 8,
+    },
+
+    resultRow: {
+      paddingVertical: isDesktop ? 10 : 8,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSoft,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+
+    resultLabel: {
+      flex: 1,
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.mutedText,
+      fontWeight: "800",
+    },
+
+    resultValue: {
+      flexShrink: 1,
+      maxWidth: "55%",
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.text,
+      fontWeight: "800",
+      textAlign: "right",
+    },
+
+    resultValueStrong: {
+      fontSize: isDesktop ? 14 : 12,
+      fontWeight: "900",
+      color: colors.primaryDark,
+    },
+
+    detailHero: {
+      backgroundColor: colors.primaryDark,
+      borderRadius: 16,
+      padding: isDesktop ? 18 : 14,
+      marginBottom: 14,
+    },
+
+    detailHeroLabel: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "800",
+      marginBottom: 4,
+    },
+
+    detailHeroAmount: {
+      fontSize: isDesktop ? 28 : 24,
+      color: colors.white,
+      fontWeight: "900",
+    },
+
+    detailHeroSubtitle: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.white,
+      opacity: 0.85,
+      fontWeight: "700",
+      marginTop: 4,
+    },
+  });
