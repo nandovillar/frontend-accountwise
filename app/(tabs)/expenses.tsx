@@ -1793,7 +1793,7 @@ const createStyles = (isDesktop: boolean) =>
       borderRadius: 8,
       paddingVertical: 5,
       paddingHorizontal: 8,
-      fontSize: isDesktop ? 15 : 13,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 15 : 13,
       fontWeight: "800",
       color: colors.text,
       backgroundColor: colors.white,
@@ -1842,7 +1842,7 @@ const createStyles = (isDesktop: boolean) =>
       borderRadius: 10,
       padding: isDesktop ? 11 : 9,
       marginBottom: 8,
-      fontSize: isDesktop ? 14 : 12,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 14 : 12,
       color: colors.text,
     },
 
@@ -1854,12 +1854,12 @@ const createStyles = (isDesktop: boolean) =>
       padding: isDesktop ? 7 : 5,
       textAlign: "center",
       backgroundColor: colors.white,
-      fontSize: isDesktop ? 13 : 11,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 11,
       color: colors.text,
     },
 
     inputLabel: {
-      fontSize: isDesktop ? 13 : 11,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 11,
       fontWeight: "800",
       color: colors.mutedText,
       marginBottom: 5,

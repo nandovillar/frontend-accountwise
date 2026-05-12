@@ -62,6 +62,7 @@ export default function ResetPasswordScreen() {
           padding: 10,
           borderRadius: 8,
           marginBottom: 20,
+          fontSize: 16,
         }}
       />
 

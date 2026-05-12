@@ -1,4 +1,4 @@
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { colors } from "./colors";
 import { spacing } from "./spacing";
 import { createTypography } from "./typography";
@@ -159,7 +159,7 @@ export const createCommonStyles = (isDesktop: boolean) => {
       borderRadius: 11,
       paddingVertical: isDesktop ? 11 : 9,
       paddingHorizontal: spacing.md,
-      fontSize: isDesktop ? 14 : 12,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 14 : 12,
       color: colors.text,
     },
 

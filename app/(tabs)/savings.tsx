@@ -789,7 +789,12 @@ function InfoPill({ label, value }: { label: string; value: string }) {
     <View style={infoPillStyles.pill}>
       <Text style={infoPillStyles.pillLabel}>{label}</Text>
 
-      <Text style={infoPillStyles.pillValue} numberOfLines={1}>
+      <Text
+        style={infoPillStyles.pillValue}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.65}
+      >
         {value}
       </Text>
     </View>
@@ -798,12 +803,12 @@ function InfoPill({ label, value }: { label: string; value: string }) {
 
 const infoPillStyles = StyleSheet.create({
   pill: {
-    flexGrow: 1,
-    minWidth: 90,
+    flex: 1,
+    minWidth: 0,
     backgroundColor: colors.surface,
     borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 9,
+    paddingVertical: 7,
+    paddingHorizontal: 7,
     borderWidth: 1,
     borderColor: colors.borderSoft,
   },
@@ -816,7 +821,8 @@ const infoPillStyles = StyleSheet.create({
   },
 
   pillValue: {
-    fontSize: 11,
+    width: "100%",
+    fontSize: 10,
     color: colors.text,
     fontWeight: "900",
   },
@@ -1010,8 +1016,7 @@ const createStyles = (isDesktop: boolean) =>
 
     infoLine: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
+      gap: isDesktop ? 8 : 5,
       marginBottom: 10,
     },
 
