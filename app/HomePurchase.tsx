@@ -86,13 +86,11 @@ export default function HomePurchaseScreen() {
   const [selectedSimulationId, setSelectedSimulationId] = useState<
     string | null
   >(null);
-
   const [originalSnapshot, setOriginalSnapshot] = useState<FormSnapshot | null>(
     null,
   );
 
   const [name, setName] = useState(defaultSimulation.name);
-
   const [propertyPrice, setPropertyPrice] = useState(
     String(defaultSimulation.property_price),
   );
@@ -108,14 +106,12 @@ export default function HomePurchaseScreen() {
   const [notaryPercent, setNotaryPercent] = useState(
     String(defaultSimulation.notary_percent),
   );
-
   const [downPayment, setDownPayment] = useState(
     String(defaultSimulation.down_payment),
   );
   const [pendingNotary, setPendingNotary] = useState(
     String(defaultSimulation.pending_notary),
   );
-
   const [years, setYears] = useState(String(defaultSimulation.years));
   const [tin, setTin] = useState(String(defaultSimulation.tin));
   const [bonus, setBonus] = useState(String(defaultSimulation.bonus));
@@ -160,6 +156,10 @@ export default function HomePurchaseScreen() {
     })} €`;
   };
 
+  const formatKpiMoney = (value: number) => {
+    return `${Math.round(value).toLocaleString("es-ES")} €`;
+  };
+
   const getCurrentUser = async () => {
     const {
       data: { session },
@@ -168,67 +168,61 @@ export default function HomePurchaseScreen() {
     return session?.user ?? null;
   };
 
-  const buildDefaultSnapshot = (): FormSnapshot => {
-    return {
-      selectedSimulationId: null,
-      name: defaultSimulation.name,
-      propertyPrice: String(defaultSimulation.property_price),
-      agencyPercent: String(defaultSimulation.agency_percent),
-      taxPercent: String(defaultSimulation.tax_percent),
-      financialFee: String(defaultSimulation.financial_fee),
-      notaryPercent: String(defaultSimulation.notary_percent),
-      downPayment: String(defaultSimulation.down_payment),
-      pendingNotary: String(defaultSimulation.pending_notary),
-      years: String(defaultSimulation.years),
-      tin: String(defaultSimulation.tin),
-      bonus: String(defaultSimulation.bonus),
-      salaryBonus: String(defaultSimulation.salary_bonus),
-      lifeInsurance: String(defaultSimulation.life_insurance),
-      homeInsurance: String(defaultSimulation.home_insurance),
-    };
-  };
+  const buildDefaultSnapshot = (): FormSnapshot => ({
+    selectedSimulationId: null,
+    name: defaultSimulation.name,
+    propertyPrice: String(defaultSimulation.property_price),
+    agencyPercent: String(defaultSimulation.agency_percent),
+    taxPercent: String(defaultSimulation.tax_percent),
+    financialFee: String(defaultSimulation.financial_fee),
+    notaryPercent: String(defaultSimulation.notary_percent),
+    downPayment: String(defaultSimulation.down_payment),
+    pendingNotary: String(defaultSimulation.pending_notary),
+    years: String(defaultSimulation.years),
+    tin: String(defaultSimulation.tin),
+    bonus: String(defaultSimulation.bonus),
+    salaryBonus: String(defaultSimulation.salary_bonus),
+    lifeInsurance: String(defaultSimulation.life_insurance),
+    homeInsurance: String(defaultSimulation.home_insurance),
+  });
 
   const buildSnapshotFromSimulation = (
     simulation: Simulation,
-  ): FormSnapshot => {
-    return {
-      selectedSimulationId: simulation.id,
-      name: simulation.name || "Simulación guardada",
-      propertyPrice: String(simulation.property_price ?? 300000),
-      agencyPercent: String(simulation.agency_percent ?? 3),
-      taxPercent: String(simulation.tax_percent ?? 6),
-      financialFee: String(simulation.financial_fee ?? 5000),
-      notaryPercent: String(simulation.notary_percent ?? 1),
-      downPayment: String(simulation.down_payment ?? 90000),
-      pendingNotary: String(simulation.pending_notary ?? 500),
-      years: String(simulation.years ?? 30),
-      tin: String(simulation.tin ?? 3.4),
-      bonus: String(simulation.bonus ?? 0.85),
-      salaryBonus: String(simulation.salary_bonus ?? 0),
-      lifeInsurance: String(simulation.life_insurance ?? 0),
-      homeInsurance: String(simulation.home_insurance ?? 0),
-    };
-  };
+  ): FormSnapshot => ({
+    selectedSimulationId: simulation.id,
+    name: simulation.name || "Simulación guardada",
+    propertyPrice: String(simulation.property_price ?? 300000),
+    agencyPercent: String(simulation.agency_percent ?? 3),
+    taxPercent: String(simulation.tax_percent ?? 6),
+    financialFee: String(simulation.financial_fee ?? 5000),
+    notaryPercent: String(simulation.notary_percent ?? 1),
+    downPayment: String(simulation.down_payment ?? 90000),
+    pendingNotary: String(simulation.pending_notary ?? 500),
+    years: String(simulation.years ?? 30),
+    tin: String(simulation.tin ?? 3.4),
+    bonus: String(simulation.bonus ?? 0.85),
+    salaryBonus: String(simulation.salary_bonus ?? 0),
+    lifeInsurance: String(simulation.life_insurance ?? 0),
+    homeInsurance: String(simulation.home_insurance ?? 0),
+  });
 
-  const buildCurrentSnapshot = (): FormSnapshot => {
-    return {
-      selectedSimulationId,
-      name,
-      propertyPrice,
-      agencyPercent,
-      taxPercent,
-      financialFee,
-      notaryPercent,
-      downPayment,
-      pendingNotary,
-      years,
-      tin,
-      bonus,
-      salaryBonus,
-      lifeInsurance,
-      homeInsurance,
-    };
-  };
+  const buildCurrentSnapshot = (): FormSnapshot => ({
+    selectedSimulationId,
+    name,
+    propertyPrice,
+    agencyPercent,
+    taxPercent,
+    financialFee,
+    notaryPercent,
+    downPayment,
+    pendingNotary,
+    years,
+    tin,
+    bonus,
+    salaryBonus,
+    lifeInsurance,
+    homeInsurance,
+  });
 
   const applySnapshot = (snapshot: FormSnapshot) => {
     setSelectedSimulationId(snapshot.selectedSimulationId);
@@ -253,17 +247,14 @@ export default function HomePurchaseScreen() {
   const tax = (price * toNumber(taxPercent)) / 100;
   const notary = (price * toNumber(notaryPercent)) / 100;
   const financial = toNumber(financialFee);
-
   const totalProperty = price + agency + tax + financial + notary;
 
   const down = toNumber(downPayment);
   const mortgage = Math.max(0, totalProperty - down);
-
   const coveredPercent = totalProperty > 0 ? (down / totalProperty) * 100 : 0;
   const remainingPercent = Math.max(0, 100 - coveredPercent);
 
   const totalMonths = toNumber(years) * 12;
-
   const bonusTotal =
     toNumber(bonus) +
     toNumber(salaryBonus) +
@@ -284,16 +275,8 @@ export default function HomePurchaseScreen() {
   const totalBankCost = monthlyPayment * totalMonths;
   const totalInterest = Math.max(0, totalBankCost - mortgage);
 
-  const loadSimulationIntoForm = (simulation: Simulation) => {
-    const snapshot = buildSnapshotFromSimulation(simulation);
-
-    applySnapshot(snapshot);
-    setOriginalSnapshot(snapshot);
-  };
-
   const cleanToExample = () => {
     const snapshot = buildDefaultSnapshot();
-
     applySnapshot(snapshot);
     setOriginalSnapshot(snapshot);
   };
@@ -302,9 +285,14 @@ export default function HomePurchaseScreen() {
     router.push("/savings");
   };
 
+  const loadSimulationIntoForm = (simulation: Simulation) => {
+    const snapshot = buildSnapshotFromSimulation(simulation);
+    applySnapshot(snapshot);
+    setOriginalSnapshot(snapshot);
+  };
+
   const loadSimulations = async () => {
     const user = await getCurrentUser();
-
     if (!user) return;
 
     const { data, error } = await supabase
@@ -321,36 +309,30 @@ export default function HomePurchaseScreen() {
     setSimulations(data || []);
 
     if (!originalSnapshot) {
-      const snapshot = buildDefaultSnapshot();
-      setOriginalSnapshot(snapshot);
+      setOriginalSnapshot(buildDefaultSnapshot());
     }
   };
 
   const getPayload = async (simulationName: string) => {
     const user = await getCurrentUser();
-
     if (!user) return null;
 
     return {
       user_id: user.id,
       name: simulationName.trim() || "Simulación sin nombre",
-
       property_price: toNumber(propertyPrice),
       agency_percent: toNumber(agencyPercent),
       tax_percent: toNumber(taxPercent),
       financial_fee: toNumber(financialFee),
       notary_percent: toNumber(notaryPercent),
-
       down_payment: toNumber(downPayment),
       pending_notary: toNumber(pendingNotary),
-
       years: toNumber(years),
       tin: toNumber(tin),
       bonus: toNumber(bonus),
       salary_bonus: toNumber(salaryBonus),
       life_insurance: toNumber(lifeInsurance),
       home_insurance: toNumber(homeInsurance),
-
       updated_at: new Date().toISOString(),
     };
   };
@@ -363,7 +345,6 @@ export default function HomePurchaseScreen() {
     }
 
     const payload = await getPayload(name);
-
     if (!payload) return;
 
     const { error } = await supabase
@@ -377,9 +358,7 @@ export default function HomePurchaseScreen() {
       return;
     }
 
-    const updatedSnapshot = buildCurrentSnapshot();
-    setOriginalSnapshot(updatedSnapshot);
-
+    setOriginalSnapshot(buildCurrentSnapshot());
     await loadSimulations();
     Alert.alert("Guardado", "Cambios guardados correctamente.");
   };
@@ -396,7 +375,6 @@ export default function HomePurchaseScreen() {
     }
 
     const payload = await getPayload(finalName);
-
     if (!payload) return;
 
     const { data, error } = await supabase
@@ -412,14 +390,12 @@ export default function HomePurchaseScreen() {
 
     if (data) {
       const snapshot = buildSnapshotFromSimulation(data);
-
       applySnapshot(snapshot);
       setOriginalSnapshot(snapshot);
     }
 
     setSaveNameModalVisible(false);
     setNewSimulationName("");
-
     await loadSimulations();
     Alert.alert("Guardado", "Simulación guardada correctamente.");
   };
@@ -428,7 +404,6 @@ export default function HomePurchaseScreen() {
     if (!selectedSimulationId) return;
 
     const user = await getCurrentUser();
-
     if (!user) return;
 
     const executeDelete = async () => {
@@ -461,18 +436,14 @@ export default function HomePurchaseScreen() {
 
   const openEdit = (mode: EditMode) => {
     setEditMode(mode);
-
     setDraftName(name);
-
     setDraftPropertyPrice(propertyPrice);
     setDraftAgencyPercent(agencyPercent);
     setDraftTaxPercent(taxPercent);
     setDraftFinancialFee(financialFee);
     setDraftNotaryPercent(notaryPercent);
-
     setDraftDownPayment(downPayment);
     setDraftPendingNotary(pendingNotary);
-
     setDraftYears(years);
     setDraftTin(tin);
     setDraftBonus(bonus);
@@ -606,17 +577,17 @@ export default function HomePurchaseScreen() {
           <View style={styles.kpiGrid}>
             <KpiCard
               label="Entrada"
-              value={formatMoney(down)}
+              value={formatKpiMoney(down)}
               styles={styles}
             />
             <KpiCard
               label="Hipoteca"
-              value={formatMoney(mortgage)}
+              value={formatKpiMoney(mortgage)}
               styles={styles}
             />
             <KpiCard
               label="Cuota"
-              value={formatMoney(monthlyPayment)}
+              value={formatKpiMoney(monthlyPayment)}
               styles={styles}
             />
           </View>
@@ -904,28 +875,24 @@ export default function HomePurchaseScreen() {
                     onChange={setDraftPropertyPrice}
                     styles={styles}
                   />
-
                   <Input
                     label="Agencia (%)"
                     value={draftAgencyPercent}
                     onChange={setDraftAgencyPercent}
                     styles={styles}
                   />
-
                   <Input
                     label="ITP / IVA (%)"
                     value={draftTaxPercent}
                     onChange={setDraftTaxPercent}
                     styles={styles}
                   />
-
                   <Input
                     label="Comisión financiera (€)"
                     value={draftFinancialFee}
                     onChange={setDraftFinancialFee}
                     styles={styles}
                   />
-
                   <Input
                     label="Notaría + Registro (%)"
                     value={draftNotaryPercent}
@@ -943,7 +910,6 @@ export default function HomePurchaseScreen() {
                     onChange={setDraftDownPayment}
                     styles={styles}
                   />
-
                   <Input
                     label="Notaría pendiente (€)"
                     value={draftPendingNotary}
@@ -961,35 +927,30 @@ export default function HomePurchaseScreen() {
                     onChange={setDraftYears}
                     styles={styles}
                   />
-
                   <Input
                     label="TIN (%)"
                     value={draftTin}
                     onChange={setDraftTin}
                     styles={styles}
                   />
-
                   <Input
                     label="Bonificación base (%)"
                     value={draftBonus}
                     onChange={setDraftBonus}
                     styles={styles}
                   />
-
                   <Input
                     label="Bonificación nómina (%)"
                     value={draftSalaryBonus}
                     onChange={setDraftSalaryBonus}
                     styles={styles}
                   />
-
                   <Input
                     label="Seguro vida (%)"
                     value={draftLifeInsurance}
                     onChange={setDraftLifeInsurance}
                     styles={styles}
                   />
-
                   <Input
                     label="Seguro hogar (%)"
                     value={draftHomeInsurance}
@@ -1111,7 +1072,7 @@ function KpiCard({
         style={styles.kpiValue}
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.5}
+        minimumFontScale={0.6}
       >
         {value}
       </Text>
@@ -1143,6 +1104,7 @@ function SectionHeader({
           <Text style={styles.sectionTitle} numberOfLines={1}>
             {title}
           </Text>
+
           <Text style={styles.sectionSubtitle} numberOfLines={1}>
             {subtitle}
           </Text>
@@ -1358,7 +1320,7 @@ const createStyles = (isDesktop: boolean) =>
 
     kpiGrid: {
       flexDirection: "row",
-      gap: isDesktop ? 10 : 8,
+      gap: isDesktop ? 10 : 6,
       marginBottom: isDesktop ? 14 : 12,
     },
 
@@ -1366,22 +1328,22 @@ const createStyles = (isDesktop: boolean) =>
       flex: 1,
       minWidth: 0,
       backgroundColor: colors.surface,
-      borderRadius: isDesktop ? 16 : 14,
+      borderRadius: isDesktop ? 16 : 12,
       borderWidth: 1,
       borderColor: colors.border,
-      paddingVertical: isDesktop ? 15 : 12,
-      paddingHorizontal: isDesktop ? 15 : 10,
+      paddingVertical: isDesktop ? 15 : 9,
+      paddingHorizontal: isDesktop ? 15 : 8,
     },
 
     kpiLabel: {
-      fontSize: isDesktop ? 12 : 10,
+      fontSize: isDesktop ? 12 : 9,
       color: colors.mutedText,
       fontWeight: "800",
-      marginBottom: 5,
+      marginBottom: 4,
     },
 
     kpiValue: {
-      fontSize: isDesktop ? 19 : 18,
+      fontSize: isDesktop ? 19 : 14,
       color: colors.text,
       fontWeight: "900",
     },
