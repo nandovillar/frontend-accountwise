@@ -159,6 +159,7 @@ export default function TabTwoScreen() {
   const [spaceIncomeDate, setSpaceIncomeDate] = useState(getTodayDate());
   const [spaceIncomeNote, setSpaceIncomeNote] = useState("");
   const [spaceIncomeTotal, setSpaceIncomeTotal] = useState(0);
+  const [spaceIncomeModalVisible, setSpaceIncomeModalVisible] = useState(false);
 
   const sortCategories = (items: string[]) => {
     const normalized = items.map(normalizeCategory);
@@ -738,6 +739,7 @@ export default function TabTwoScreen() {
     setSpaceIncomeAmount("");
     setSpaceIncomeDate(getTodayDate());
     setSpaceIncomeNote("");
+    setSpaceIncomeModalVisible(false);
     await loadIncome();
   };
 
@@ -1484,44 +1486,19 @@ export default function TabTwoScreen() {
           </View>
 
           {activeSpaceId && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTextBlock}>
-                  <Text style={styles.sectionTitle}>
-                    Ingresar dinero al espacio
-                  </Text>
-                  <Text style={styles.sectionSubtitle}>
-                    Registra una aportacion desde tu cuenta personal
-                  </Text>
-                </View>
-              </View>
-
-              <TextInput
-                style={styles.input}
-                placeholder="Importe"
-                value={spaceIncomeAmount}
-                keyboardType="numeric"
-                onChangeText={setSpaceIncomeAmount}
+            <Pressable
+              style={[styles.primaryButton, styles.incomeButton]}
+              onPress={() => setSpaceIncomeModalVisible(true)}
+            >
+              <Ionicons
+                name="add-circle-outline"
+                size={18}
+                color={colors.white}
               />
-              <TextInput
-                style={styles.input}
-                placeholder="Fecha YYYY-MM-DD"
-                value={spaceIncomeDate}
-                onChangeText={setSpaceIncomeDate}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Nota"
-                value={spaceIncomeNote}
-                onChangeText={setSpaceIncomeNote}
-              />
-              <Pressable
-                style={styles.primaryButton}
-                onPress={handleAddSpaceIncome}
-              >
-                <Text style={styles.primaryButtonText}>Guardar ingreso</Text>
-              </Pressable>
-            </View>
+              <Text style={styles.primaryButtonText}>
+                Aportar dinero al espacio
+              </Text>
+            </Pressable>
           )}
 
           <ExpenseSection
@@ -1771,6 +1748,71 @@ export default function TabTwoScreen() {
           </ExpenseSection>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={spaceIncomeModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSpaceIncomeModalVisible(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>
+                  Aportar dinero al espacio
+                </Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  Se suma aqui y se descuenta de tu personal
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setSpaceIncomeModalVisible(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Importe"
+              value={spaceIncomeAmount}
+              keyboardType="numeric"
+              onChangeText={setSpaceIncomeAmount}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Fecha YYYY-MM-DD"
+              value={spaceIncomeDate}
+              onChangeText={setSpaceIncomeDate}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Nota"
+              value={spaceIncomeNote}
+              onChangeText={setSpaceIncomeNote}
+            />
+
+            <View style={commonStyles.modalActions}>
+              <Pressable
+                style={commonStyles.modalCancelButton}
+                onPress={() => setSpaceIncomeModalVisible(false)}
+              >
+                <Text style={commonStyles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+
+              <Pressable
+                style={commonStyles.modalSaveButton}
+                onPress={handleAddSpaceIncome}
+              >
+                <Text style={commonStyles.modalSaveText}>Guardar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={!!editingItem}
@@ -2522,6 +2564,13 @@ const createStyles = (isDesktop: boolean) =>
       padding: isDesktop ? 12 : 10,
       borderRadius: 10,
       alignItems: "center",
+    },
+
+    incomeButton: {
+      marginBottom: 16,
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 8,
     },
 
     primaryButtonText: {
