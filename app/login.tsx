@@ -54,7 +54,7 @@ export default function LoginScreen() {
     clearMessage();
 
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
 
@@ -70,39 +70,79 @@ export default function LoginScreen() {
   const handleSignup = async () => {
     clearMessage();
 
+    const cleanName = name.trim();
+    const cleanEmail = signupEmail.trim();
+
+    if (!cleanName || !cleanEmail || !signupPassword) {
+      showMessage("Completa nombre, email y contraseña.");
+      return;
+    }
+
+    if (signupPassword.length < 6) {
+      showMessage("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
     const { data, error: signupError } = await supabase.auth.signUp({
-      email: signupEmail,
+      email: cleanEmail,
       password: signupPassword,
+      options: {
+        data: {
+          full_name: cleanName,
+        },
+      },
     });
 
     if (signupError) {
       showMessage(
-        signupError.message.includes("already registered")
-          ? "Este email ya está registrado"
-          : "Error al crear la cuenta",
+        signupError.message.toLowerCase().includes("already")
+          ? "Este email ya está registrado. Prueba a iniciar sesión."
+          : signupError.message || "Error al crear la cuenta.",
       );
       return;
     }
 
-    if (data.user) {
-      await supabase.from("profiles").insert({
-        id: data.user.id,
-        full_name: name,
-      });
+    if (data.user?.identities && data.user.identities.length === 0) {
+      showMessage("Este email ya está registrado. Prueba a iniciar sesión.");
+      return;
     }
 
-    showMessage("Cuenta creada. Revisa tu email si Supabase pide confirmación.", false);
+    if (data.user) {
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: data.user.id,
+        full_name: cleanName,
+        salary: 0,
+      });
+
+      if (profileError) {
+        showMessage(
+          `Cuenta creada, pero no se pudo preparar el perfil: ${profileError.message}`,
+        );
+        return;
+      }
+    }
+
+    if (data.session) {
+      await refreshSession();
+      router.replace("/(tabs)");
+      return;
+    }
+
+    showMessage(
+      "Cuenta creada. Revisa tu email para confirmar el acceso.",
+      false,
+    );
   };
 
   const handleResetPassword = async () => {
     clearMessage();
 
-    if (!email) {
+    if (!email.trim()) {
       showMessage("Introduce tu email para recuperar la contraseña");
       return;
     }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: "https://frontend-accountwise.vercel.app/reset-password",
     });
 
@@ -291,7 +331,9 @@ function AuthModeButton({
       style={[styles.modeButton, active && styles.modeButtonActive]}
       onPress={onPress}
     >
-      <Text style={[styles.modeButtonText, active && styles.modeButtonTextActive]}>
+      <Text
+        style={[styles.modeButtonText, active && styles.modeButtonTextActive]}
+      >
         {label}
       </Text>
     </Pressable>
