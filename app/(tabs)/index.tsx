@@ -90,6 +90,19 @@ export default function HomeScreen() {
         .maybeSingle();
 
       salary = Number(spaceSettings?.monthly_income || 0);
+
+      const { data: incomeRows } = await supabase
+        .from("space_contributions")
+        .select("amount")
+        .eq("space_id", activeSpaceId)
+        .eq("month", selectedMonth);
+
+      salary +=
+        incomeRows?.reduce(
+          (sum: number, item: { amount: number }) =>
+            sum + Number(item.amount || 0),
+          0,
+        ) || 0;
     } else {
       const { data: profile } = await supabase
         .from("profiles")

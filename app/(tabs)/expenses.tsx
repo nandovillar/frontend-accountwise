@@ -95,6 +95,7 @@ export default function TabTwoScreen() {
   };
 
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [salary, setSalary] = useState(0);
   const [salaryInput, setSalaryInput] = useState("");
@@ -154,6 +155,10 @@ export default function TabTwoScreen() {
   >(null);
   const [calendarMonth, setCalendarMonth] = useState(getCurrentMonth());
   const [movingExpenseKey, setMovingExpenseKey] = useState<string | null>(null);
+  const [spaceIncomeAmount, setSpaceIncomeAmount] = useState("");
+  const [spaceIncomeDate, setSpaceIncomeDate] = useState(getTodayDate());
+  const [spaceIncomeNote, setSpaceIncomeNote] = useState("");
+  const [spaceIncomeTotal, setSpaceIncomeTotal] = useState(0);
 
   const sortCategories = (items: string[]) => {
     const normalized = items.map(normalizeCategory);
@@ -284,6 +289,7 @@ export default function TabTwoScreen() {
     const user = await getCurrentUser();
 
     if (!user) return;
+    setCurrentUserId(user.id);
 
     if (activeSpaceId) {
       const { data } = await supabase
@@ -292,9 +298,24 @@ export default function TabTwoScreen() {
         .eq("space_id", activeSpaceId)
         .maybeSingle();
 
-      setSalary(Number(data?.monthly_income || 0));
+      const { data: incomeRows } = await supabase
+        .from("space_contributions")
+        .select("amount")
+        .eq("space_id", activeSpaceId)
+        .eq("month", selectedMonth);
+      const contributionTotal =
+        incomeRows?.reduce(
+          (sum: number, item: { amount: number }) =>
+            sum + Number(item.amount || 0),
+          0,
+        ) || 0;
+
+      setSpaceIncomeTotal(contributionTotal);
+      setSalary(Number(data?.monthly_income || 0) + contributionTotal);
       return;
     }
+
+    setSpaceIncomeTotal(0);
 
     const { data } = await supabase
       .from("profiles")
@@ -332,16 +353,6 @@ export default function TabTwoScreen() {
     }
 
     if (!data || data.length === 0) {
-      await supabase
-        .from("expense_categories")
-        .insert(
-          defaultCategories.map((name) => ({
-            user_id: user.id,
-            name,
-            ...getSpacePayload(activeSpaceId),
-          })),
-        );
-
       setCategories(defaultCategories);
       return;
     }
@@ -681,6 +692,55 @@ export default function TabTwoScreen() {
     await loadExpenses();
   };
 
+  const handleAddSpaceIncome = async () => {
+    const user = await getCurrentUser();
+    const value = Number(spaceIncomeAmount);
+
+    if (!user || !activeSpaceId || !value || value <= 0) return;
+
+    const incomeMonth = getMonthFromDate(spaceIncomeDate);
+    const incomeDay = getDayFromDate(spaceIncomeDate);
+    const note = spaceIncomeNote.trim() || "Ingreso a cuenta compartida";
+
+    await supabase.from("space_contributions").insert([
+      {
+        space_id: activeSpaceId,
+        from_user_id: user.id,
+        amount: value,
+        note,
+        contribution_date: spaceIncomeDate,
+        month: incomeMonth,
+        day_of_month: incomeDay,
+      },
+    ]);
+
+    await supabase.from("transactions").insert([
+      {
+        title: note,
+        amount: value,
+        type: "expense",
+        user_id: user.id,
+        created_at: new Date().toISOString(),
+        month: incomeMonth,
+        day_of_month: incomeDay,
+        category: "Aportaciones",
+        space_id: null,
+      },
+    ]);
+
+    await recordActivity(
+      "space_income_created",
+      "space_contribution",
+      null,
+      `Se registro un ingreso de ${value} €.`,
+    );
+
+    setSpaceIncomeAmount("");
+    setSpaceIncomeDate(getTodayDate());
+    setSpaceIncomeNote("");
+    await loadIncome();
+  };
+
   const handleAddFixedExpense = async () => {
     if (!fixedTitle || !fixedAmount || !fixedDate) return;
 
@@ -969,20 +1029,11 @@ export default function TabTwoScreen() {
           day_of_month: sourceDay,
           user_id: user.id,
           month: sourceMonth,
-          is_paid: true,
+          is_paid: false,
           category: normalizeCategory(item.category),
           space_id: targetSpaceId,
         },
       ]);
-
-      await supabase
-        .from("fixed_expenses")
-        .update({
-          is_paid: true,
-          is_transferred: true,
-          transferred_to_space_id: targetSpaceId,
-        })
-        .eq("id", item.id);
 
       await recordActivity(
         "fixed_expense_transferred",
@@ -1005,14 +1056,6 @@ export default function TabTwoScreen() {
           space_id: targetSpaceId,
         },
       ]);
-
-      await supabase
-        .from("transactions")
-        .update({
-          is_transferred: true,
-          transferred_to_space_id: targetSpaceId,
-        })
-        .eq("id", item.id);
 
       await recordActivity(
         "transaction_transferred",
@@ -1417,6 +1460,16 @@ export default function TabTwoScreen() {
             </View>
 
             <View style={styles.separator} />
+            {activeSpaceId && (
+              <>
+                <SummaryRow
+                  label="Ingresos añadidos"
+                  value={formatCompactMoney(spaceIncomeTotal)}
+                  styles={styles}
+                />
+                <View style={styles.separator} />
+              </>
+            )}
             <SummaryRow
               label={fixedSectionTitle}
               value={formatCompactMoney(fixedPaidTotal)}
@@ -1429,6 +1482,47 @@ export default function TabTwoScreen() {
               styles={styles}
             />
           </View>
+
+          {activeSpaceId && (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTextBlock}>
+                  <Text style={styles.sectionTitle}>
+                    Ingresar dinero al espacio
+                  </Text>
+                  <Text style={styles.sectionSubtitle}>
+                    Registra una aportacion desde tu cuenta personal
+                  </Text>
+                </View>
+              </View>
+
+              <TextInput
+                style={styles.input}
+                placeholder="Importe"
+                value={spaceIncomeAmount}
+                keyboardType="numeric"
+                onChangeText={setSpaceIncomeAmount}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Fecha YYYY-MM-DD"
+                value={spaceIncomeDate}
+                onChangeText={setSpaceIncomeDate}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Nota"
+                value={spaceIncomeNote}
+                onChangeText={setSpaceIncomeNote}
+              />
+              <Pressable
+                style={styles.primaryButton}
+                onPress={handleAddSpaceIncome}
+              >
+                <Text style={styles.primaryButtonText}>Guardar ingreso</Text>
+              </Pressable>
+            </View>
+          )}
 
           <ExpenseSection
             type="fixed"
@@ -1488,6 +1582,7 @@ export default function TabTwoScreen() {
                 item.day_of_month,
               );
               const moveKey = `fixed-${item.id}`;
+              const canManageItem = !activeSpaceId || item.user_id === currentUserId;
 
               return (
                 <View key={moveKey}>
@@ -1515,35 +1610,41 @@ export default function TabTwoScreen() {
                   </View>
 
                   <View style={styles.rowActions}>
-                    <IconAction
-                      icon="create-outline"
-                      onPress={() => openEditFixed(item)}
-                      styles={styles}
-                    />
+                    {canManageItem && (
+                      <IconAction
+                        icon="create-outline"
+                        onPress={() => openEditFixed(item)}
+                        styles={styles}
+                      />
+                    )}
                     <IconAction
                       icon={item.is_paid ? "refresh-outline" : "checkmark"}
                       dark={!item.is_paid}
                       onPress={() => togglePaid(item)}
                       styles={styles}
                     />
-                    <IconAction
-                      icon="swap-horizontal-outline"
-                      onPress={() =>
-                        setMovingExpenseKey(
-                          movingExpenseKey === moveKey ? null : moveKey,
-                        )
-                      }
-                      styles={styles}
-                    />
-                    <IconAction
-                      icon="trash-outline"
-                      danger
-                      onPress={() => deleteFixed(item)}
-                      styles={styles}
-                    />
+                    {canManageItem && (
+                      <IconAction
+                        icon="swap-horizontal-outline"
+                        onPress={() =>
+                          setMovingExpenseKey(
+                            movingExpenseKey === moveKey ? null : moveKey,
+                          )
+                        }
+                        styles={styles}
+                      />
+                    )}
+                    {canManageItem && (
+                      <IconAction
+                        icon="trash-outline"
+                        danger
+                        onPress={() => deleteFixed(item)}
+                        styles={styles}
+                      />
+                    )}
                   </View>
                   </View>
-                  {renderMoveTargets(item, "fixed", moveKey)}
+                  {canManageItem && renderMoveTargets(item, "fixed", moveKey)}
                 </View>
               );
             })}
@@ -1610,6 +1711,7 @@ export default function TabTwoScreen() {
                 item.day_of_month || 1,
               );
               const moveKey = `variable-${item.id}`;
+              const canManageItem = !activeSpaceId || item.user_id === currentUserId;
 
               return (
                 <View key={moveKey}>
@@ -1634,29 +1736,35 @@ export default function TabTwoScreen() {
                   </View>
 
                   <View style={styles.rowActions}>
-                    <IconAction
-                      icon="create-outline"
-                      onPress={() => openEditVariable(item)}
-                      styles={styles}
-                    />
-                    <IconAction
-                      icon="swap-horizontal-outline"
-                      onPress={() =>
-                        setMovingExpenseKey(
-                          movingExpenseKey === moveKey ? null : moveKey,
-                        )
-                      }
-                      styles={styles}
-                    />
-                    <IconAction
-                      icon="trash-outline"
-                      danger
-                      onPress={() => deleteVariable(item)}
-                      styles={styles}
-                    />
+                    {canManageItem && (
+                      <IconAction
+                        icon="create-outline"
+                        onPress={() => openEditVariable(item)}
+                        styles={styles}
+                      />
+                    )}
+                    {canManageItem && (
+                      <IconAction
+                        icon="swap-horizontal-outline"
+                        onPress={() =>
+                          setMovingExpenseKey(
+                            movingExpenseKey === moveKey ? null : moveKey,
+                          )
+                        }
+                        styles={styles}
+                      />
+                    )}
+                    {canManageItem && (
+                      <IconAction
+                        icon="trash-outline"
+                        danger
+                        onPress={() => deleteVariable(item)}
+                        styles={styles}
+                      />
+                    )}
                   </View>
                   </View>
-                  {renderMoveTargets(item, "variable", moveKey)}
+                  {canManageItem && renderMoveTargets(item, "variable", moveKey)}
                 </View>
               );
             })}
