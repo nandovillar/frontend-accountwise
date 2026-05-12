@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppTextInput } from "@/src/components/AppTextInput";
 import { KpiCard } from "@/src/components/KpiCard";
@@ -113,7 +114,7 @@ export default function SavingsScreen() {
     };
   };
 
-  const loadSavings = async () => {
+  const loadSavings = useCallback(async () => {
     const user = await getCurrentUser();
 
     if (!user) return;
@@ -130,7 +131,7 @@ export default function SavingsScreen() {
     }
 
     setSavings(data || []);
-  };
+  }, []);
 
   const resetForm = () => {
     setEditingId(null);
@@ -294,7 +295,13 @@ export default function SavingsScreen() {
     );
 
     return () => subscription.subscription.unsubscribe();
-  }, []);
+  }, [loadSavings]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSavings();
+    }, [loadSavings]),
+  );
 
   const totals = getTotals();
 

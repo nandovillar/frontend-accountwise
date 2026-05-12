@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppBottomMenu } from "@/src/components/AppBottomMenu";
 import { AppTextInput } from "@/src/components/AppTextInput";
@@ -98,10 +98,6 @@ export default function HomePurchaseScreen() {
   const [selectedSimulationId, setSelectedSimulationId] = useState<
     string | null
   >(null);
-
-  const [originalSnapshot, setOriginalSnapshot] = useState<FormSnapshot | null>(
-    null,
-  );
 
   const [name, setName] = useState(defaultSimulation.name);
   const [propertyPrice, setPropertyPrice] = useState(
@@ -200,24 +196,6 @@ export default function HomePurchaseScreen() {
     homeInsurance: String(simulation.home_insurance ?? 0),
   });
 
-  const buildCurrentSnapshot = (): FormSnapshot => ({
-    selectedSimulationId,
-    name,
-    propertyPrice,
-    agencyPercent,
-    taxPercent,
-    financialFee,
-    notaryPercent,
-    downPayment,
-    pendingNotary,
-    years,
-    tin,
-    bonus,
-    salaryBonus,
-    lifeInsurance,
-    homeInsurance,
-  });
-
   const applySnapshot = (snapshot: FormSnapshot) => {
     setSelectedSimulationId(snapshot.selectedSimulationId);
     setName(snapshot.name);
@@ -273,20 +251,18 @@ export default function HomePurchaseScreen() {
   const cleanToExample = () => {
     const snapshot = buildDefaultSnapshot();
     applySnapshot(snapshot);
-    setOriginalSnapshot(snapshot);
   };
 
   const exitSimulator = () => {
-    router.push("/savings");
+    router.replace("/savings");
   };
 
   const loadSimulationIntoForm = (simulation: Simulation) => {
     const snapshot = buildSnapshotFromSimulation(simulation);
     applySnapshot(snapshot);
-    setOriginalSnapshot(snapshot);
   };
 
-  const loadSimulations = async () => {
+  const loadSimulations = useCallback(async () => {
     const user = await getCurrentUser();
 
     if (!user) return;
@@ -303,11 +279,7 @@ export default function HomePurchaseScreen() {
     }
 
     setSimulations(data || []);
-
-    if (!originalSnapshot) {
-      setOriginalSnapshot(buildDefaultSnapshot());
-    }
-  };
+  }, []);
 
   const getPayload = async (simulationName: string) => {
     const user = await getCurrentUser();
@@ -356,7 +328,6 @@ export default function HomePurchaseScreen() {
       return;
     }
 
-    setOriginalSnapshot(buildCurrentSnapshot());
     await loadSimulations();
     Alert.alert("Guardado", "Cambios guardados correctamente.");
   };
@@ -390,7 +361,6 @@ export default function HomePurchaseScreen() {
     if (data) {
       const snapshot = buildSnapshotFromSimulation(data);
       applySnapshot(snapshot);
-      setOriginalSnapshot(snapshot);
     }
 
     setSaveNameModalVisible(false);
@@ -499,13 +469,12 @@ export default function HomePurchaseScreen() {
 
       const snapshot = buildDefaultSnapshot();
       applySnapshot(snapshot);
-      setOriginalSnapshot(snapshot);
 
       await loadSimulations();
     };
 
     init();
-  }, []);
+  }, [loadSimulations]);
 
   return (
     <View style={commonStyles.screen}>

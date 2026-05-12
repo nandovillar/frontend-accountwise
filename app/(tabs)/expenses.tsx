@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
@@ -15,6 +15,7 @@ import {
   getMonthFromDate,
   getTodayDate,
 } from "@/src/utils/dates";
+import { getCurrentUser } from "@/src/utils/auth";
 import { formatCompactMoney } from "@/src/utils/money";
 
 import {
@@ -152,9 +153,7 @@ export default function TabTwoScreen() {
   };
 
   const loadSectionTitles = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -189,9 +188,7 @@ export default function TabTwoScreen() {
   const saveSectionTitles = async (
     titles: Record<ExpenseSectionType, string>,
   ) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -269,9 +266,7 @@ export default function TabTwoScreen() {
   };
 
   const loadProfile = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -291,9 +286,7 @@ export default function TabTwoScreen() {
   };
 
   const loadCategories = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -331,9 +324,7 @@ export default function TabTwoScreen() {
       return;
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -356,9 +347,7 @@ export default function TabTwoScreen() {
   const autoMarkDueFixedExpenses = async () => {
     if (selectedMonth !== getCurrentMonth()) return;
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -374,9 +363,7 @@ export default function TabTwoScreen() {
   };
 
   const loadExpenses = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -393,9 +380,7 @@ export default function TabTwoScreen() {
   };
 
   const loadFixedExpenses = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -412,9 +397,7 @@ export default function TabTwoScreen() {
   };
 
   const ensureTemplatesForMonth = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -449,9 +432,7 @@ export default function TabTwoScreen() {
   };
 
   const generateFixedForMonth = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -499,6 +480,18 @@ export default function TabTwoScreen() {
     await loadExpenses();
   };
 
+  const loadAllRef = useRef(loadAll);
+  const loadMonthDataRef = useRef(loadAll);
+
+  loadAllRef.current = loadAll;
+  loadMonthDataRef.current = async () => {
+    setFixedExpenses([]);
+    setExpenses([]);
+    await generateFixedForMonth();
+    await loadFixedExpenses();
+    await loadExpenses();
+  };
+
   useEffect(() => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
@@ -508,14 +501,14 @@ export default function TabTwoScreen() {
         return;
       }
 
-      await loadAll();
+      await loadAllRef.current();
     };
 
     checkSession();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
-        if (session?.user) await loadAll();
+        if (session?.user) await loadAllRef.current();
       },
     );
 
@@ -523,15 +516,7 @@ export default function TabTwoScreen() {
   }, []);
 
   useEffect(() => {
-    const init = async () => {
-      setFixedExpenses([]);
-      setExpenses([]);
-      await generateFixedForMonth();
-      await loadFixedExpenses();
-      await loadExpenses();
-    };
-
-    init();
+    loadMonthDataRef.current();
   }, [selectedMonth]);
 
   const changeMonth = async (offset: number) => {
@@ -550,9 +535,7 @@ export default function TabTwoScreen() {
   };
 
   const saveSalary = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -567,9 +550,7 @@ export default function TabTwoScreen() {
   const handleAddExpense = async () => {
     if (!title || !amount) return;
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -601,9 +582,7 @@ export default function TabTwoScreen() {
   const handleAddFixedExpense = async () => {
     if (!fixedTitle || !fixedAmount || !fixedDate) return;
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return;
 
@@ -713,9 +692,7 @@ export default function TabTwoScreen() {
         })
         .eq("id", editingItem.id);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
 
       if (user) {
         await supabase
@@ -761,9 +738,7 @@ export default function TabTwoScreen() {
 
   const deleteFixed = async (item: any) => {
     const executeDelete = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
 
       if (!user) return;
 
@@ -2183,3 +2158,4 @@ const createStyles = (isDesktop: boolean) =>
       lineHeight: isDesktop ? 34 : 30,
     },
   });
+

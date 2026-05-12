@@ -7,6 +7,7 @@ import { AppBottomMenu } from "@/src/components/AppBottomMenu";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
+import { getCurrentUser } from "@/src/utils/auth";
 
 import {
   Alert,
@@ -32,9 +33,7 @@ export default function SettingsScreen() {
   const [email, setEmail] = useState("");
 
   const loadUser = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     setEmail(user?.email || "");
   };

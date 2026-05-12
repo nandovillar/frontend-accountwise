@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
+import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
@@ -65,7 +66,7 @@ export default function HomeScreen() {
     setSelectedMonth(`${newYear}-${monthStr}`);
   };
 
-  const loadMonthlySummary = async () => {
+  const loadMonthlySummary = useCallback(async () => {
     const user = await getCurrentUser();
 
     if (!user) return;
@@ -146,7 +147,7 @@ export default function HomeScreen() {
       variables,
       savings: totalSavings,
     });
-  };
+  }, [selectedMonth]);
 
   useEffect(() => {
     const init = async () => {
@@ -171,11 +172,17 @@ export default function HomeScreen() {
     );
 
     return () => subscription.subscription.unsubscribe();
-  }, []);
+  }, [loadMonthlySummary]);
 
   useEffect(() => {
     loadMonthlySummary();
-  }, [selectedMonth]);
+  }, [loadMonthlySummary]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadMonthlySummary();
+    }, [loadMonthlySummary]),
+  );
 
   const totalExpenses = summary.fixedPaid + summary.variables;
   const available = summary.salary - totalExpenses;
@@ -193,26 +200,6 @@ export default function HomeScreen() {
 
       <ScrollView contentContainerStyle={commonStyles.container}>
         <View style={commonStyles.content}>
-          <View style={styles.heroCard}>
-            <View style={styles.heroTextBlock}>
-              <Text style={styles.heroLabel}>AccountWise</Text>
-
-              <Text style={styles.heroTitle}>Resumen mensual</Text>
-
-              <Text style={styles.heroSubtitle}>
-                Vista rápida de ingresos, gastos y ahorro.
-              </Text>
-            </View>
-
-            <View style={styles.heroIcon}>
-              <Ionicons
-                name="analytics-outline"
-                size={28}
-                color={colors.white}
-              />
-            </View>
-          </View>
-
           <View style={styles.monthCard}>
             <Pressable
               style={styles.monthButton}
@@ -379,54 +366,6 @@ function DetailRow({
 
 const createStyles = (isDesktop: boolean) =>
   StyleSheet.create({
-    heroCard: {
-      backgroundColor: colors.primaryDark,
-      borderRadius: isDesktop ? 20 : 18,
-      padding: isDesktop ? 22 : 16,
-      marginBottom: isDesktop ? 14 : 12,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 14,
-      minHeight: isDesktop ? 128 : 108,
-    },
-
-    heroTextBlock: {
-      flex: 1,
-      minWidth: 0,
-    },
-
-    heroLabel: {
-      fontSize: isDesktop ? 13 : 11,
-      color: colors.white,
-      opacity: 0.85,
-      fontWeight: "800",
-      marginBottom: 4,
-    },
-
-    heroTitle: {
-      fontSize: isDesktop ? 28 : 23,
-      color: colors.white,
-      fontWeight: "900",
-      marginBottom: 4,
-    },
-
-    heroSubtitle: {
-      fontSize: isDesktop ? 13 : 11,
-      color: colors.white,
-      opacity: 0.85,
-      fontWeight: "600",
-    },
-
-    heroIcon: {
-      width: isDesktop ? 58 : 48,
-      height: isDesktop ? 58 : 48,
-      borderRadius: 999,
-      backgroundColor: "rgba(255,255,255,0.16)",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-
     monthCard: {
       backgroundColor: colors.surface,
       borderRadius: 16,
