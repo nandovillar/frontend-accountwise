@@ -201,7 +201,27 @@ export function SpaceProvider({ children }: { children: ReactNode }) {
       target_email: cleanEmail,
     });
 
-    if (error) return error.message;
+    if (error) {
+      const message = error.message.toLowerCase();
+
+      if (
+        message.includes("no existe") ||
+        message.includes("not found") ||
+        message.includes("no rows")
+      ) {
+        return "No existe ninguna cuenta con ese email. Primero debe crear una cuenta en AccountWise.";
+      }
+
+      if (message.includes("acceso") || message.includes("permission")) {
+        return "No tienes permisos para invitar usuarios a este espacio.";
+      }
+
+      if (message.includes("schema cache") || message.includes("function")) {
+        return "Supabase todavia no ha actualizado la funcion de invitacion. Recarga el schema y prueba de nuevo.";
+      }
+
+      return `No se pudo anadir el usuario: ${error.message}`;
+    }
 
     await recordActivity(
       "member_invited",

@@ -43,6 +43,9 @@ export default function SettingsScreen() {
   const [sharedSpaceName, setSharedSpaceName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [spaceMessage, setSpaceMessage] = useState("");
+  const [spaceMessageType, setSpaceMessageType] = useState<
+    "success" | "error" | null
+  >(null);
 
   const loadUser = async () => {
     const user = await getCurrentUser();
@@ -59,28 +62,41 @@ export default function SettingsScreen() {
 
   const handleCreateSharedSpace = async () => {
     setSpaceMessage("");
+    setSpaceMessageType(null);
     const error = await createSharedSpace(sharedSpaceName);
 
     if (error) {
       setSpaceMessage(error);
+      setSpaceMessageType("error");
       return;
     }
 
     setSharedSpaceName("");
     setSpaceMessage("Espacio compartido creado.");
+    setSpaceMessageType("success");
   };
 
   const handleInvite = async () => {
     setSpaceMessage("");
+    setSpaceMessageType(null);
+
+    if (!inviteEmail.trim()) {
+      setSpaceMessage("Introduce el email de la persona que quieres anadir.");
+      setSpaceMessageType("error");
+      return;
+    }
+
     const error = await inviteMemberByEmail(inviteEmail);
 
     if (error) {
       setSpaceMessage(error);
+      setSpaceMessageType("error");
       return;
     }
 
     setInviteEmail("");
     setSpaceMessage("Usuario anadido al espacio compartido.");
+    setSpaceMessageType("success");
     await refreshSpaces();
   };
 
@@ -230,7 +246,34 @@ export default function SettingsScreen() {
             )}
 
             {spaceMessage ? (
-              <Text style={styles.spaceMessage}>{spaceMessage}</Text>
+              <View
+                style={[
+                  styles.spaceMessageBox,
+                  spaceMessageType === "error" && styles.spaceMessageBoxError,
+                ]}
+              >
+                <Ionicons
+                  name={
+                    spaceMessageType === "error"
+                      ? "alert-circle-outline"
+                      : "checkmark-circle-outline"
+                  }
+                  size={18}
+                  color={
+                    spaceMessageType === "error"
+                      ? colors.danger
+                      : colors.primaryDark
+                  }
+                />
+                <Text
+                  style={[
+                    styles.spaceMessage,
+                    spaceMessageType === "error" && styles.spaceMessageError,
+                  ]}
+                >
+                  {spaceMessage}
+                </Text>
+              </View>
             ) : null}
           </View>
 
@@ -346,11 +389,33 @@ const createStyles = (isDesktop: boolean) =>
       marginBottom: 12,
     },
 
+    spaceMessageBox: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+      backgroundColor: colors.primarySoft,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 10,
+      marginTop: 2,
+    },
+
+    spaceMessageBoxError: {
+      backgroundColor: "#FEF2F2",
+      borderColor: "#FECACA",
+    },
+
     spaceMessage: {
+      flex: 1,
       fontSize: isDesktop ? 13 : 11,
       color: colors.primaryDark,
       fontWeight: "800",
-      marginTop: 2,
+      lineHeight: isDesktop ? 18 : 16,
+    },
+
+    spaceMessageError: {
+      color: colors.danger,
     },
 
     logoutButton: {
