@@ -7,11 +7,14 @@ import { AppBottomMenu } from "@/src/components/AppBottomMenu";
 import { AppTextInput } from "@/src/components/AppTextInput";
 import { KpiCard } from "@/src/components/KpiCard";
 import { ResultRow } from "@/src/components/ResultRow";
+import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
+import { useSpaces } from "@/src/context/SpaceContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
 import { formatCompactMoney, formatMoney } from "@/src/utils/money";
+import { applySpaceFilter, getSpacePayload } from "@/src/utils/spaceQueries";
 
 import {
   Alert,
@@ -84,6 +87,7 @@ const defaultSimulation = {
 };
 
 export default function HomePurchaseScreen() {
+  const { activeSpaceId, recordActivity } = useSpaces();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
@@ -267,11 +271,15 @@ export default function HomePurchaseScreen() {
 
     if (!user) return;
 
-    const { data, error } = await supabase
+    const simulationsQuery = supabase
       .from("home_purchase_simulations")
       .select("*")
-      .eq("user_id", user.id)
       .order("updated_at", { ascending: false });
+    const { data, error } = await applySpaceFilter(
+      simulationsQuery,
+      user.id,
+      activeSpaceId,
+    );
 
     if (error) {
       Alert.alert("Error", "No se pudieron cargar las simulaciones.");
@@ -279,7 +287,7 @@ export default function HomePurchaseScreen() {
     }
 
     setSimulations(data || []);
-  }, []);
+  }, [activeSpaceId]);
 
   const getPayload = async (simulationName: string) => {
     const user = await getCurrentUser();
@@ -303,6 +311,7 @@ export default function HomePurchaseScreen() {
       life_insurance: toNumber(lifeInsurance),
       home_insurance: toNumber(homeInsurance),
       updated_at: new Date().toISOString(),
+      ...getSpacePayload(activeSpaceId),
     };
   };
 
@@ -329,6 +338,12 @@ export default function HomePurchaseScreen() {
     }
 
     await loadSimulations();
+    await recordActivity(
+      "home_simulation_updated",
+      "home_purchase_simulation",
+      selectedSimulationId,
+      `Se actualizo la simulacion ${payload.name}.`,
+    );
     Alert.alert("Guardado", "Cambios guardados correctamente.");
   };
 
@@ -367,6 +382,12 @@ export default function HomePurchaseScreen() {
     setNewSimulationName("");
 
     await loadSimulations();
+    await recordActivity(
+      "home_simulation_created",
+      "home_purchase_simulation",
+      data?.id || null,
+      `Se creo la simulacion ${finalName}.`,
+    );
     Alert.alert("Guardado", "Simulación guardada correctamente.");
   };
 
@@ -391,6 +412,12 @@ export default function HomePurchaseScreen() {
 
       cleanToExample();
       await loadSimulations();
+      await recordActivity(
+        "home_simulation_deleted",
+        "home_purchase_simulation",
+        selectedSimulationId,
+        "Se elimino una simulacion de casa.",
+      );
     };
 
     if (Platform.OS === "web") {
@@ -482,6 +509,8 @@ export default function HomePurchaseScreen() {
 
       <ScrollView contentContainerStyle={commonStyles.container}>
         <View style={commonStyles.content}>
+          <SpaceSwitcher />
+
           <View style={[commonStyles.card, styles.titleCard]}>
             <View style={styles.titleTextBlock}>
               <Text style={commonStyles.smallText}>

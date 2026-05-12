@@ -18,6 +18,39 @@ import { createCommonStyles } from "@/src/theme/commonStyles";
 
 type AuthMode = "login" | "signup";
 
+type AuthErrorLike = {
+  code?: string;
+  message?: string;
+  status?: number;
+};
+
+const getSignupErrorMessage = (error: AuthErrorLike) => {
+  const message = error.message || "Error al crear la cuenta.";
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("already") || normalized.includes("registered")) {
+    return "Este email ya esta registrado. Prueba a iniciar sesion.";
+  }
+
+  if (normalized.includes("invalid email")) {
+    return "El email no parece valido.";
+  }
+
+  if (normalized.includes("password")) {
+    return "La contrasena no cumple los requisitos de Supabase.";
+  }
+
+  if (normalized.includes("signup") && normalized.includes("disabled")) {
+    return "El registro esta desactivado en Supabase Auth.";
+  }
+
+  if (normalized.includes("database")) {
+    return "Supabase no pudo crear el usuario por un error de base de datos. Revisa triggers o policies de profiles.";
+  }
+
+  return `No se pudo crear la cuenta: ${message}`;
+};
+
 export default function LoginScreen() {
   const { refreshSession } = useAuth();
   const { width } = useWindowDimensions();
@@ -59,7 +92,7 @@ export default function LoginScreen() {
     });
 
     if (error) {
-      showMessage("Email o contraseña incorrectos");
+      showMessage("Email o contrasena incorrectos");
       return;
     }
 
@@ -74,12 +107,12 @@ export default function LoginScreen() {
     const cleanEmail = signupEmail.trim();
 
     if (!cleanName || !cleanEmail || !signupPassword) {
-      showMessage("Completa nombre, email y contraseña.");
+      showMessage("Completa nombre, email y contrasena.");
       return;
     }
 
     if (signupPassword.length < 6) {
-      showMessage("La contraseña debe tener al menos 6 caracteres.");
+      showMessage("La contrasena debe tener al menos 6 caracteres.");
       return;
     }
 
@@ -94,16 +127,12 @@ export default function LoginScreen() {
     });
 
     if (signupError) {
-      showMessage(
-        signupError.message.toLowerCase().includes("already")
-          ? "Este email ya está registrado. Prueba a iniciar sesión."
-          : signupError.message || "Error al crear la cuenta.",
-      );
+      showMessage(getSignupErrorMessage(signupError));
       return;
     }
 
     if (data.user?.identities && data.user.identities.length === 0) {
-      showMessage("Este email ya está registrado. Prueba a iniciar sesión.");
+      showMessage("Este email ya esta registrado. Prueba a iniciar sesion.");
       return;
     }
 
@@ -111,6 +140,7 @@ export default function LoginScreen() {
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
         full_name: cleanName,
+        email: cleanEmail,
         salary: 0,
       });
 
@@ -138,7 +168,7 @@ export default function LoginScreen() {
     clearMessage();
 
     if (!email.trim()) {
-      showMessage("Introduce tu email para recuperar la contraseña");
+      showMessage("Introduce tu email para recuperar la contrasena");
       return;
     }
 
@@ -148,8 +178,8 @@ export default function LoginScreen() {
 
     showMessage(
       error
-        ? "No se pudo enviar el email de recuperación"
-        : "Te hemos enviado un email para restablecer tu contraseña",
+        ? "No se pudo enviar el email de recuperacion"
+        : "Te hemos enviado un email para restablecer tu contrasena",
       !!error,
     );
   };
@@ -178,7 +208,7 @@ export default function LoginScreen() {
           <View style={commonStyles.card}>
             <View style={styles.modeSwitch}>
               <AuthModeButton
-                label="Iniciar sesión"
+                label="Iniciar sesion"
                 active={mode === "login"}
                 onPress={() => {
                   setMode("login");
@@ -232,7 +262,7 @@ export default function LoginScreen() {
                 />
 
                 <AppTextInput
-                  label="Contraseña"
+                  label="Contrasena"
                   value={password}
                   onChange={setPassword}
                   keyboardType="default"
@@ -257,7 +287,7 @@ export default function LoginScreen() {
                   onPress={handleResetPassword}
                 >
                   <Text style={styles.forgotText}>
-                    ¿Olvidaste tu contraseña?
+                    Olvidaste tu contrasena?
                   </Text>
                 </Pressable>
               </View>
@@ -285,7 +315,7 @@ export default function LoginScreen() {
                 />
 
                 <AppTextInput
-                  label="Contraseña"
+                  label="Contrasena"
                   value={signupPassword}
                   onChange={setSignupPassword}
                   keyboardType="default"

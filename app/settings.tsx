@@ -4,6 +4,9 @@ import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppBottomMenu } from "@/src/components/AppBottomMenu";
+import { AppTextInput } from "@/src/components/AppTextInput";
+import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
+import { useSpaces } from "@/src/context/SpaceContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
@@ -20,6 +23,12 @@ import {
 } from "react-native";
 
 export default function SettingsScreen() {
+  const {
+    activeSpace,
+    createSharedSpace,
+    inviteMemberByEmail,
+    refreshSpaces,
+  } = useSpaces();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
@@ -31,11 +40,48 @@ export default function SettingsScreen() {
   const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
 
   const [email, setEmail] = useState("");
+  const [sharedSpaceName, setSharedSpaceName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [spaceMessage, setSpaceMessage] = useState("");
 
   const loadUser = async () => {
     const user = await getCurrentUser();
 
     setEmail(user?.email || "");
+
+    if (user?.email) {
+      await supabase
+        .from("profiles")
+        .update({ email: user.email.toLowerCase() })
+        .eq("id", user.id);
+    }
+  };
+
+  const handleCreateSharedSpace = async () => {
+    setSpaceMessage("");
+    const error = await createSharedSpace(sharedSpaceName);
+
+    if (error) {
+      setSpaceMessage(error);
+      return;
+    }
+
+    setSharedSpaceName("");
+    setSpaceMessage("Espacio compartido creado.");
+  };
+
+  const handleInvite = async () => {
+    setSpaceMessage("");
+    const error = await inviteMemberByEmail(inviteEmail);
+
+    if (error) {
+      setSpaceMessage(error);
+      return;
+    }
+
+    setInviteEmail("");
+    setSpaceMessage("Usuario anadido al espacio compartido.");
+    await refreshSpaces();
   };
 
   const handleLogout = async () => {
@@ -86,8 +132,8 @@ export default function SettingsScreen() {
             <Text style={commonStyles.cardTitle}>Preferencias</Text>
 
             <Text style={[commonStyles.subtitle, styles.description]}>
-              Desde aquí puedes revisar tu cuenta y acceder a opciones básicas
-              de la aplicación.
+              Desde aqui puedes revisar tu cuenta y acceder a opciones basicas
+              de la aplicacion.
             </Text>
 
             <View style={styles.optionRow}>
@@ -100,7 +146,7 @@ export default function SettingsScreen() {
               </View>
 
               <View style={styles.optionTextBlock}>
-                <Text style={styles.optionTitle}>Sesión protegida</Text>
+                <Text style={styles.optionTitle}>Sesion protegida</Text>
 
                 <Text style={styles.optionDescription}>
                   Tus gastos, ahorros y simulaciones se cargan usando tu
@@ -122,17 +168,77 @@ export default function SettingsScreen() {
                 <Text style={styles.optionTitle}>Tema visual</Text>
 
                 <Text style={styles.optionDescription}>
-                  Tema turquesa con diseño financiero limpio.
+                  Tema turquesa con diseno financiero limpio.
                 </Text>
               </View>
             </View>
           </View>
 
           <View style={commonStyles.card}>
+            <Text style={commonStyles.cardTitle}>Espacios</Text>
+
+            <Text style={[commonStyles.subtitle, styles.description]}>
+              Usa Personal para tus datos privados y crea un espacio compartido
+              para una cuenta comun.
+            </Text>
+
+            <SpaceSwitcher />
+
+            <AppTextInput
+              label="Nuevo espacio compartido"
+              value={sharedSpaceName}
+              onChange={setSharedSpaceName}
+              keyboardType="default"
+              commonStyles={commonStyles}
+            />
+
+            <Pressable
+              style={[commonStyles.primaryButton, styles.spaceActionButton]}
+              onPress={handleCreateSharedSpace}
+            >
+              <Ionicons name="people-outline" size={18} color={colors.white} />
+              <Text style={commonStyles.primaryButtonText}>Crear espacio</Text>
+            </Pressable>
+
+            {activeSpace.type === "shared" && (
+              <>
+                <AppTextInput
+                  label="Invitar por email"
+                  value={inviteEmail}
+                  onChange={setInviteEmail}
+                  keyboardType="default"
+                  commonStyles={commonStyles}
+                />
+
+                <Pressable
+                  style={[
+                    commonStyles.secondaryButton,
+                    styles.spaceActionButton,
+                  ]}
+                  onPress={handleInvite}
+                >
+                  <Ionicons
+                    name="person-add-outline"
+                    size={18}
+                    color={colors.primaryDark}
+                  />
+                  <Text style={commonStyles.secondaryButtonText}>
+                    Anadir al espacio activo
+                  </Text>
+                </Pressable>
+              </>
+            )}
+
+            {spaceMessage ? (
+              <Text style={styles.spaceMessage}>{spaceMessage}</Text>
+            ) : null}
+          </View>
+
+          <View style={commonStyles.card}>
             <Text style={commonStyles.cardTitle}>Acciones</Text>
 
             <Text style={[commonStyles.subtitle, styles.description]}>
-              Cierra la sesión cuando termines de usar la aplicación.
+              Cierra la sesion cuando termines de usar la aplicacion.
             </Text>
 
             <Pressable
@@ -141,7 +247,7 @@ export default function SettingsScreen() {
             >
               <Ionicons name="log-out-outline" size={18} color="#B91C1C" />
 
-              <Text style={commonStyles.dangerButtonText}>Cerrar sesión</Text>
+              <Text style={commonStyles.dangerButtonText}>Cerrar sesion</Text>
             </Pressable>
           </View>
         </View>
@@ -233,6 +339,18 @@ const createStyles = (isDesktop: boolean) =>
       color: colors.mutedText,
       fontWeight: "600",
       lineHeight: isDesktop ? 18 : 16,
+    },
+
+    spaceActionButton: {
+      width: "100%",
+      marginBottom: 12,
+    },
+
+    spaceMessage: {
+      fontSize: isDesktop ? 13 : 11,
+      color: colors.primaryDark,
+      fontWeight: "800",
+      marginTop: 2,
     },
 
     logoutButton: {

@@ -4,11 +4,14 @@ import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
+import { useSpaces } from "@/src/context/SpaceContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
 import { formatCompactMoney } from "@/src/utils/money";
+import { applySpaceFilter } from "@/src/utils/spaceQueries";
 
 import {
   Pressable,
@@ -27,6 +30,7 @@ type Summary = {
 };
 
 export default function HomeScreen() {
+  const { activeSpaceId } = useSpaces();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
@@ -71,52 +75,103 @@ export default function HomeScreen() {
 
     if (!user) return;
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("salary")
-      .eq("id", user.id)
-      .maybeSingle();
+    let salary = 0;
 
-    if (!profile) {
-      await supabase.from("profiles").insert({
-        id: user.id,
-        salary: 0,
-      });
+    if (activeSpaceId) {
+      const { data: spaceSettings } = await supabase
+        .from("space_settings")
+        .select("monthly_income")
+        .eq("space_id", activeSpaceId)
+        .maybeSingle();
+
+      salary = Number(spaceSettings?.monthly_income || 0);
+    } else {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("salary")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!profile) {
+        await supabase.from("profiles").insert({
+          id: user.id,
+          salary: 0,
+        });
+      }
+
+      salary = Number(profile?.salary || 0);
     }
 
-    const salary = Number(profile?.salary || 0);
-
-    const { data: fixed } = await supabase
+    const fixedQuery = supabase
       .from("fixed_expenses")
       .select("amount")
-      .eq("user_id", user.id)
       .eq("month", selectedMonth)
       .eq("is_paid", true);
+    const { data: fixed } = await applySpaceFilter(
+      fixedQuery,
+      user.id,
+      activeSpaceId,
+    );
 
     const fixedPaid =
-      fixed?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+      fixed?.reduce(
+        (sum: number, item: { amount: number }) => sum + Number(item.amount),
+        0,
+      ) || 0;
 
-    const { data: vars } = await supabase
+    const varsQuery = supabase
       .from("transactions")
       .select("amount")
-      .eq("user_id", user.id)
       .eq("month", selectedMonth)
       .eq("type", "expense");
+    const { data: vars } = await applySpaceFilter(
+      varsQuery,
+      user.id,
+      activeSpaceId,
+    );
 
     const variables =
-      vars?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
+      vars?.reduce(
+        (sum: number, item: { amount: number }) => sum + Number(item.amount),
+        0,
+      ) || 0;
 
-    const { data: savingsList } = await supabase
+    if (activeSpaceId) {
+      const { data: contributions } = await supabase
+        .from("space_contributions")
+        .select("amount")
+        .eq("space_id", activeSpaceId)
+        .eq("month", selectedMonth);
+
+      salary +=
+        contributions?.reduce(
+          (sum: number, item: { amount: number }) =>
+            sum + Number(item.amount),
+          0,
+        ) || 0;
+    }
+
+    const savingsQuery = supabase
       .from("savings")
-      .select("monthly_amount, contributed, start_date, end_date")
-      .eq("user_id", user.id);
+      .select("monthly_amount, contributed, start_date, end_date");
+    const { data: savingsList } = await applySpaceFilter(
+      savingsQuery,
+      user.id,
+      activeSpaceId,
+    );
 
     let totalSavings = 0;
 
     if (savingsList) {
       const now = new Date();
 
-      savingsList.forEach((saving) => {
+      savingsList.forEach(
+        (saving: {
+          monthly_amount: number;
+          contributed: number;
+          start_date: string;
+          end_date: string;
+        }) => {
         const start = new Date(saving.start_date);
         const end = new Date(saving.end_date);
 
@@ -138,7 +193,8 @@ export default function HomeScreen() {
           passedMonths * Number(saving.monthly_amount || 0);
 
         totalSavings += currentSaved;
-      });
+        },
+      );
     }
 
     setSummary({
@@ -147,7 +203,7 @@ export default function HomeScreen() {
       variables,
       savings: totalSavings,
     });
-  }, [selectedMonth]);
+  }, [activeSpaceId, selectedMonth]);
 
   useEffect(() => {
     const init = async () => {
@@ -200,6 +256,8 @@ export default function HomeScreen() {
 
       <ScrollView contentContainerStyle={commonStyles.container}>
         <View style={commonStyles.content}>
+          <SpaceSwitcher />
+
           <View style={styles.monthCard}>
             <Pressable
               style={styles.monthButton}
@@ -231,7 +289,7 @@ export default function HomeScreen() {
               <Text style={styles.balanceLabel}>Disponible</Text>
 
               <Text style={styles.balanceSubtitle}>
-                Sueldo menos gastos del mes
+                Ingresos menos gastos del mes
               </Text>
             </View>
 
@@ -273,7 +331,7 @@ export default function HomeScreen() {
 
             <View style={styles.detailList}>
               <DetailRow
-                label="Sueldo"
+                label={activeSpaceId ? "Ingresos del espacio" : "Sueldo"}
                 value={formatCompactMoney(summary.salary)}
                 styles={styles}
               />

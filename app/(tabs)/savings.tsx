@@ -7,12 +7,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppTextInput } from "@/src/components/AppTextInput";
 import { KpiCard } from "@/src/components/KpiCard";
 import { ResultRow } from "@/src/components/ResultRow";
+import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
+import { useSpaces } from "@/src/context/SpaceContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
 import { getNextYearDate, getTodayDate } from "@/src/utils/dates";
 import { formatCompactMoney, formatMoney } from "@/src/utils/money";
+import { applySpaceFilter, getSpacePayload } from "@/src/utils/spaceQueries";
 
 import {
   Alert,
@@ -40,6 +43,7 @@ type SavingItem = {
 };
 
 export default function SavingsScreen() {
+  const { activeSpaceId, recordActivity } = useSpaces();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
@@ -119,11 +123,15 @@ export default function SavingsScreen() {
 
     if (!user) return;
 
-    const { data, error } = await supabase
+    const savingsQuery = supabase
       .from("savings")
       .select("*")
-      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
+    const { data, error } = await applySpaceFilter(
+      savingsQuery,
+      user.id,
+      activeSpaceId,
+    );
 
     if (error) {
       Alert.alert("Error", "No se pudieron cargar los ahorros.");
@@ -131,7 +139,7 @@ export default function SavingsScreen() {
     }
 
     setSavings(data || []);
-  }, []);
+  }, [activeSpaceId]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -181,6 +189,7 @@ export default function SavingsScreen() {
       monthly_amount: Number(monthly) || 0,
       contributed: Number(contributed) || 0,
       borrowed: borrowed.trim(),
+      ...getSpacePayload(activeSpaceId),
     };
 
     if (editingId) {
@@ -194,6 +203,13 @@ export default function SavingsScreen() {
         Alert.alert("Error", "No se pudo actualizar el ahorro.");
         return;
       }
+
+      await recordActivity(
+        "saving_updated",
+        "saving",
+        editingId,
+        `Se actualizo el ahorro ${payload.name}.`,
+      );
     } else {
       const { error } = await supabase.from("savings").insert([payload]);
 
@@ -201,6 +217,13 @@ export default function SavingsScreen() {
         Alert.alert("Error", "No se pudo guardar el ahorro.");
         return;
       }
+
+      await recordActivity(
+        "saving_created",
+        "saving",
+        null,
+        `Se creo el ahorro ${payload.name}.`,
+      );
     }
 
     await loadSavings();
@@ -229,6 +252,12 @@ export default function SavingsScreen() {
       }
 
       await loadSavings();
+      await recordActivity(
+        "saving_deleted",
+        "saving",
+        item.id,
+        `Se elimino el ahorro ${item.name}.`,
+      );
     };
 
     if (Platform.OS === "web") {
@@ -329,6 +358,8 @@ export default function SavingsScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={commonStyles.content}>
+          <SpaceSwitcher />
+
           <View style={styles.heroCard}>
             <View style={styles.heroTextBlock}>
               <Text style={styles.heroLabel}>Ahorros</Text>
