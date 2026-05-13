@@ -185,7 +185,9 @@ export default function HomeScreen() {
 
     const savingsQuery = supabase
       .from("savings")
-      .select("monthly_amount, contributed, start_date, end_date");
+      .select(
+        "monthly_amount, contributed, withdrawn_amount, start_date, end_date",
+      );
     const { data: savingsList } = await applySpaceFilter(
       savingsQuery,
       user.id,
@@ -201,6 +203,7 @@ export default function HomeScreen() {
         (saving: {
           monthly_amount: number;
           contributed: number;
+          withdrawn_amount?: number;
           start_date: string;
           end_date: string;
         }) => {
@@ -220,9 +223,12 @@ export default function HomeScreen() {
         const passedMonths =
           now < start ? 0 : Math.min(totalMonths, Math.max(0, rawPassed));
 
-        const currentSaved =
+        const currentSaved = Math.max(
+          0,
           Number(saving.contributed || 0) +
-          passedMonths * Number(saving.monthly_amount || 0);
+            passedMonths * Number(saving.monthly_amount || 0) -
+            Number(saving.withdrawn_amount || 0),
+        );
 
         totalSavings += currentSaved;
         },

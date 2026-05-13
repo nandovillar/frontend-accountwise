@@ -41,6 +41,7 @@ type SavingItem = {
   end_date: string;
   monthly_amount: number;
   contributed: number;
+  withdrawn_amount?: number;
   borrowed?: string;
   created_at?: string;
 };
@@ -73,6 +74,8 @@ export default function SavingsScreen() {
   const [monthly, setMonthly] = useState("");
   const [contributed, setContributed] = useState("");
   const [borrowed, setBorrowed] = useState("");
+  const [movementAmount, setMovementAmount] = useState("");
+  const [isMovingSavingMoney, setIsMovingSavingMoney] = useState(false);
 
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getNextYearDate());
@@ -88,6 +91,7 @@ export default function SavingsScreen() {
     monthlyValue: number,
     contributedValue: number,
     goalValue: number,
+    withdrawnValue = 0,
   ) => {
     const now = new Date();
     const start = new Date(startDateValue);
@@ -107,9 +111,13 @@ export default function SavingsScreen() {
       now < start ? 0 : Math.min(totalMonths, Math.max(0, rawPassed));
 
     const remainingMonths = Math.max(0, totalMonths - passedMonths);
-    const currentSaved = contributedValue + passedMonths * monthlyValue;
+    const grossSaved = contributedValue + passedMonths * monthlyValue;
+    const currentSaved = Math.max(0, grossSaved - withdrawnValue);
     const pending = Math.max(0, goalValue - currentSaved);
-    const forecastSaved = contributedValue + totalMonths * monthlyValue;
+    const forecastSaved = Math.max(
+      0,
+      contributedValue + totalMonths * monthlyValue - withdrawnValue,
+    );
     const completed = currentSaved >= goalValue && goalValue > 0;
 
     const neededMonthly =
@@ -123,6 +131,7 @@ export default function SavingsScreen() {
       passedMonths,
       remainingMonths,
       currentSaved,
+      withdrawn: withdrawnValue,
       pending,
       forecastSaved,
       completed,
@@ -215,6 +224,16 @@ export default function SavingsScreen() {
     setFormVisible(true);
   };
 
+  const openSavingDetail = (item: SavingItem) => {
+    setMovementAmount("");
+    setSelectedSaving(item);
+  };
+
+  const closeSavingDetail = () => {
+    setMovementAmount("");
+    setSelectedSaving(null);
+  };
+
   const closeForm = () => {
     resetForm();
     setFormVisible(false);
@@ -266,7 +285,12 @@ export default function SavingsScreen() {
         `Se actualizo el ahorro ${payload.name}.`,
       );
     } else {
-      const { error } = await supabase.from("savings").insert([payload]);
+      const { error } = await supabase.from("savings").insert([
+        {
+          ...payload,
+          withdrawn_amount: 0,
+        },
+      ]);
 
       if (error) {
         Alert.alert("Error", "No se pudo guardar el ahorro.");
@@ -284,6 +308,142 @@ export default function SavingsScreen() {
     await loadSavings();
     closeForm();
     showActionMessage(editingId ? "Ahorro actualizado." : "Ahorro creado.");
+  };
+
+  const getPersonalIncome = async (userId: string) => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("salary")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      await supabase.from("profiles").insert({ id: userId, salary: 0 });
+      return 0;
+    }
+
+    return Number(data.salary || 0);
+  };
+
+  const updatePersonalIncome = async (userId: string, value: number) => {
+    const { error } = await supabase.from("profiles").upsert({
+      id: userId,
+      salary: Math.max(0, value),
+    });
+
+    if (error) throw error;
+  };
+
+  const moveSavingMoney = async (direction: "withdraw" | "return") => {
+    if (!selectedSaving || isMovingSavingMoney) return;
+
+    const user = await getCurrentUser();
+
+    if (!user) return;
+
+    const amount = Number(String(movementAmount).replace(",", "."));
+
+    if (!amount || amount <= 0) {
+      Alert.alert("Importe no valido", "Introduce un importe mayor que 0.");
+      return;
+    }
+
+    const result = calculateSaving(
+      selectedSaving.start_date,
+      selectedSaving.end_date,
+      Number(selectedSaving.monthly_amount || 0),
+      Number(selectedSaving.contributed || 0),
+      Number(selectedSaving.goal || 0),
+      Number(selectedSaving.withdrawn_amount || 0),
+    );
+    const currentWithdrawn = Number(selectedSaving.withdrawn_amount || 0);
+
+    if (direction === "withdraw" && amount > result.currentSaved) {
+      Alert.alert(
+        "Importe demasiado alto",
+        "No puedes retirar mas dinero del que hay disponible en este ahorro.",
+      );
+      return;
+    }
+
+    if (direction === "return" && amount > currentWithdrawn) {
+      Alert.alert(
+        "Importe demasiado alto",
+        "No puedes devolver mas dinero del que habias retirado.",
+      );
+      return;
+    }
+
+    setIsMovingSavingMoney(true);
+
+    try {
+      const currentIncome = await getPersonalIncome(user.id);
+      const nextIncome =
+        direction === "withdraw" ? currentIncome + amount : currentIncome - amount;
+
+      if (direction === "return" && nextIncome < 0) {
+        Alert.alert(
+          "No hay suficiente dinero",
+          "Tu cuenta personal no tiene ese importe disponible para devolverlo al ahorro.",
+        );
+        return;
+      }
+
+      const nextWithdrawn =
+        direction === "withdraw"
+          ? currentWithdrawn + amount
+          : Math.max(0, currentWithdrawn - amount);
+
+      const { error } = await supabase
+        .from("savings")
+        .update({ withdrawn_amount: nextWithdrawn })
+        .eq("id", selectedSaving.id)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      await updatePersonalIncome(user.id, nextIncome);
+
+      const updatedSaving = {
+        ...selectedSaving,
+        withdrawn_amount: nextWithdrawn,
+      };
+
+      setSelectedSaving(updatedSaving);
+      setSavings((current) =>
+        current.map((item) =>
+          item.id === updatedSaving.id ? updatedSaving : item,
+        ),
+      );
+      setMovementAmount("");
+
+      await refreshSavings();
+      await recordActivity(
+        direction === "withdraw"
+          ? "saving_money_withdrawn"
+          : "saving_money_returned",
+        "saving",
+        selectedSaving.id,
+        direction === "withdraw"
+          ? `Se retiraron ${amount} euros del ahorro ${selectedSaving.name}.`
+          : `Se devolvieron ${amount} euros al ahorro ${selectedSaving.name}.`,
+      );
+
+      showActionMessage(
+        direction === "withdraw"
+          ? "Dinero retirado a tu cuenta personal."
+          : "Dinero devuelto al ahorro.",
+      );
+    } catch {
+      Alert.alert(
+        "Error",
+        "No se pudo completar el movimiento. Revisa que la base de datos tenga la columna withdrawn_amount.",
+      );
+    } finally {
+      setIsMovingSavingMoney(false);
+    }
   };
 
   const deleteSaving = async (item: SavingItem) => {
@@ -342,17 +502,20 @@ export default function SavingsScreen() {
           Number(item.monthly_amount || 0),
           Number(item.contributed || 0),
           Number(item.goal || 0),
+          Number(item.withdrawn_amount || 0),
         );
 
         return {
           goals: acc.goals + Number(item.goal || 0),
           saved: acc.saved + result.currentSaved,
+          withdrawn: acc.withdrawn + Number(item.withdrawn_amount || 0),
           pending: acc.pending + result.pending,
         };
       },
       {
         goals: 0,
         saved: 0,
+        withdrawn: 0,
         pending: 0,
       },
     );
@@ -461,8 +624,8 @@ export default function SavingsScreen() {
             />
 
             <KpiCard
-              label="Planes"
-              value={String(savings.length)}
+              label="Recogido"
+              value={formatCompactMoney(totals.withdrawn)}
               styles={styles}
             />
           </View>
@@ -495,6 +658,7 @@ export default function SavingsScreen() {
                   Number(item.monthly_amount || 0),
                   Number(item.contributed || 0),
                   Number(item.goal || 0),
+                  Number(item.withdrawn_amount || 0),
                 );
 
                 return (
@@ -508,6 +672,9 @@ export default function SavingsScreen() {
                         <Text style={styles.savingStatus}>
                           {result.completed ? "Cumplido" : "En progreso"} ·{" "}
                           {result.progress.toFixed(0)}%
+                          {Number(item.withdrawn_amount || 0) > 0
+                            ? ` · ${formatCompactMoney(Number(item.withdrawn_amount || 0))} recogidos`
+                            : ""}
                         </Text>
                       </View>
 
@@ -537,9 +704,9 @@ export default function SavingsScreen() {
                       />
 
                       <InfoPill
-                        label="Mensual"
+                        label="Recogido"
                         value={formatCompactMoney(
-                          Number(item.monthly_amount || 0),
+                          Number(item.withdrawn_amount || 0),
                         )}
                       />
 
@@ -552,7 +719,7 @@ export default function SavingsScreen() {
                     <View style={styles.actionsRowRight}>
                       <Pressable
                         style={styles.iconButton}
-                        onPress={() => setSelectedSaving(item)}
+                        onPress={() => openSavingDetail(item)}
                       >
                         <Ionicons
                           name="eye-outline"
@@ -748,7 +915,7 @@ export default function SavingsScreen() {
         visible={!!selectedSaving}
         transparent
         animationType="fade"
-        onRequestClose={() => setSelectedSaving(null)}
+        onRequestClose={closeSavingDetail}
       >
         <View style={commonStyles.modalOverlay}>
           <View style={commonStyles.modalCardSmall}>
@@ -765,7 +932,7 @@ export default function SavingsScreen() {
 
               <Pressable
                 style={commonStyles.closeButton}
-                onPress={() => setSelectedSaving(null)}
+                onPress={closeSavingDetail}
               >
                 <Ionicons name="close" size={22} color={colors.primaryDark} />
               </Pressable>
@@ -779,10 +946,14 @@ export default function SavingsScreen() {
                   Number(selectedSaving.monthly_amount || 0),
                   Number(selectedSaving.contributed || 0),
                   Number(selectedSaving.goal || 0),
+                  Number(selectedSaving.withdrawn_amount || 0),
                 );
 
                 return (
-                  <View>
+                  <ScrollView
+                    style={commonStyles.modalScroll}
+                    keyboardShouldPersistTaps="handled"
+                  >
                     <View style={styles.detailHero}>
                       <Text style={styles.detailHeroLabel}>Ahorrado</Text>
 
@@ -814,6 +985,14 @@ export default function SavingsScreen() {
                     />
 
                     <ResultRow
+                      label="Dinero recogido"
+                      value={formatMoney(
+                        Number(selectedSaving.withdrawn_amount || 0),
+                      )}
+                      styles={styles}
+                    />
+
+                    <ResultRow
                       label="Ahorro mensual"
                       value={formatMoney(
                         Number(selectedSaving.monthly_amount || 0),
@@ -838,6 +1017,62 @@ export default function SavingsScreen() {
                       value={result.completed ? "Cumplido" : "En progreso"}
                       styles={styles}
                     />
+
+                    <View style={styles.movementBox}>
+                      <Text style={styles.summaryTitle}>Mover dinero</Text>
+
+                      <Text style={styles.movementText}>
+                        Retira dinero del ahorro a tu cuenta personal o
+                        devuelvelo cuando lo vuelvas a reservar.
+                      </Text>
+
+                      <AppTextInput
+                        label="Importe (€)"
+                        value={movementAmount}
+                        onChange={setMovementAmount}
+                        commonStyles={commonStyles}
+                      />
+
+                      <View style={styles.movementActions}>
+                        <Pressable
+                          style={[
+                            commonStyles.secondaryButton,
+                            styles.movementButton,
+                          ]}
+                          onPress={() => moveSavingMoney("return")}
+                          disabled={isMovingSavingMoney}
+                        >
+                          <Ionicons
+                            name="arrow-undo-outline"
+                            size={18}
+                            color={colors.primaryDark}
+                          />
+
+                          <Text style={commonStyles.secondaryButtonText}>
+                            Devolver
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={[
+                            commonStyles.primaryButton,
+                            styles.movementButton,
+                          ]}
+                          onPress={() => moveSavingMoney("withdraw")}
+                          disabled={isMovingSavingMoney}
+                        >
+                          <Ionicons
+                            name="arrow-redo-outline"
+                            size={18}
+                            color={colors.white}
+                          />
+
+                          <Text style={commonStyles.primaryButtonText}>
+                            Retirar
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
 
                     <View style={commonStyles.modalActions}>
                       <Pressable
@@ -870,7 +1105,7 @@ export default function SavingsScreen() {
                         </Text>
                       </Pressable>
                     </View>
-                  </View>
+                  </ScrollView>
                 );
               })()}
           </View>
@@ -1167,6 +1402,34 @@ const createStyles = (isDesktop: boolean) =>
       color: colors.text,
       fontWeight: "900",
       marginBottom: 8,
+    },
+
+    movementBox: {
+      backgroundColor: colors.background,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      padding: isDesktop ? 14 : 12,
+      marginTop: 12,
+      marginBottom: 12,
+    },
+
+    movementText: {
+      fontSize: isDesktop ? 12 : 10,
+      color: colors.mutedText,
+      fontWeight: "700",
+      marginBottom: 10,
+      lineHeight: isDesktop ? 18 : 15,
+    },
+
+    movementActions: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 4,
+    },
+
+    movementButton: {
+      flex: 1,
     },
 
     resultRow: {
