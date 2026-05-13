@@ -183,7 +183,7 @@ export default function HomePurchaseScreen() {
 
   const buildEmptySnapshot = (): FormSnapshot => ({
     selectedSimulationId: null,
-    name: "Nueva simulaciÃ³n",
+    name: "Nueva simulación",
     propertyPrice: "",
     agencyPercent: "",
     taxPercent: "",
@@ -556,7 +556,7 @@ export default function HomePurchaseScreen() {
                   Simulaciones guardadas
                 </Text>
                 <Text style={commonStyles.subtitle}>
-                  Abre una simulaciÃ³n propia o usa el ejemplo solo cuando lo
+                  Abre una simulación propia o usa el ejemplo solo cuando lo
                   necesites.
                 </Text>
               </View>
@@ -569,7 +569,7 @@ export default function HomePurchaseScreen() {
               >
                 <Ionicons name="add" size={19} color={colors.white} />
                 <Text style={commonStyles.primaryButtonText}>
-                  Nueva simulaciÃ³n
+                  Nueva simulación
                 </Text>
               </Pressable>
 
@@ -600,11 +600,11 @@ export default function HomePurchaseScreen() {
               </View>
 
               <Text style={commonStyles.sectionTitle}>
-                AÃºn no tienes simulaciones
+                Aún no tienes simulaciones
               </Text>
 
               <Text style={commonStyles.subtitle}>
-                Crea una nueva o abre el ejemplo para ver cÃ³mo quedarÃ­a un
+                Crea una nueva o abre el ejemplo para ver cómo quedaría un
                 caso completo.
               </Text>
             </View>
@@ -654,10 +654,10 @@ export default function HomePurchaseScreen() {
                   <View style={commonStyles.modalTitleBlock}>
                     <Text style={commonStyles.modalTitle}>
                       {selectedSimulationId
-                        ? "SimulaciÃ³n guardada"
+                        ? "Simulación guardada"
                         : name === defaultSimulation.name
-                          ? "SimulaciÃ³n de ejemplo"
-                          : "Nueva simulaciÃ³n"}
+                          ? "Simulación de ejemplo"
+                          : "Nueva simulación"}
                     </Text>
 
                     <Text style={commonStyles.modalSubtitle}>

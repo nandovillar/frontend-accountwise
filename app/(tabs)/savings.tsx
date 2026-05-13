@@ -60,6 +60,7 @@ export default function SavingsScreen() {
 
   const [savings, setSavings] = useState<SavingItem[]>([]);
   const [selectedSaving, setSelectedSaving] = useState<SavingItem | null>(null);
+  const [movementSaving, setMovementSaving] = useState<SavingItem | null>(null);
   const [actionMessage, setActionMessage] = useState("");
   const [dataError, setDataError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
@@ -230,8 +231,17 @@ export default function SavingsScreen() {
   };
 
   const closeSavingDetail = () => {
-    setMovementAmount("");
     setSelectedSaving(null);
+  };
+
+  const openMovementForm = (item: SavingItem) => {
+    setMovementAmount("");
+    setMovementSaving(item);
+  };
+
+  const closeMovementForm = () => {
+    setMovementAmount("");
+    setMovementSaving(null);
   };
 
   const closeForm = () => {
@@ -337,7 +347,7 @@ export default function SavingsScreen() {
   };
 
   const moveSavingMoney = async (direction: "withdraw" | "return") => {
-    if (!selectedSaving || isMovingSavingMoney) return;
+    if (!movementSaving || isMovingSavingMoney) return;
 
     const user = await getCurrentUser();
 
@@ -351,14 +361,14 @@ export default function SavingsScreen() {
     }
 
     const result = calculateSaving(
-      selectedSaving.start_date,
-      selectedSaving.end_date,
-      Number(selectedSaving.monthly_amount || 0),
-      Number(selectedSaving.contributed || 0),
-      Number(selectedSaving.goal || 0),
-      Number(selectedSaving.withdrawn_amount || 0),
+      movementSaving.start_date,
+      movementSaving.end_date,
+      Number(movementSaving.monthly_amount || 0),
+      Number(movementSaving.contributed || 0),
+      Number(movementSaving.goal || 0),
+      Number(movementSaving.withdrawn_amount || 0),
     );
-    const currentWithdrawn = Number(selectedSaving.withdrawn_amount || 0);
+    const currentWithdrawn = Number(movementSaving.withdrawn_amount || 0);
 
     if (direction === "withdraw" && amount > result.currentSaved) {
       Alert.alert(
@@ -399,7 +409,7 @@ export default function SavingsScreen() {
       const { error } = await supabase
         .from("savings")
         .update({ withdrawn_amount: nextWithdrawn })
-        .eq("id", selectedSaving.id)
+        .eq("id", movementSaving.id)
         .eq("user_id", user.id);
 
       if (error) throw error;
@@ -407,11 +417,14 @@ export default function SavingsScreen() {
       await updatePersonalIncome(user.id, nextIncome);
 
       const updatedSaving = {
-        ...selectedSaving,
+        ...movementSaving,
         withdrawn_amount: nextWithdrawn,
       };
 
-      setSelectedSaving(updatedSaving);
+      setMovementSaving(updatedSaving);
+      setSelectedSaving((current) =>
+        current?.id === updatedSaving.id ? updatedSaving : current,
+      );
       setSavings((current) =>
         current.map((item) =>
           item.id === updatedSaving.id ? updatedSaving : item,
@@ -425,10 +438,10 @@ export default function SavingsScreen() {
           ? "saving_money_withdrawn"
           : "saving_money_returned",
         "saving",
-        selectedSaving.id,
+        movementSaving.id,
         direction === "withdraw"
-          ? `Se retiraron ${amount} euros del ahorro ${selectedSaving.name}.`
-          : `Se devolvieron ${amount} euros al ahorro ${selectedSaving.name}.`,
+          ? `Se retiraron ${amount} euros del ahorro ${movementSaving.name}.`
+          : `Se devolvieron ${amount} euros al ahorro ${movementSaving.name}.`,
       );
 
       showActionMessage(
@@ -717,6 +730,17 @@ export default function SavingsScreen() {
                     </View>
 
                     <View style={styles.actionsRowRight}>
+                      <Pressable
+                        style={styles.iconButton}
+                        onPress={() => openMovementForm(item)}
+                      >
+                        <Ionicons
+                          name="swap-horizontal-outline"
+                          size={18}
+                          color={colors.primaryDark}
+                        />
+                      </Pressable>
+
                       <Pressable
                         style={styles.iconButton}
                         onPress={() => openSavingDetail(item)}
@@ -1018,12 +1042,103 @@ export default function SavingsScreen() {
                       styles={styles}
                     />
 
-                    <View style={styles.movementBox}>
-                      <Text style={styles.summaryTitle}>Mover dinero</Text>
+                    <View style={commonStyles.modalActions}>
+                      <Pressable
+                        style={commonStyles.secondaryButton}
+                        onPress={() => openEditForm(selectedSaving)}
+                      >
+                        <Ionicons
+                          name="create-outline"
+                          size={18}
+                          color={colors.primaryDark}
+                        />
 
+                        <Text style={commonStyles.secondaryButtonText}>
+                          Editar
+                        </Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={commonStyles.dangerButton}
+                        onPress={() => deleteSaving(selectedSaving)}
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={18}
+                          color="#B91C1C"
+                        />
+
+                        <Text style={commonStyles.dangerButtonText}>
+                          Eliminar
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </ScrollView>
+                );
+              })()}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={!!movementSaving}
+        transparent
+        animationType="fade"
+        onRequestClose={closeMovementForm}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>Mover dinero</Text>
+
+                <Text style={commonStyles.modalSubtitle}>
+                  {movementSaving?.name}
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={closeMovementForm}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            {movementSaving &&
+              (() => {
+                const result = calculateSaving(
+                  movementSaving.start_date,
+                  movementSaving.end_date,
+                  Number(movementSaving.monthly_amount || 0),
+                  Number(movementSaving.contributed || 0),
+                  Number(movementSaving.goal || 0),
+                  Number(movementSaving.withdrawn_amount || 0),
+                );
+
+                return (
+                  <View>
+                    <View style={styles.movementSummary}>
+                      <ResultRow
+                        label="Disponible en ahorro"
+                        value={formatMoney(result.currentSaved)}
+                        strong
+                        styles={styles}
+                      />
+
+                      <ResultRow
+                        label="Dinero recogido"
+                        value={formatMoney(
+                          Number(movementSaving.withdrawn_amount || 0),
+                        )}
+                        styles={styles}
+                      />
+                    </View>
+
+                    <View style={styles.movementBox}>
                       <Text style={styles.movementText}>
                         Retira dinero del ahorro a tu cuenta personal o
-                        devuelvelo cuando lo vuelvas a reservar.
+                        devuélvelo cuando lo vuelvas a reservar.
                       </Text>
 
                       <AppTextInput
@@ -1073,39 +1188,7 @@ export default function SavingsScreen() {
                         </Pressable>
                       </View>
                     </View>
-
-                    <View style={commonStyles.modalActions}>
-                      <Pressable
-                        style={commonStyles.secondaryButton}
-                        onPress={() => openEditForm(selectedSaving)}
-                      >
-                        <Ionicons
-                          name="create-outline"
-                          size={18}
-                          color={colors.primaryDark}
-                        />
-
-                        <Text style={commonStyles.secondaryButtonText}>
-                          Editar
-                        </Text>
-                      </Pressable>
-
-                      <Pressable
-                        style={commonStyles.dangerButton}
-                        onPress={() => deleteSaving(selectedSaving)}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={18}
-                          color="#B91C1C"
-                        />
-
-                        <Text style={commonStyles.dangerButtonText}>
-                          Eliminar
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </ScrollView>
+                  </View>
                 );
               })()}
           </View>
@@ -1412,6 +1495,16 @@ const createStyles = (isDesktop: boolean) =>
       padding: isDesktop ? 14 : 12,
       marginTop: 12,
       marginBottom: 12,
+    },
+
+    movementSummary: {
+      backgroundColor: colors.background,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      paddingHorizontal: isDesktop ? 14 : 12,
+      paddingVertical: isDesktop ? 8 : 6,
+      marginBottom: 10,
     },
 
     movementText: {
