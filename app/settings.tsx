@@ -15,6 +15,7 @@ import { getCurrentUser } from "@/src/utils/auth";
 
 import {
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -50,6 +51,7 @@ export default function SettingsScreen() {
   const [sharedSpaceName, setSharedSpaceName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [spaceMessage, setSpaceMessage] = useState("");
+  const [tutorialVisible, setTutorialVisible] = useState(false);
   const [spaceMessageType, setSpaceMessageType] = useState<
     "success" | "error" | null
   >(null);
@@ -276,6 +278,32 @@ export default function SettingsScreen() {
                 );
               })}
             </View>
+
+            <Pressable
+              style={styles.tutorialButton}
+              onPress={() => setTutorialVisible(true)}
+            >
+              <View style={styles.optionIcon}>
+                <Ionicons
+                  name="school-outline"
+                  size={20}
+                  color={colors.primaryDark}
+                />
+              </View>
+
+              <View style={styles.optionTextBlock}>
+                <Text style={styles.optionTitle}>Ver tutorial</Text>
+                <Text style={styles.optionDescription}>
+                  Aprende el flujo básico de la app paso a paso.
+                </Text>
+              </View>
+
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={colors.mutedText}
+              />
+            </Pressable>
           </View>
 
           <View style={commonStyles.card}>
@@ -385,6 +413,100 @@ export default function SettingsScreen() {
       </ScrollView>
 
       <AppBottomMenu active="settings" />
+
+      <Modal
+        visible={tutorialVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTutorialVisible(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCard}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>Tutorial de uso</Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  Una guía rápida para empezar con AccountWise.
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setTutorialVisible(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={commonStyles.modalScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              <TutorialStep
+                number="1"
+                title="Elige el espacio"
+                text="Usa Personal para tus datos privados. Si tienes una cuenta común, crea un espacio compartido e invita a la otra persona."
+                styles={styles}
+              />
+              <TutorialStep
+                number="2"
+                title="Configura ingresos y gastos"
+                text="En Gastos añade el sueldo, gastos fijos y otros movimientos. Los gastos fijos pueden marcarse como automáticos o manuales."
+                styles={styles}
+              />
+              <TutorialStep
+                number="3"
+                title="Revisa el resumen"
+                text="En Inicio verás el balance del mes y el gráfico por categoría para detectar dónde se va más dinero."
+                styles={styles}
+              />
+              <TutorialStep
+                number="4"
+                title="Gestiona ahorros"
+                text="En Ahorros crea objetivos, revisa el progreso y mueve dinero entre el ahorro y tu cuenta personal cuando lo necesites."
+                styles={styles}
+              />
+              <TutorialStep
+                number="5"
+                title="Simula una vivienda"
+                text="Desde Ahorros puedes abrir el simulador de casa, guardar simulaciones y compararlas más adelante."
+                styles={styles}
+              />
+            </ScrollView>
+
+            <Pressable
+              style={[commonStyles.primaryButton, styles.tutorialCloseButton]}
+              onPress={() => setTutorialVisible(false)}
+            >
+              <Text style={commonStyles.primaryButtonText}>Entendido</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function TutorialStep({
+  number,
+  title,
+  text,
+  styles,
+}: {
+  number: string;
+  title: string;
+  text: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.tutorialStep}>
+      <View style={styles.tutorialNumber}>
+        <Text style={styles.tutorialNumberText}>{number}</Text>
+      </View>
+      <View style={styles.tutorialTextBlock}>
+        <Text style={styles.tutorialTitle}>{title}</Text>
+        <Text style={styles.tutorialText}>{text}</Text>
+      </View>
     </View>
   );
 }
@@ -529,6 +651,62 @@ const createStyles = (isDesktop: boolean, isTablet: boolean) =>
       fontSize: isDesktop ? 10 : 9,
       fontWeight: "700",
       color: colors.mutedText,
+    },
+
+    tutorialButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginTop: 14,
+      paddingTop: 14,
+      borderTopWidth: 1,
+      borderTopColor: colors.borderSoft,
+    },
+
+    tutorialStep: {
+      flexDirection: "row",
+      gap: 10,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSoft,
+    },
+
+    tutorialNumber: {
+      width: 28,
+      height: 28,
+      borderRadius: 999,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    tutorialNumberText: {
+      color: colors.primaryDark,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    tutorialTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    tutorialTitle: {
+      color: colors.text,
+      fontSize: isDesktop ? 14 : 12,
+      fontWeight: "900",
+      marginBottom: 3,
+    },
+
+    tutorialText: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 11,
+      fontWeight: "700",
+      lineHeight: isDesktop ? 18 : 16,
+    },
+
+    tutorialCloseButton: {
+      marginTop: 14,
     },
 
     spaceActionButton: {

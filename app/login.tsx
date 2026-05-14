@@ -70,10 +70,15 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [name, setName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
+  const [signupPasswordRepeat, setSignupPasswordRepeat] = useState("");
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupPasswordRepeat, setShowSignupPasswordRepeat] =
+    useState(false);
 
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
@@ -111,13 +116,18 @@ export default function LoginScreen() {
     const cleanName = name.trim();
     const cleanEmail = signupEmail.trim();
 
-    if (!cleanName || !cleanEmail || !signupPassword) {
+    if (!cleanName || !cleanEmail || !signupPassword || !signupPasswordRepeat) {
       showMessage("Completa nombre, email y contraseña.");
       return;
     }
 
     if (signupPassword.length < 6) {
       showMessage("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
+    if (signupPassword !== signupPasswordRepeat) {
+      showMessage("Las contraseñas no coinciden.");
       return;
     }
 
@@ -271,7 +281,9 @@ export default function LoginScreen() {
                   value={password}
                   onChange={setPassword}
                   keyboardType="default"
-                  secureTextEntry
+                  secureTextEntry={!showPassword}
+                  rightIcon={showPassword ? "eye-off-outline" : "eye-outline"}
+                  onRightIconPress={() => setShowPassword(!showPassword)}
                   commonStyles={commonStyles}
                 />
 
@@ -324,7 +336,30 @@ export default function LoginScreen() {
                   value={signupPassword}
                   onChange={setSignupPassword}
                   keyboardType="default"
-                  secureTextEntry
+                  secureTextEntry={!showSignupPassword}
+                  rightIcon={
+                    showSignupPassword ? "eye-off-outline" : "eye-outline"
+                  }
+                  onRightIconPress={() =>
+                    setShowSignupPassword(!showSignupPassword)
+                  }
+                  commonStyles={commonStyles}
+                />
+
+                <AppTextInput
+                  label="Repetir contraseña"
+                  value={signupPasswordRepeat}
+                  onChange={setSignupPasswordRepeat}
+                  keyboardType="default"
+                  secureTextEntry={!showSignupPasswordRepeat}
+                  rightIcon={
+                    showSignupPasswordRepeat
+                      ? "eye-off-outline"
+                      : "eye-outline"
+                  }
+                  onRightIconPress={() =>
+                    setShowSignupPasswordRepeat(!showSignupPasswordRepeat)
+                  }
                   commonStyles={commonStyles}
                 />
 

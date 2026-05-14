@@ -163,6 +163,25 @@ export const createCommonStyles = (isDesktop: boolean) => {
       color: colors.text,
     },
 
+    inputShell: {
+      position: "relative",
+      justifyContent: "center",
+    },
+
+    inputWithIcon: {
+      paddingRight: 44,
+    },
+
+    inputIconButton: {
+      position: "absolute",
+      right: 8,
+      width: 34,
+      height: 34,
+      borderRadius: 999,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
     divider: {
       height: 1,
       backgroundColor: colors.borderSoft,
