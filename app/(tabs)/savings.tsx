@@ -278,7 +278,7 @@ export default function SavingsScreen() {
     const contributedAmount = parseMoneyInput(contributed);
 
     if (goalAmount <= 0) {
-      Alert.alert("Importe no valido", "El objetivo debe ser mayor que 0.");
+      Alert.alert("Importe no válido", "El objetivo debe ser mayor que 0.");
       return;
     }
 
@@ -310,7 +310,7 @@ export default function SavingsScreen() {
         "saving_updated",
         "saving",
         editingId,
-        `Se actualizo el ahorro ${payload.name}.`,
+        `Se actualizó el ahorro ${payload.name}.`,
       );
     } else {
       const { error } = await supabase.from("savings").insert([
@@ -329,7 +329,7 @@ export default function SavingsScreen() {
         "saving_created",
         "saving",
         null,
-        `Se creo el ahorro ${payload.name}.`,
+        `Se creó el ahorro ${payload.name}.`,
       );
     }
 
@@ -374,7 +374,7 @@ export default function SavingsScreen() {
     const amount = parseMoneyInput(movementAmount);
 
     if (!amount || amount <= 0) {
-      Alert.alert("Importe no valido", "Introduce un importe mayor que 0.");
+      Alert.alert("Importe no válido", "Introduce un importe mayor que 0.");
       return;
     }
 
@@ -391,7 +391,7 @@ export default function SavingsScreen() {
     if (direction === "withdraw" && amount > result.currentSaved) {
       Alert.alert(
         "Importe demasiado alto",
-        "No puedes retirar mas dinero del que hay disponible en este ahorro.",
+        "No puedes retirar más dinero del que hay disponible en este ahorro.",
       );
       return;
     }
@@ -399,7 +399,7 @@ export default function SavingsScreen() {
     if (direction === "return" && amount > currentWithdrawn) {
       Alert.alert(
         "Importe demasiado alto",
-        "No puedes devolver mas dinero del que habias retirado.",
+        "No puedes devolver más dinero del que habías retirado.",
       );
       return;
     }
@@ -504,7 +504,7 @@ export default function SavingsScreen() {
         "saving_deleted",
         "saving",
         item.id,
-        `Se elimino el ahorro ${item.name}.`,
+        `Se eliminó el ahorro ${item.name}.`,
       );
     };
 
@@ -676,7 +676,7 @@ export default function SavingsScreen() {
 
             {savings.length === 0 ? (
               <EmptyState
-                title="No tienes ahorros todavia"
+                title="No tienes ahorros todavía"
                 text="Crea tu primer objetivo para ver el resumen y el progreso."
                 actionLabel="Crear objetivo"
                 icon="wallet-outline"

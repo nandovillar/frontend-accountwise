@@ -387,7 +387,7 @@ export default function HomePurchaseScreen() {
       "home_simulation_updated",
       "home_purchase_simulation",
       selectedSimulationId,
-      `Se actualizo la simulacion ${payload.name}.`,
+      `Se actualizó la simulación ${payload.name}.`,
     );
     Alert.alert("Guardado", "Cambios guardados correctamente.");
   };
@@ -431,7 +431,7 @@ export default function HomePurchaseScreen() {
       "home_simulation_created",
       "home_purchase_simulation",
       data?.id || null,
-      `Se creo la simulacion ${finalName}.`,
+      `Se creó la simulación ${finalName}.`,
     );
     Alert.alert("Guardado", "Simulación guardada correctamente.");
   };
@@ -462,7 +462,7 @@ export default function HomePurchaseScreen() {
         "home_simulation_deleted",
         "home_purchase_simulation",
         selectedSimulationId,
-        "Se elimino una simulacion de casa.",
+        "Se eliminó una simulación de casa.",
       );
     };
 

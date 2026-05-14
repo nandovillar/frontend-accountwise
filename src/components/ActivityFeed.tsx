@@ -29,7 +29,7 @@ export function ActivityFeed({ items }: { items: SpaceActivity[] }) {
     <View style={styles.card}>
       <View style={styles.header}>
         <Ionicons name="notifications-outline" size={16} color={colors.primaryDark} />
-        <Text style={styles.title}>Ultimos cambios</Text>
+        <Text style={styles.title}>Últimos cambios</Text>
       </View>
 
       {items.map((item) => (

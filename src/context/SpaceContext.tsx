@@ -253,17 +253,17 @@ export function SpaceProvider({ children }: { children: ReactNode }) {
       }
 
       if (message.includes("schema cache") || message.includes("function")) {
-        return "Supabase todavia no ha actualizado la funcion de invitacion. Recarga el schema y prueba de nuevo.";
+        return "Supabase todavía no ha actualizado la función de invitación. Recarga el schema y prueba de nuevo.";
       }
 
-      return `No se pudo anadir el usuario: ${error.message}`;
+      return `No se pudo añadir el usuario: ${error.message}`;
     }
 
     await recordActivity(
       "member_invited",
       "space",
       activeSpaceId,
-      `Se invito a ${cleanEmail} al espacio compartido.`,
+      `Se invitó a ${cleanEmail} al espacio compartido.`,
     );
     return null;
   };

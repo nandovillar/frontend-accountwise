@@ -88,7 +88,7 @@ export default function SettingsScreen() {
     setSpaceMessageType(null);
 
     if (!inviteEmail.trim()) {
-      setSpaceMessage("Introduce el email de la persona que quieres anadir.");
+      setSpaceMessage("Introduce el email de la persona que quieres añadir.");
       setSpaceMessageType("error");
       return;
     }
@@ -182,8 +182,8 @@ export default function SettingsScreen() {
             <Text style={commonStyles.cardTitle}>Preferencias</Text>
 
             <Text style={[commonStyles.subtitle, styles.description]}>
-              Desde aqui puedes revisar tu cuenta y acceder a opciones basicas
-              de la aplicacion.
+              Desde aquí puedes revisar tu cuenta y acceder a opciones básicas
+              de la aplicación.
             </Text>
 
             <View style={styles.optionRow}>
@@ -196,7 +196,7 @@ export default function SettingsScreen() {
               </View>
 
               <View style={styles.optionTextBlock}>
-                <Text style={styles.optionTitle}>Sesion protegida</Text>
+                <Text style={styles.optionTitle}>Sesión protegida</Text>
 
                 <Text style={styles.optionDescription}>
                   Tus gastos, ahorros y simulaciones se cargan usando tu
@@ -283,7 +283,7 @@ export default function SettingsScreen() {
 
             <Text style={[commonStyles.subtitle, styles.description]}>
               Usa Personal para tus datos privados y crea un espacio compartido
-              para una cuenta comun.
+              para una cuenta común.
             </Text>
 
             <SpaceSwitcher />
@@ -327,7 +327,7 @@ export default function SettingsScreen() {
                     color={colors.primaryDark}
                   />
                   <Text style={commonStyles.secondaryButtonText}>
-                    Anadir al espacio activo
+                    Añadir al espacio activo
                   </Text>
                 </Pressable>
               </>
@@ -369,7 +369,7 @@ export default function SettingsScreen() {
             <Text style={commonStyles.cardTitle}>Acciones</Text>
 
             <Text style={[commonStyles.subtitle, styles.description]}>
-              Cierra la sesion cuando termines de usar la aplicacion.
+              Cierra la sesión cuando termines de usar la aplicación.
             </Text>
 
             <Pressable
@@ -378,7 +378,7 @@ export default function SettingsScreen() {
             >
               <Ionicons name="log-out-outline" size={18} color="#B91C1C" />
 
-              <Text style={commonStyles.dangerButtonText}>Cerrar sesion</Text>
+              <Text style={commonStyles.dangerButtonText}>Cerrar sesión</Text>
             </Pressable>
           </View>
         </View>

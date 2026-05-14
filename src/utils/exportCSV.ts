@@ -2,7 +2,7 @@ import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 export async function exportExpensesToCSV(expenses: any[]) {
-  let csv = "fecha,categoria,descripcion,cantidad\n";
+  let csv = "fecha,categoría,descripción,cantidad\n";
 
   expenses.forEach((item) => {
     csv += `${item.date},${item.category},${item.description},${item.amount}\n`;

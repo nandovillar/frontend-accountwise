@@ -30,19 +30,19 @@ const getSignupErrorMessage = (error: AuthErrorLike) => {
   const normalized = message.toLowerCase();
 
   if (normalized.includes("already") || normalized.includes("registered")) {
-    return "Este email ya esta registrado. Prueba a iniciar sesion.";
+    return "Este email ya está registrado. Prueba a iniciar sesión.";
   }
 
   if (normalized.includes("invalid email")) {
-    return "El email no parece valido.";
+    return "El email no parece válido.";
   }
 
   if (normalized.includes("password")) {
-    return "La contrasena no cumple los requisitos de Supabase.";
+    return "La contraseña no cumple los requisitos de Supabase.";
   }
 
   if (normalized.includes("signup") && normalized.includes("disabled")) {
-    return "El registro esta desactivado en Supabase Auth.";
+    return "El registro está desactivado en Supabase Auth.";
   }
 
   if (normalized.includes("database")) {
@@ -97,7 +97,7 @@ export default function LoginScreen() {
     });
 
     if (error) {
-      showMessage("Email o contrasena incorrectos");
+      showMessage("Email o contraseña incorrectos");
       return;
     }
 
@@ -112,12 +112,12 @@ export default function LoginScreen() {
     const cleanEmail = signupEmail.trim();
 
     if (!cleanName || !cleanEmail || !signupPassword) {
-      showMessage("Completa nombre, email y contrasena.");
+      showMessage("Completa nombre, email y contraseña.");
       return;
     }
 
     if (signupPassword.length < 6) {
-      showMessage("La contrasena debe tener al menos 6 caracteres.");
+      showMessage("La contraseña debe tener al menos 6 caracteres.");
       return;
     }
 
@@ -137,7 +137,7 @@ export default function LoginScreen() {
     }
 
     if (data.user?.identities && data.user.identities.length === 0) {
-      showMessage("Este email ya esta registrado. Prueba a iniciar sesion.");
+      showMessage("Este email ya está registrado. Prueba a iniciar sesión.");
       return;
     }
 
@@ -173,7 +173,7 @@ export default function LoginScreen() {
     clearMessage();
 
     if (!email.trim()) {
-      showMessage("Introduce tu email para recuperar la contrasena");
+      showMessage("Introduce tu email para recuperar la contraseña");
       return;
     }
 
@@ -183,8 +183,8 @@ export default function LoginScreen() {
 
     showMessage(
       error
-        ? "No se pudo enviar el email de recuperacion"
-        : "Te hemos enviado un email para restablecer tu contrasena",
+        ? "No se pudo enviar el email de recuperación"
+        : "Te hemos enviado un email para restablecer tu contraseña",
       !!error,
     );
   };
@@ -213,7 +213,7 @@ export default function LoginScreen() {
           <View style={commonStyles.card}>
             <View style={styles.modeSwitch}>
               <AuthModeButton
-                label="Iniciar sesion"
+                label="Iniciar sesión"
                 active={mode === "login"}
                 onPress={() => {
                   setMode("login");
@@ -267,7 +267,7 @@ export default function LoginScreen() {
                 />
 
                 <AppTextInput
-                  label="Contrasena"
+                  label="Contraseña"
                   value={password}
                   onChange={setPassword}
                   keyboardType="default"
@@ -292,7 +292,7 @@ export default function LoginScreen() {
                   onPress={handleResetPassword}
                 >
                   <Text style={styles.forgotText}>
-                    Olvidaste tu contrasena?
+                    ¿Olvidaste tu contraseña?
                   </Text>
                 </Pressable>
               </View>
@@ -320,7 +320,7 @@ export default function LoginScreen() {
                 />
 
                 <AppTextInput
-                  label="Contrasena"
+                  label="Contraseña"
                   value={signupPassword}
                   onChange={setSignupPassword}
                   keyboardType="default"

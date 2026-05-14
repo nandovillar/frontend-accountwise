@@ -756,7 +756,7 @@ export default function TabTwoScreen() {
 
     const value = parseMoneyInput(salaryInput);
     if (value < 0) {
-      Alert.alert("Importe no valido", "Introduce un importe igual o mayor que 0.");
+      Alert.alert("Importe no válido", "Introduce un importe igual o mayor que 0.");
       return;
     }
 
@@ -772,7 +772,7 @@ export default function TabTwoScreen() {
         "space_income_updated",
         "space_settings",
         activeSpaceId,
-        "Se actualizo el ingreso mensual del espacio.",
+        "Se actualizó el ingreso mensual del espacio.",
       );
     } else {
       await supabase.from("profiles").upsert({ id: user.id, salary: value });
@@ -792,7 +792,7 @@ export default function TabTwoScreen() {
     const expenseAmount = parseMoneyInput(amount);
 
     if (expenseAmount <= 0) {
-      Alert.alert("Importe no valido", "El gasto debe ser mayor que 0.");
+      Alert.alert("Importe no válido", "El gasto debe ser mayor que 0.");
       return;
     }
 
@@ -820,7 +820,7 @@ export default function TabTwoScreen() {
       "transaction_created",
       "transaction",
       null,
-      `Se anadio el gasto ${title}.`,
+      `Se añadió el gasto ${title}.`,
     );
 
     setTitle("");
@@ -869,7 +869,7 @@ export default function TabTwoScreen() {
     const value = parseMoneyInput(bizumAmount);
 
     if (value <= 0) {
-      Alert.alert("Importe no valido", "El importe debe ser mayor que 0.");
+      Alert.alert("Importe no válido", "El importe debe ser mayor que 0.");
       return;
     }
 
@@ -897,7 +897,7 @@ export default function TabTwoScreen() {
       isReceived ? "bizum_received_created" : "bizum_sent_created",
       "transaction",
       null,
-      `${isReceived ? "Se registro un Bizum recibido de" : "Se registro un Bizum enviado a"} ${bizumName.trim()} por ${bizumConcept.trim()}.`,
+      `${isReceived ? "Se registró un Bizum recibido de" : "Se registró un Bizum enviado a"} ${bizumName.trim()} por ${bizumConcept.trim()}.`,
     );
 
     closeBizumModal();
@@ -913,7 +913,7 @@ export default function TabTwoScreen() {
     if (!user || !activeSpaceId) return;
 
     if (!value || value <= 0) {
-      Alert.alert("Importe no valido", "La aportacion debe ser mayor que 0.");
+      Alert.alert("Importe no válido", "La aportación debe ser mayor que 0.");
       return;
     }
 
@@ -951,7 +951,7 @@ export default function TabTwoScreen() {
       "space_income_created",
       "space_contribution",
       null,
-      `Se registro un ingreso de ${value} €.`,
+      `Se registró un ingreso de ${value} €.`,
     );
 
     setSpaceIncomeAmount("");
@@ -959,7 +959,7 @@ export default function TabTwoScreen() {
     setSpaceIncomeNote("");
     setSpaceIncomeModalVisible(false);
     await loadAllRef.current();
-    showActionMessage("Aportacion registrada.");
+    showActionMessage("Aportación registrada.");
   };
 
   const handleAddFixedExpense = async () => {
@@ -971,7 +971,7 @@ export default function TabTwoScreen() {
     const fixedExpenseAmount = parseMoneyInput(fixedAmount);
 
     if (fixedExpenseAmount <= 0) {
-      Alert.alert("Importe no valido", "El gasto fijo debe ser mayor que 0.");
+      Alert.alert("Importe no válido", "El gasto fijo debe ser mayor que 0.");
       return;
     }
 
@@ -1016,7 +1016,7 @@ export default function TabTwoScreen() {
       "fixed_expense_created",
       "fixed_expense",
       null,
-      `Se anadio el gasto fijo ${fixedTitle}.`,
+      `Se añadió el gasto fijo ${fixedTitle}.`,
     );
 
     setFixedTitle("");
@@ -1126,7 +1126,7 @@ export default function TabTwoScreen() {
         "fixed_expense_updated",
         "fixed_expense",
         editingItem.id,
-        `Se edito el gasto fijo ${editingItem.title}.`,
+        `Se editó el gasto fijo ${editingItem.title}.`,
       );
       return;
     }
@@ -1148,7 +1148,7 @@ export default function TabTwoScreen() {
       "transaction_updated",
       "transaction",
       editingItem.id,
-      `Se edito el gasto ${editingItem.title}.`,
+      `Se editó el gasto ${editingItem.title}.`,
     );
   };
 
@@ -1164,7 +1164,7 @@ export default function TabTwoScreen() {
       "fixed_expense_toggled",
       "fixed_expense",
       item.id,
-      `${item.title} se marco como ${item.is_paid ? "pendiente" : "pagado"}.`,
+      `${item.title} se marcó como ${item.is_paid ? "pendiente" : "pagado"}.`,
     );
   };
 
@@ -1189,7 +1189,7 @@ export default function TabTwoScreen() {
         "fixed_expense_deleted",
         "fixed_expense",
         item.id,
-        `Se elimino el gasto fijo ${item.title}.`,
+        `Se eliminó el gasto fijo ${item.title}.`,
       );
     };
 
@@ -1214,7 +1214,7 @@ export default function TabTwoScreen() {
         "transaction_deleted",
         "transaction",
         item.id,
-        `Se elimino el gasto ${item.title}.`,
+        `Se eliminó el gasto ${item.title}.`,
       );
     };
 
@@ -1308,7 +1308,7 @@ export default function TabTwoScreen() {
         "fixed_expense_transferred",
         "fixed_expense",
         item.id,
-        `Se traspaso el gasto fijo ${item.title}.`,
+        `Se traspasó el gasto fijo ${item.title}.`,
       );
       showActionMessage("Gasto fijo copiado al destino.");
       await loadAllRef.current();
@@ -1356,7 +1356,7 @@ export default function TabTwoScreen() {
         "transaction_transferred",
         "transaction",
         item.id,
-        `Se traspaso el gasto ${item.title}.`,
+        `Se traspasó el gasto ${item.title}.`,
       );
       showActionMessage("Gasto copiado al destino.");
       await loadAllRef.current();
@@ -2499,7 +2499,7 @@ export default function TabTwoScreen() {
                   Aportar dinero al espacio
                 </Text>
                 <Text style={commonStyles.modalSubtitle}>
-                  Se suma aqui y se descuenta de tu personal
+                  Se suma aquí y se descuenta de tu personal
                 </Text>
               </View>
 

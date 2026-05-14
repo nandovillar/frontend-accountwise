@@ -433,9 +433,9 @@ export default function HomeScreen() {
           </View>
 
           <View style={commonStyles.card}>
-            <Text style={commonStyles.cardTitle}>Gasto por categoria</Text>
+            <Text style={commonStyles.cardTitle}>Gasto por categoría</Text>
             <Text style={commonStyles.subtitle}>
-              Peso de cada categoria sobre tus ingresos del mes
+              Peso de cada categoría sobre tus ingresos del mes
             </Text>
 
             <CategoryChart
@@ -542,7 +542,7 @@ function CategoryChart({
           color={colors.primaryDark}
         />
         <Text style={styles.emptyChartText}>
-          Todavia no hay gastos para este mes.
+          Todavía no hay gastos para este mes.
         </Text>
       </View>
     );
