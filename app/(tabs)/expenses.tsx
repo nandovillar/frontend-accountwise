@@ -32,6 +32,12 @@ import {
   getTodayDate,
 } from "@/src/utils/dates";
 import { getCurrentUser } from "@/src/utils/auth";
+import {
+  colorOptions,
+  getCategoryColor,
+  getCategorySoftColor,
+  normalizeColor,
+} from "@/src/utils/categoryColors";
 import { formatCompactMoney, parseMoneyInput } from "@/src/utils/money";
 import {
   canDeleteExpense,
@@ -55,14 +61,11 @@ import {
 } from "react-native";
 
 const defaultCategories = [
-  "Otros",
   "Casa",
   "Comida",
-  "Compras",
-  "Ocio",
-  "Salud",
-  "Suscripciones",
   "Transporte",
+  "Salud",
+  "Ocio",
 ];
 
 type EditingType = "fixed" | "variable" | null;
@@ -156,6 +159,13 @@ export default function TabTwoScreen() {
 
   const [categories, setCategories] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState("");
+  const [newCategoryColor, setNewCategoryColor] = useState(colorOptions[0]);
+  const [categoryColors, setCategoryColors] = useState<Record<string, string>>(
+    {},
+  );
+  const [categoryColorDrafts, setCategoryColorDrafts] = useState<
+    Record<string, string>
+  >({});
 
   const [fixedFilterCategory, setFixedFilterCategory] = useState("Todas");
   const [fixedPaidFilter, setFixedPaidFilter] =
@@ -219,9 +229,9 @@ export default function TabTwoScreen() {
     const unique = Array.from(new Set(normalized.filter(Boolean)));
 
     return [
-      "Otros",
+      ...defaultCategories.filter((item) => unique.includes(item)),
       ...unique
-        .filter((item) => item !== "Otros")
+        .filter((item) => !defaultCategories.includes(item))
         .sort((a, b) => a.localeCompare(b)),
     ];
   };
@@ -394,27 +404,56 @@ export default function TabTwoScreen() {
 
     const categoriesQuery = supabase
       .from("expense_categories")
-      .select("name")
+      .select("name, color")
       .order("name", { ascending: true });
-    const { data, error } = await applySpaceFilter(
+    let { data, error } = await applySpaceFilter(
       categoriesQuery,
       user.id,
       activeSpaceId,
     );
 
+    if (error && String(error.message || "").includes("color")) {
+      const fallbackQuery = supabase
+        .from("expense_categories")
+        .select("name")
+        .order("name", { ascending: true });
+      const fallback = await applySpaceFilter(
+        fallbackQuery,
+        user.id,
+        activeSpaceId,
+      );
+      data = fallback.data;
+      error = fallback.error;
+    }
+
     if (error) {
       setCategories(defaultCategories);
+      setCategoryColors({});
       return;
     }
 
     if (!data || data.length === 0) {
       setCategories(defaultCategories);
+      setCategoryColors({});
       return;
     }
 
-    const loaded = data.map((item: { name: string }) =>
+    const loaded = data.map((item: { name: string; color?: string }) =>
       normalizeCategory(item.name),
     );
+    const loadedColors = data.reduce(
+      (
+        acc: Record<string, string>,
+        item: { name: string; color?: string | null },
+      ) => {
+        const category = normalizeCategory(item.name);
+        const normalizedColor = normalizeColor(item.color);
+        if (normalizedColor) acc[category] = normalizedColor;
+        return acc;
+      },
+      {},
+    );
+
     setCategories(
       sortCategories([
         ...defaultCategories,
@@ -425,16 +464,19 @@ export default function TabTwoScreen() {
         "Pendiente de cobrar",
       ]),
     );
+    setCategoryColors(loadedColors);
   };
 
   const createCategory = async (onCreated?: (category: string) => void) => {
     const cleanName = newCategory.trim();
     if (!cleanName) return;
+    const cleanColor = normalizeColor(newCategoryColor) || colorOptions[0];
 
     if (categories.includes(cleanName)) {
       onCreated?.(cleanName);
       setEditCategory(cleanName);
       setNewCategory("");
+      setNewCategoryColor(colorOptions[0]);
       setShowAddCategoryInModal(false);
       return;
     }
@@ -443,11 +485,21 @@ export default function TabTwoScreen() {
 
     if (!user) return;
 
-    const { error } = await supabase.from("expense_categories").insert({
+    let { error } = await supabase.from("expense_categories").insert({
       user_id: user.id,
       name: cleanName,
+      color: cleanColor,
       ...getSpacePayload(activeSpaceId),
     });
+
+    if (error && String(error.message || "").includes("color")) {
+      const fallback = await supabase.from("expense_categories").insert({
+        user_id: user.id,
+        name: cleanName,
+        ...getSpacePayload(activeSpaceId),
+      });
+      error = fallback.error;
+    }
 
     if (error) {
       Alert.alert("Error", "No se pudo crear la categoría.");
@@ -457,7 +509,69 @@ export default function TabTwoScreen() {
     setEditCategory(cleanName);
     onCreated?.(cleanName);
     setNewCategory("");
+    setNewCategoryColor(colorOptions[0]);
     setShowAddCategoryInModal(false);
+    await loadCategories();
+  };
+
+  const saveCategoryColor = async (category: string) => {
+    const cleanCategory = normalizeCategory(category);
+    const nextColor = normalizeColor(
+      categoryColorDrafts[cleanCategory] ||
+        categoryColors[cleanCategory] ||
+        getCategoryColor(cleanCategory, categoryColors),
+    );
+
+    if (!nextColor) {
+      Alert.alert("Color no válido", "Usa #38BDF8 o rgb(56,189,248).");
+      return;
+    }
+
+    const user = await getCurrentUser();
+    if (!user) return;
+
+    const existingQuery = supabase
+      .from("expense_categories")
+      .select("id")
+      .eq("name", cleanCategory)
+      .limit(1);
+    const { data: existing, error: findError } = await applySpaceFilter(
+      existingQuery,
+      user.id,
+      activeSpaceId,
+    );
+
+    if (findError) {
+      Alert.alert("Error", "No se pudo preparar el cambio de color.");
+      return;
+    }
+
+    const existingId = existing?.[0]?.id;
+    const result = existingId
+      ? await supabase
+          .from("expense_categories")
+          .update({ color: nextColor })
+          .eq("id", existingId)
+      : await supabase.from("expense_categories").insert({
+          user_id: user.id,
+          name: cleanCategory,
+          color: nextColor,
+          ...getSpacePayload(activeSpaceId),
+        });
+
+    if (result.error) {
+      Alert.alert(
+        "Falta actualizar Supabase",
+        "Para guardar colores ejecuta: alter table public.expense_categories add column if not exists color text;",
+      );
+      return;
+    }
+
+    setCategoryColors((current) => ({
+      ...current,
+      [cleanCategory]: nextColor,
+    }));
+    showActionMessage("Color de categoría actualizado.");
     await loadCategories();
   };
 
@@ -1733,19 +1847,242 @@ export default function TabTwoScreen() {
   const renderCategorySelector = (
     selected: string,
     onSelect: (category: string) => void,
-  ) => (
-    <View>
-      <View style={styles.categoryList}>
-        {categories.map((category) => (
+  ) => {
+    const selectedColor = getCategoryColor(selected, categoryColors);
+    const colorDraft = categoryColorDrafts[selected] || selectedColor;
+
+    return (
+      <View>
+        <View style={styles.categoryList}>
+          {categories.map((category) => {
+            const categoryColor = getCategoryColor(category, categoryColors);
+            const active = selected === category;
+
+            return (
+              <Pressable
+                key={category}
+                style={[
+                  styles.categoryButton,
+                  {
+                    borderColor: categoryColor,
+                    backgroundColor: active
+                      ? categoryColor
+                      : getCategorySoftColor(categoryColor),
+                  },
+                ]}
+                onPress={() => onSelect(category)}
+              >
+                <View
+                  style={[
+                    styles.categorySwatch,
+                    { backgroundColor: categoryColor },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.categoryButtonText,
+                    active && styles.categoryButtonTextActive,
+                  ]}
+                >
+                  {category}
+                </Text>
+              </Pressable>
+            );
+          })}
           <Pressable
-            key={category}
-            style={[
-              styles.categoryButton,
-              selected === category && styles.categoryButtonActive,
-            ]}
-            onPress={() => onSelect(category)}
+            style={styles.categoryAddButton}
+            onPress={() => setShowAddCategoryInModal(!showAddCategoryInModal)}
           >
-            <Text
+            <Ionicons name="add" size={16} color={colors.primaryDark} />
+            <Text style={styles.categoryAddButtonText}>Crear categoría</Text>
+          </Pressable>
+        </View>
+
+        {selected && (
+          <View style={styles.categoryColorBox}>
+            <Text style={styles.categoryColorTitle}>Color de {selected}</Text>
+            <View style={styles.colorSwatchRow}>
+              {colorOptions.map((option) => (
+                <Pressable
+                  key={option}
+                  style={[
+                    styles.colorSwatchButton,
+                    { backgroundColor: option },
+                    normalizeColor(colorDraft) === option &&
+                      styles.colorSwatchButtonActive,
+                  ]}
+                  onPress={() =>
+                    setCategoryColorDrafts((current) => ({
+                      ...current,
+                      [selected]: option,
+                    }))
+                  }
+                />
+              ))}
+            </View>
+            <View style={styles.categoryColorEditRow}>
+              <TextInput
+                style={styles.categoryColorInput}
+                value={colorDraft}
+                placeholder="#38BDF8 o rgb(56,189,248)"
+                onChangeText={(value) =>
+                  setCategoryColorDrafts((current) => ({
+                    ...current,
+                    [selected]: value,
+                  }))
+                }
+              />
+              <Pressable
+                style={styles.saveCategoryButton}
+                onPress={() => saveCategoryColor(selected)}
+              >
+                <Text style={styles.saveCategoryButtonText}>Guardar color</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {showAddCategoryInModal && (
+          <View style={styles.addCategoryBox}>
+            <TextInput
+              style={styles.categoryInput}
+              placeholder="Nueva categoría"
+              value={newCategory}
+              onChangeText={setNewCategory}
+            />
+            <View style={styles.colorSwatchRow}>
+              {colorOptions.map((option) => (
+                <Pressable
+                  key={option}
+                  style={[
+                    styles.colorSwatchButton,
+                    { backgroundColor: option },
+                    normalizeColor(newCategoryColor) === option &&
+                      styles.colorSwatchButtonActive,
+                  ]}
+                  onPress={() => setNewCategoryColor(option)}
+                />
+              ))}
+            </View>
+            <TextInput
+              style={styles.categoryInput}
+              placeholder="#38BDF8 o rgb(56,189,248)"
+              value={newCategoryColor}
+              onChangeText={setNewCategoryColor}
+            />
+            <Pressable
+              style={styles.saveCategoryButton}
+              onPress={() => createCategory(onSelect)}
+            >
+              <Text style={styles.saveCategoryButtonText}>Crear</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderFilterSelector = (
+    selected: string,
+    onSelect: (category: string) => void,
+    isOpen: boolean,
+    setIsOpen: (value: boolean) => void,
+    extraCategories: string[] = [],
+  ) => {
+    const options = ["Todas", ...sortCategories([...categories, ...extraCategories])];
+
+    return (
+      <View style={styles.filterDropdown}>
+        <Pressable
+          style={styles.filterDropdownButton}
+          onPress={() => setIsOpen(!isOpen)}
+        >
+          <Text style={styles.filterDropdownText}>{selected}</Text>
+          <Ionicons
+            name={isOpen ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={colors.primaryDark}
+          />
+        </Pressable>
+
+        {isOpen && (
+          <View style={styles.filterDropdownOptions}>
+            {options.map((category) => (
+              <Pressable
+                key={category}
+                style={[
+                  styles.filterDropdownOption,
+                  selected === category && styles.filterDropdownOptionActive,
+                ]}
+                onPress={() => {
+                  onSelect(category);
+                  setIsOpen(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.filterDropdownOptionText,
+                    selected === category &&
+                      styles.filterDropdownOptionTextActive,
+                  ]}
+                >
+                  {category}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderCategoryBadge = (category: string) => {
+    const normalized = normalizeCategory(category);
+    const categoryColor = getCategoryColor(normalized, categoryColors);
+
+    return (
+      <View
+        style={[
+          styles.categoryBadge,
+          {
+            backgroundColor: getCategorySoftColor(categoryColor),
+            borderColor: categoryColor,
+          },
+        ]}
+      >
+        <Text style={[styles.categoryBadgeText, { color: categoryColor }]}>
+          {normalized}
+        </Text>
+      </View>
+    );
+  };
+
+  const renderDateButton = (date: string, onPress: () => void) => (
+    <Pressable style={styles.dateButton} onPress={onPress}>
+      <Text style={styles.dateButtonText}>{formatDateText(date)}</Text>
+      <Ionicons name="calendar-outline" size={16} color={colors.primaryDark} />
+    </Pressable>
+  );
+
+  const renderMoneyInput = (
+    value: string,
+    onChangeText: (text: string) => void,
+    placeholder = "Importe",
+  ) => (
+    <View style={styles.moneyInputShell}>
+      <TextInput
+        style={[styles.input, styles.moneyInput]}
+        placeholder={placeholder}
+        value={value}
+        keyboardType="decimal-pad"
+        inputMode="decimal"
+        onChangeText={onChangeText}
+      />
+      <Text style={styles.moneyInputSuffix}>€</Text>
+    </View>
+  );
+
+  /*
               style={[
                 styles.categoryButtonText,
                 selected === category && styles.categoryButtonTextActive,
@@ -1869,6 +2206,7 @@ export default function TabTwoScreen() {
       <Text style={styles.moneyInputSuffix}>€</Text>
     </View>
   );
+  */
 
   const renderPaymentModeSelector = (
     value: boolean,
@@ -2327,7 +2665,16 @@ export default function TabTwoScreen() {
                       >
                         {item.title}
                       </Text>
-                      {renderCategoryBadge(currentCategory)}
+                      <View style={styles.categoryMetaStack}>
+                        {renderCategoryBadge(currentCategory)}
+                        <View style={styles.paymentTypeBadge}>
+                          <Text style={styles.paymentTypeBadgeText}>
+                            {item.auto_pay ?? true
+                              ? "Pago automático"
+                              : "Pago manual"}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
 
                     <Text style={styles.expenseMeta}>
@@ -2336,11 +2683,6 @@ export default function TabTwoScreen() {
                     {item.is_transferred && (
                       <Text style={styles.expenseMeta}>Traspasado</Text>
                     )}
-                    <View style={styles.paymentTypeBadge}>
-                      <Text style={styles.paymentTypeBadgeText}>
-                        {item.auto_pay ?? true ? "Pago automático" : "Pago manual"}
-                      </Text>
-                    </View>
                   </View>
 
                   <Ionicons
@@ -3585,6 +3927,9 @@ const createStyles = (isDesktop: boolean) =>
       borderRadius: 999,
       paddingVertical: 6,
       paddingHorizontal: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
     },
 
     categoryButtonActive: {
@@ -3600,6 +3945,14 @@ const createStyles = (isDesktop: boolean) =>
 
     categoryButtonTextActive: {
       color: colors.white,
+    },
+
+    categorySwatch: {
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.8)",
     },
 
     categoryAddButton: {
@@ -3670,8 +4023,58 @@ const createStyles = (isDesktop: boolean) =>
 
     addCategoryBox: {
       marginTop: 8,
-      flexDirection: "row",
       gap: 8,
+    },
+
+    categoryColorBox: {
+      marginTop: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      padding: 10,
+      backgroundColor: colors.background,
+      gap: 8,
+    },
+
+    categoryColorTitle: {
+      color: colors.text,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
+    colorSwatchRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+
+    colorSwatchButton: {
+      width: isDesktop ? 26 : 24,
+      height: isDesktop ? 26 : 24,
+      borderRadius: 999,
+      borderWidth: 2,
+      borderColor: colors.surface,
+    },
+
+    colorSwatchButtonActive: {
+      borderColor: colors.text,
+    },
+
+    categoryColorEditRow: {
+      flexDirection: isDesktop ? "row" : "column",
+      gap: 8,
+    },
+
+    categoryColorInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: Platform.OS === "web" ? 10 : 8,
+      color: colors.text,
+      backgroundColor: colors.surface,
+      fontWeight: "800",
     },
 
     saveCategoryButton: {
@@ -3773,6 +4176,8 @@ const createStyles = (isDesktop: boolean) =>
 
     categoryBadge: {
       backgroundColor: colors.primarySoft,
+      borderWidth: 1,
+      borderColor: colors.border,
       borderRadius: 999,
       paddingVertical: isDesktop ? 5 : 4,
       paddingHorizontal: isDesktop ? 10 : 8,
@@ -3790,6 +4195,12 @@ const createStyles = (isDesktop: boolean) =>
       textDecorationLine: "line-through",
     },
 
+    categoryMetaStack: {
+      alignItems: "flex-end",
+      gap: 6,
+      maxWidth: isDesktop ? 150 : 110,
+    },
+
     expenseMeta: {
       fontSize: isDesktop ? 13 : 11,
       color: colors.mutedText,
@@ -3798,13 +4209,11 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     paymentTypeBadge: {
-      alignSelf: "flex-start",
-      marginTop: 8,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 999,
-      paddingVertical: isDesktop ? 5 : 4,
-      paddingHorizontal: isDesktop ? 10 : 8,
+      paddingVertical: isDesktop ? 4 : 3,
+      paddingHorizontal: isDesktop ? 9 : 7,
       backgroundColor: colors.surface,
     },
 

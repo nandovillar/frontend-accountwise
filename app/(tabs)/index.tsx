@@ -12,6 +12,7 @@ import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
+import { getCategoryColor } from "@/src/utils/categoryColors";
 import { formatMonthText } from "@/src/utils/dates";
 import { formatCompactMoney } from "@/src/utils/money";
 import { applySpaceFilter } from "@/src/utils/spaceQueries";
@@ -33,6 +34,7 @@ type Summary = {
   categoryTotals: {
     category: string;
     amount: number;
+    color?: string;
   }[];
 };
 
@@ -201,8 +203,31 @@ export default function HomeScreen() {
       );
     });
 
+    const categoryColorQuery = supabase
+      .from("expense_categories")
+      .select("name, color");
+    const { data: categoryRows, error: categoryColorError } =
+      await applySpaceFilter(categoryColorQuery, user.id, activeSpaceId);
+    const categoryColors =
+      !categoryColorError && categoryRows
+        ? categoryRows.reduce(
+        (
+          acc: Record<string, string>,
+          item: { name: string; color?: string | null },
+        ) => {
+          if (item.color) acc[item.name] = item.color;
+          return acc;
+        },
+        {},
+          )
+        : {};
+
     const categoryTotals = Array.from(categoryMap.entries())
-      .map(([category, amount]) => ({ category, amount }))
+      .map(([category, amount]) => ({
+        category,
+        amount,
+        color: getCategoryColor(category, categoryColors),
+      }))
       .sort((a, b) => b.amount - a.amount);
 
     const savingsQuery = supabase
@@ -543,7 +568,7 @@ function CategoryChart({
   totalExpenses,
   styles,
 }: {
-  items: { category: string; amount: number }[];
+  items: { category: string; amount: number; color?: string }[];
   salary: number;
   totalExpenses: number;
   styles: ReturnType<typeof createStyles>;
@@ -593,7 +618,7 @@ function CategoryChart({
       const start = current;
       const end = current + (item.amount / totalForChart) * 100;
       current = end;
-      const color = palette[index % palette.length];
+      const color = item.color || palette[index % palette.length];
       return `${color} ${start.toFixed(2)}% ${end.toFixed(2)}%`;
     })
     .join(", ");
@@ -644,7 +669,7 @@ function CategoryChart({
             <View
               style={[
                 styles.legendDot,
-                { backgroundColor: palette[index % palette.length] },
+                { backgroundColor: item.color || palette[index % palette.length] },
               ]}
             />
             <Text style={styles.legendLabel} numberOfLines={1}>
