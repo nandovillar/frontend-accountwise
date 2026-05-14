@@ -15,6 +15,7 @@ import { getCurrentUser } from "@/src/utils/auth";
 
 import {
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -121,10 +122,19 @@ export default function SettingsScreen() {
     if (nextThemeId === themeId) return;
 
     const option = themeOptions.find((item) => item.id === nextThemeId);
+    const message = `¿Quieres aplicar el tema ${option?.name || "seleccionado"}?`;
+
+    if (Platform.OS === "web") {
+      if (window.confirm(message)) {
+        setThemeId(nextThemeId);
+      }
+
+      return;
+    }
 
     Alert.alert(
       "Cambiar tema",
-      `¿Quieres aplicar el tema ${option?.name || "seleccionado"}?`,
+      message,
       [
         { text: "Cancelar", style: "cancel" },
         {
