@@ -14,8 +14,8 @@ export const createCommonStyles = (isDesktop: boolean) => {
 
     container: {
       flexGrow: 1,
-      paddingHorizontal: isDesktop ? spacing.xxl : spacing.lg,
-      paddingTop: isDesktop ? spacing.xxl : spacing.lg,
+      paddingHorizontal: isDesktop ? spacing.xxl : spacing.xl,
+      paddingTop: isDesktop ? spacing.xxl : spacing.xl,
       paddingBottom: isDesktop ? 96 : 88,
       alignItems: "center",
     },
@@ -30,8 +30,8 @@ export const createCommonStyles = (isDesktop: boolean) => {
       borderRadius: isDesktop ? 18 : 16,
       borderWidth: 1,
       borderColor: colors.border,
-      padding: isDesktop ? spacing.xl : spacing.lg,
-      marginBottom: spacing.lg,
+      padding: isDesktop ? spacing.xxl : spacing.xl,
+      marginBottom: isDesktop ? spacing.xl : spacing.lg,
     },
 
     compactCard: {

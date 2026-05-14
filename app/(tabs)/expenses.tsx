@@ -2357,7 +2357,7 @@ function IconAction({
     >
       <Ionicons
         name={icon}
-        size={16}
+        size={18}
         color={dark ? colors.white : danger ? "#B91C1C" : colors.primaryDark}
       />
     </Pressable>
@@ -2573,18 +2573,19 @@ const createStyles = (isDesktop: boolean) =>
 
     sectionCard: {
       backgroundColor: colors.surface,
-      borderRadius: 16,
+      borderRadius: isDesktop ? 18 : 16,
       borderWidth: 1,
       borderColor: colors.border,
-      padding: isDesktop ? 16 : 13,
-      marginBottom: 16,
+      padding: isDesktop ? 22 : 17,
+      marginBottom: isDesktop ? 22 : 18,
     },
 
     sectionHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      gap: 10,
+      gap: 14,
+      marginBottom: isDesktop ? 4 : 2,
     },
 
     sectionTitleButton: {
@@ -2656,9 +2657,9 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     addButton: {
-      width: 36,
-      height: 36,
-      borderRadius: 11,
+      width: isDesktop ? 44 : 42,
+      height: isDesktop ? 44 : 42,
+      borderRadius: 13,
       backgroundColor: colors.primaryDark,
       alignItems: "center",
       justifyContent: "center",
@@ -2722,24 +2723,24 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     filterTitle: {
-      fontSize: isDesktop ? 12 : 10,
+      fontSize: isDesktop ? 13 : 11,
       fontWeight: "800",
       color: colors.mutedText,
-      marginTop: 12,
-      marginBottom: 8,
+      marginTop: isDesktop ? 18 : 15,
+      marginBottom: 10,
     },
 
     filterDropdown: {
-      marginBottom: 10,
+      marginBottom: isDesktop ? 16 : 14,
     },
 
     filterDropdownButton: {
       backgroundColor: colors.white,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 10,
-      paddingVertical: isDesktop ? 10 : 9,
-      paddingHorizontal: 11,
+      borderRadius: 12,
+      paddingVertical: isDesktop ? 13 : 12,
+      paddingHorizontal: isDesktop ? 14 : 12,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
@@ -2963,13 +2964,13 @@ const createStyles = (isDesktop: boolean) =>
       backgroundColor: "#F8FCFD",
       borderWidth: 1,
       borderColor: colors.borderSoft,
-      borderRadius: 12,
-      paddingVertical: isDesktop ? 9 : 8,
-      paddingHorizontal: isDesktop ? 11 : 9,
-      marginBottom: 9,
+      borderRadius: isDesktop ? 15 : 14,
+      paddingVertical: isDesktop ? 14 : 12,
+      paddingHorizontal: isDesktop ? 16 : 13,
+      marginBottom: isDesktop ? 12 : 11,
       flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
+      alignItems: isDesktop ? "center" : "flex-start",
+      gap: isDesktop ? 14 : 10,
     },
 
     expenseInfo: {
@@ -2979,28 +2980,29 @@ const createStyles = (isDesktop: boolean) =>
 
     expenseTopLine: {
       flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
+      alignItems: "flex-start",
+      gap: 10,
     },
 
     expenseTitle: {
       flex: 1,
-      fontSize: isDesktop ? 14 : 12,
-      fontWeight: "500",
+      fontSize: isDesktop ? 15 : 13,
+      fontWeight: "700",
       color: colors.text,
+      lineHeight: isDesktop ? 20 : 18,
     },
 
     categoryBadge: {
       backgroundColor: colors.primarySoft,
       borderRadius: 999,
-      paddingVertical: 3,
-      paddingHorizontal: 7,
-      maxWidth: 110,
+      paddingVertical: isDesktop ? 5 : 4,
+      paddingHorizontal: isDesktop ? 10 : 8,
+      maxWidth: isDesktop ? 130 : 96,
     },
 
     categoryBadgeText: {
       color: colors.primaryDark,
-      fontSize: isDesktop ? 10 : 8,
+      fontSize: isDesktop ? 11 : 9,
       fontWeight: "800",
     },
 
@@ -3010,15 +3012,19 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     expenseMeta: {
-      fontSize: isDesktop ? 12 : 10,
+      fontSize: isDesktop ? 13 : 11,
       color: colors.mutedText,
-      marginTop: 3,
+      marginTop: 7,
+      fontWeight: "600",
     },
 
     rowActions: {
       flexDirection: "row",
-      gap: 4,
+      flexWrap: "wrap",
+      justifyContent: "flex-end",
+      gap: isDesktop ? 7 : 6,
       alignItems: "center",
+      maxWidth: isDesktop ? 172 : 86,
     },
 
     moveTargetRow: {
@@ -3058,9 +3064,9 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     iconAction: {
-      width: isDesktop ? 30 : 28,
-      height: isDesktop ? 30 : 28,
-      borderRadius: 8,
+      width: isDesktop ? 36 : 34,
+      height: isDesktop ? 36 : 34,
+      borderRadius: 11,
       backgroundColor: colors.primarySoft,
       alignItems: "center",
       justifyContent: "center",
