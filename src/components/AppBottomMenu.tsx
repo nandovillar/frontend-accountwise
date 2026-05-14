@@ -18,7 +18,7 @@ export function AppBottomMenu({ active }: { active?: ActiveTab }) {
   return (
     <View style={styles.bottomBar}>
       <MenuItem
-        label="Inicio"
+        label="Resumen"
         icon="home-outline"
         active={active === "home"}
         styles={styles}
@@ -80,7 +80,7 @@ const createStyles = () =>
     height: 68,
     paddingTop: 6,
     paddingBottom: 8,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     flexDirection: "row",

@@ -10,14 +10,14 @@ import { DataState } from "@/src/components/DataState";
 import { EmptyState } from "@/src/components/EmptyState";
 import { KpiCard } from "@/src/components/KpiCard";
 import { ResultRow } from "@/src/components/ResultRow";
-import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
+import { SpaceMenuButton } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
-import { getNextYearDate, getTodayDate } from "@/src/utils/dates";
+import { formatDateText, getNextYearDate, getTodayDate } from "@/src/utils/dates";
 import {
   formatCompactMoney,
   formatMoney,
@@ -49,6 +49,22 @@ type SavingItem = {
   withdrawn_amount?: number;
   borrowed?: string;
   created_at?: string;
+};
+
+const withLoadTimeout = async (task: Promise<void>) => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error("La carga está tardando demasiado.")),
+      15000,
+    );
+  });
+
+  try {
+    await Promise.race([task, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 };
 
 export default function SavingsScreen() {
@@ -192,7 +208,7 @@ export default function SavingsScreen() {
 
   const refreshSavings = useCallback(async () => {
     try {
-      await loadSavings();
+      await withLoadTimeout(loadSavings());
     } catch (error) {
       const message =
         error instanceof Error
@@ -205,10 +221,14 @@ export default function SavingsScreen() {
     }
   }, [loadSavings]);
 
-  const retrySavings = useCallback(() => {
+  const forceRefreshSavings = useCallback(async () => {
     loadInProgressRef.current = false;
-    refreshSavings();
+    await refreshSavings();
   }, [refreshSavings]);
+
+  const retrySavings = useCallback(() => {
+    forceRefreshSavings();
+  }, [forceRefreshSavings]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -333,7 +353,7 @@ export default function SavingsScreen() {
       );
     }
 
-    await loadSavings();
+    await forceRefreshSavings();
     closeForm();
     showActionMessage(editingId ? "Ahorro actualizado." : "Ahorro creado.");
   };
@@ -450,7 +470,7 @@ export default function SavingsScreen() {
       );
       setMovementAmount("");
 
-      await refreshSavings();
+      await forceRefreshSavings();
       await recordActivity(
         direction === "withdraw"
           ? "saving_money_withdrawn"
@@ -498,7 +518,7 @@ export default function SavingsScreen() {
         setSelectedSaving(null);
       }
 
-      await refreshSavings();
+      await forceRefreshSavings();
       showActionMessage("Ahorro eliminado.");
       await recordActivity(
         "saving_deleted",
@@ -561,7 +581,7 @@ export default function SavingsScreen() {
         return;
       }
 
-      await refreshSavings();
+      await forceRefreshSavings();
     };
 
     init();
@@ -569,18 +589,18 @@ export default function SavingsScreen() {
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
         if (session?.user) {
-          await refreshSavings();
+          await forceRefreshSavings();
         }
       },
     );
 
     return () => subscription.subscription.unsubscribe();
-  }, [refreshSavings]);
+  }, [forceRefreshSavings]);
 
   useFocusEffect(
     useCallback(() => {
-      refreshSavings();
-    }, [refreshSavings]),
+      forceRefreshSavings();
+    }, [forceRefreshSavings]),
   );
 
   const totals = getTotals();
@@ -596,7 +616,12 @@ export default function SavingsScreen() {
 
   return (
     <View style={commonStyles.screen}>
-      <Header title="Ahorros" />
+      <Header
+        title="Ahorros"
+        headerStyle={{ backgroundColor: colors.surface }}
+        headerTintColor={colors.text}
+        headerTitleStyle={{ color: colors.text }}
+      />
 
       <Pressable
         style={commonStyles.settingsButton}
@@ -604,13 +629,13 @@ export default function SavingsScreen() {
       >
         <Text style={commonStyles.settingsButtonText}>☰</Text>
       </Pressable>
+      <SpaceMenuButton isDesktop={isDesktop} />
 
       <ScrollView
         contentContainerStyle={commonStyles.container}
         keyboardShouldPersistTaps="handled"
       >
         <View style={commonStyles.content}>
-          <SpaceSwitcher />
           <DataState
             loading={isLoadingData && !hasLoadedData && !hasVisibleSavingsData}
             error={dataError}
@@ -998,6 +1023,18 @@ export default function SavingsScreen() {
                       value={formatMoney(
                         Number(selectedSaving.monthly_amount || 0),
                       )}
+                      styles={styles}
+                    />
+
+                    <ResultRow
+                      label="Inicio"
+                      value={formatDateText(selectedSaving.start_date)}
+                      styles={styles}
+                    />
+
+                    <ResultRow
+                      label="Fin"
+                      value={formatDateText(selectedSaving.end_date)}
                       styles={styles}
                     />
 

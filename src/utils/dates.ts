@@ -45,3 +45,29 @@ export const addMonths = (monthValue: string, offset: number) => {
 
   return `${newYear}-${String(newMonth).padStart(2, "0")}`;
 };
+
+const capitalize = (value: string) =>
+  value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+
+export const formatMonthText = (monthValue: string) => {
+  const [year, month] = monthValue.split("-").map(Number);
+  if (!year || !month) return monthValue;
+
+  const value = new Date(year, month - 1, 1).toLocaleDateString("es-ES", {
+    month: "long",
+    year: "numeric",
+  });
+
+  return capitalize(value);
+};
+
+export const formatDateText = (dateValue: string) => {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  if (!year || !month || !day) return dateValue;
+
+  return new Date(year, month - 1, day).toLocaleDateString("es-ES", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};

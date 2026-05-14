@@ -17,7 +17,7 @@ export default function TabLayout() {
 
         tabBarStyle: {
           height: 68,
-          backgroundColor: colors.white,
+          backgroundColor: colors.surface,
           borderTopWidth: 1,
           borderTopColor: colors.border,
           paddingTop: 6,
@@ -37,7 +37,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Inicio",
+          title: "Resumen",
           tabBarIcon: ({ color }) => (
             <Ionicons name="home-outline" size={24} color={color} />
           ),

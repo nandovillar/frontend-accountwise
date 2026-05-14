@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   createContext,
   ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -15,8 +16,10 @@ import {
   themeOptions,
   themePalettes,
 } from "@/src/theme/colors";
+import { supabase } from "@/src/lib/supabase";
 
-const THEME_STORAGE_KEY = "accountwise-theme";
+const getThemeStorageKey = (userId?: string) =>
+  userId ? `accountwise-theme:${userId}` : "accountwise-theme";
 
 type ThemeContextValue = {
   themeId: ThemeId;
@@ -31,24 +34,34 @@ const isThemeId = (value: string | null): value is ThemeId =>
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeIdState, setThemeIdState] = useState<ThemeId>(defaultThemeId);
+  const [currentUserId, setCurrentUserId] = useState<string | undefined>();
 
   useEffect(() => {
-    const loadTheme = async () => {
-      const storedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+    const loadTheme = async (userId?: string) => {
+      setCurrentUserId(userId);
+      const storedTheme = await AsyncStorage.getItem(getThemeStorageKey(userId));
       const nextTheme = isThemeId(storedTheme) ? storedTheme : defaultThemeId;
 
       applyThemeColors(nextTheme);
       setThemeIdState(nextTheme);
     };
 
-    loadTheme();
+    supabase.auth.getSession().then(({ data }) => loadTheme(data.session?.user.id));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      loadTheme(session?.user.id);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const setThemeId = async (nextThemeId: ThemeId) => {
+  const setThemeId = useCallback(async (nextThemeId: ThemeId) => {
     applyThemeColors(nextThemeId);
     setThemeIdState(nextThemeId);
-    await AsyncStorage.setItem(THEME_STORAGE_KEY, nextThemeId);
-  };
+    await AsyncStorage.setItem(getThemeStorageKey(currentUserId), nextThemeId);
+  }, [currentUserId]);
 
   const value = useMemo(
     () => ({
@@ -56,7 +69,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setThemeId,
       options: themeOptions,
     }),
-    [themeIdState],
+    [setThemeId, themeIdState],
   );
 
   return (

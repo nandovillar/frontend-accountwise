@@ -5,13 +5,14 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DataState } from "@/src/components/DataState";
-import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
+import { SpaceMenuButton } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
+import { formatMonthText } from "@/src/utils/dates";
 import { formatCompactMoney } from "@/src/utils/money";
 import { applySpaceFilter } from "@/src/utils/spaceQueries";
 
@@ -33,6 +34,22 @@ type Summary = {
     category: string;
     amount: number;
   }[];
+};
+
+const withLoadTimeout = async (task: Promise<void>) => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error("La carga está tardando demasiado.")),
+      15000,
+    );
+  });
+
+  try {
+    await Promise.race([task, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 };
 
 export default function HomeScreen() {
@@ -254,7 +271,7 @@ export default function HomeScreen() {
 
   const refreshMonthlySummary = useCallback(async () => {
     try {
-      await loadMonthlySummary();
+      await withLoadTimeout(loadMonthlySummary());
     } catch (error) {
       const message =
         error instanceof Error
@@ -267,10 +284,14 @@ export default function HomeScreen() {
     }
   }, [loadMonthlySummary]);
 
-  const retryMonthlySummary = useCallback(() => {
+  const forceRefreshMonthlySummary = useCallback(async () => {
     loadInProgressRef.current = false;
-    refreshMonthlySummary();
+    await refreshMonthlySummary();
   }, [refreshMonthlySummary]);
+
+  const retryMonthlySummary = useCallback(() => {
+    forceRefreshMonthlySummary();
+  }, [forceRefreshMonthlySummary]);
 
   useEffect(() => {
     const init = async () => {
@@ -281,7 +302,7 @@ export default function HomeScreen() {
         return;
       }
 
-      await refreshMonthlySummary();
+      await forceRefreshMonthlySummary();
     };
 
     init();
@@ -289,18 +310,18 @@ export default function HomeScreen() {
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
         if (session?.user) {
-          await refreshMonthlySummary();
+          await forceRefreshMonthlySummary();
         }
       },
     );
 
     return () => subscription.subscription.unsubscribe();
-  }, [refreshMonthlySummary]);
+  }, [forceRefreshMonthlySummary]);
 
   useFocusEffect(
     useCallback(() => {
-      refreshMonthlySummary();
-    }, [refreshMonthlySummary]),
+      forceRefreshMonthlySummary();
+    }, [forceRefreshMonthlySummary]),
   );
 
   const totalExpenses = summary.fixedPaid + summary.variables;
@@ -314,7 +335,12 @@ export default function HomeScreen() {
 
   return (
     <View style={commonStyles.screen}>
-      <Header title="Inicio" />
+      <Header
+        title="Resumen"
+        headerStyle={{ backgroundColor: colors.surface }}
+        headerTintColor={colors.text}
+        headerTitleStyle={{ color: colors.text }}
+      />
 
       <Pressable
         style={commonStyles.settingsButton}
@@ -322,10 +348,10 @@ export default function HomeScreen() {
       >
         <Text style={commonStyles.settingsButtonText}>☰</Text>
       </Pressable>
+      <SpaceMenuButton isDesktop={isDesktop} />
 
       <ScrollView contentContainerStyle={commonStyles.container}>
         <View style={commonStyles.content}>
-          <SpaceSwitcher />
           <DataState
             loading={isLoadingData && !hasLoadedData && !hasVisibleFinanceData}
             error={dataError}
@@ -345,7 +371,7 @@ export default function HomeScreen() {
               />
             </Pressable>
 
-            <Text style={styles.monthText}>{selectedMonth}</Text>
+            <Text style={styles.monthText}>{formatMonthText(selectedMonth)}</Text>
 
             <Pressable
               style={styles.monthButton}

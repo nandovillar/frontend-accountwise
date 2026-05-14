@@ -15,7 +15,7 @@ import {
 import { ActionNotice } from "@/src/components/ActionNotice";
 import { DataState } from "@/src/components/DataState";
 import { EmptyState } from "@/src/components/EmptyState";
-import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
+import { SpaceMenuButton } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
@@ -23,6 +23,8 @@ import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import {
   addMonths,
+  formatDateText,
+  formatMonthText,
   getCurrentMonth,
   getDateFromMonthAndDay,
   getDayFromDate,
@@ -65,6 +67,7 @@ const defaultCategories = [
 
 type EditingType = "fixed" | "variable" | null;
 type ExpenseSectionType = "fixed" | "variable";
+type FixedPaidFilter = "Todas" | "Pagados" | "Pendientes";
 type ExpenseDetail = {
   item: any;
   type: ExpenseSectionType;
@@ -127,6 +130,8 @@ export default function TabTwoScreen() {
   const [dataError, setDataError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isActionBusy, setIsActionBusy] = useState(false);
+  const actionBusyRef = useRef(false);
 
   const [salary, setSalary] = useState(0);
   const [salaryInput, setSalaryInput] = useState("");
@@ -153,6 +158,8 @@ export default function TabTwoScreen() {
   const [newCategory, setNewCategory] = useState("");
 
   const [fixedFilterCategory, setFixedFilterCategory] = useState("Todas");
+  const [fixedPaidFilter, setFixedPaidFilter] =
+    useState<FixedPaidFilter>("Todas");
   const [variableFilterCategory, setVariableFilterCategory] = useState("Todas");
   const [showFixedFilter, setShowFixedFilter] = useState(false);
   const [showVariableFilter, setShowVariableFilter] = useState(false);
@@ -160,7 +167,7 @@ export default function TabTwoScreen() {
   const [showAddFixed, setShowAddFixed] = useState(false);
   const [showAddVariable, setShowAddVariable] = useState(false);
   const [bizumModalType, setBizumModalType] = useState<
-    "received" | "sent" | null
+    "received" | "sent" | "refund" | "owed" | null
   >(null);
   const [bizumName, setBizumName] = useState("");
   const [bizumConcept, setBizumConcept] = useState("");
@@ -192,7 +199,7 @@ export default function TabTwoScreen() {
 
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [calendarTarget, setCalendarTarget] = useState<
-    "fixedCreate" | "variableCreate" | "edit" | null
+    "fixedCreate" | "variableCreate" | "spaceIncome" | "edit" | null
   >(null);
   const [calendarMonth, setCalendarMonth] = useState(getCurrentMonth());
   const [movingExpenseKey, setMovingExpenseKey] = useState<string | null>(null);
@@ -288,7 +295,7 @@ export default function TabTwoScreen() {
   };
 
   const openCalendar = (
-    target: "fixedCreate" | "variableCreate" | "edit",
+    target: "fixedCreate" | "variableCreate" | "spaceIncome" | "edit",
     currentDate: string,
   ) => {
     setCalendarTarget(target);
@@ -299,6 +306,7 @@ export default function TabTwoScreen() {
   const selectCalendarDate = (date: string) => {
     if (calendarTarget === "fixedCreate") setFixedDate(date);
     if (calendarTarget === "variableCreate") setVariableDate(date);
+    if (calendarTarget === "spaceIncome") setSpaceIncomeDate(date);
     if (calendarTarget === "edit") setEditDate(date);
 
     setCalendarVisible(false);
@@ -408,7 +416,14 @@ export default function TabTwoScreen() {
       normalizeCategory(item.name),
     );
     setCategories(
-      sortCategories([...loaded, "Bizum recibido", "Bizum enviado"]),
+      sortCategories([
+        ...defaultCategories,
+        ...loaded,
+        "Bizum recibido",
+        "Bizum enviado",
+        "Devoluciones",
+        "Pendiente de cobrar",
+      ]),
     );
   };
 
@@ -686,6 +701,39 @@ export default function TabTwoScreen() {
     loadAllRef.current();
   }, []);
 
+  const forceReloadAll = useCallback(async () => {
+    loadInProgressRef.current = false;
+    await loadAllRef.current();
+  }, []);
+
+  const runAction = useCallback(
+    async (action: () => Promise<void>) => {
+      if (actionBusyRef.current) {
+        showActionMessage("Espera a que termine la acción anterior.");
+        return;
+      }
+
+      actionBusyRef.current = true;
+      setIsActionBusy(true);
+
+      try {
+        await action();
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "No se pudo completar la acción.";
+        Alert.alert("Error", message);
+        showActionMessage("No se pudo completar. Datos recargados.");
+        await forceReloadAll();
+      } finally {
+        actionBusyRef.current = false;
+        setIsActionBusy(false);
+      }
+    },
+    [forceReloadAll],
+  );
+
   loadMonthDataRef.current = async () => {
     setFixedExpenses([]);
     setExpenses([]);
@@ -703,19 +751,19 @@ export default function TabTwoScreen() {
         return;
       }
 
-      await loadAllRef.current();
+      await forceReloadAll();
     };
 
     checkSession();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
-        if (session?.user) await loadAllRef.current();
+        if (session?.user) await forceReloadAll();
       },
     );
 
     return () => subscription.subscription.unsubscribe();
-  }, []);
+  }, [forceReloadAll]);
 
   useEffect(() => {
     setSalary(0);
@@ -725,13 +773,13 @@ export default function TabTwoScreen() {
     setIncomeTransactions([]);
     setFixedFilterCategory("Todas");
     setVariableFilterCategory("Todas");
-    loadAllRef.current();
-  }, [activeSpaceId, selectedMonth]);
+    forceReloadAll();
+  }, [activeSpaceId, selectedMonth, forceReloadAll]);
 
   useFocusEffect(
     useCallback(() => {
-      loadAllRef.current();
-    }, []),
+      forceReloadAll();
+    }, [forceReloadAll]),
   );
 
   const changeMonth = async (offset: number) => {
@@ -761,12 +809,13 @@ export default function TabTwoScreen() {
     }
 
     if (activeSpaceId) {
-      await supabase.from("space_settings").upsert({
+      const { error } = await supabase.from("space_settings").upsert({
         space_id: activeSpaceId,
         monthly_income: value,
         updated_by: user.id,
         updated_at: new Date().toISOString(),
       });
+      if (error) throw error;
 
       await recordActivity(
         "space_income_updated",
@@ -775,10 +824,13 @@ export default function TabTwoScreen() {
         "Se actualizó el ingreso mensual del espacio.",
       );
     } else {
-      await supabase.from("profiles").upsert({ id: user.id, salary: value });
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({ id: user.id, salary: value });
+      if (error) throw error;
     }
 
-    await loadAllRef.current();
+    await forceReloadAll();
     showActionMessage("Ingresos actualizados.");
     setEditingSalary(false);
   };
@@ -803,7 +855,7 @@ export default function TabTwoScreen() {
     const expenseMonth = getMonthFromDate(variableDate);
     const expenseDay = getDayFromDate(variableDate);
 
-    await supabase.from("transactions").insert([
+    const { error } = await supabase.from("transactions").insert([
       {
         title,
         amount: expenseAmount,
@@ -816,6 +868,7 @@ export default function TabTwoScreen() {
         ...getSpacePayload(activeSpaceId),
       },
     ]);
+    if (error) throw error;
     await recordActivity(
       "transaction_created",
       "transaction",
@@ -829,11 +882,11 @@ export default function TabTwoScreen() {
     setVariableCategory("Otros");
     setShowAddVariable(false);
     setShowVariableSection(true);
-    await loadAllRef.current();
+    await forceReloadAll();
     showActionMessage("Gasto guardado.");
   };
 
-  const openBizumModal = (type: "received" | "sent") => {
+  const openBizumModal = (type: "received" | "sent" | "refund" | "owed") => {
     setBizumModalType(type);
     setBizumName("");
     setBizumConcept("");
@@ -875,11 +928,19 @@ export default function TabTwoScreen() {
 
     const bizumMonth = getMonthFromDate(variableDate);
     const bizumDay = getDayFromDate(variableDate);
-    const isReceived = bizumModalType === "received";
-    const category = isReceived ? "Bizum recibido" : "Bizum enviado";
+    const isReceived =
+      bizumModalType === "received" || bizumModalType === "refund";
+    const category =
+      bizumModalType === "received"
+        ? "Bizum recibido"
+        : bizumModalType === "sent"
+          ? "Bizum enviado"
+          : bizumModalType === "refund"
+            ? "Devoluciones"
+            : "Pendiente de cobrar";
     const title = `${bizumName.trim()} - ${bizumConcept.trim()}`;
 
-    await supabase.from("transactions").insert([
+    const { error } = await supabase.from("transactions").insert([
       {
         title,
         amount: value,
@@ -892,6 +953,8 @@ export default function TabTwoScreen() {
         ...getSpacePayload(activeSpaceId),
       },
     ]);
+    if (error) throw error;
+    if (error) throw error;
 
     await recordActivity(
       isReceived ? "bizum_received_created" : "bizum_sent_created",
@@ -902,8 +965,10 @@ export default function TabTwoScreen() {
 
     closeBizumModal();
     setShowVariableSection(true);
-    await loadAllRef.current();
-    showActionMessage(isReceived ? "Bizum recibido añadido." : "Bizum enviado añadido.");
+    await forceReloadAll();
+    showActionMessage(
+      isReceived ? "Ingreso añadido." : "Movimiento pendiente añadido.",
+    );
   };
 
   const handleAddSpaceIncome = async () => {
@@ -921,7 +986,9 @@ export default function TabTwoScreen() {
     const incomeDay = getDayFromDate(spaceIncomeDate);
     const note = spaceIncomeNote.trim() || "Ingreso a cuenta compartida";
 
-    await supabase.from("space_contributions").insert([
+    const { error: contributionError } = await supabase
+      .from("space_contributions")
+      .insert([
       {
         space_id: activeSpaceId,
         from_user_id: user.id,
@@ -932,8 +999,11 @@ export default function TabTwoScreen() {
         day_of_month: incomeDay,
       },
     ]);
+    if (contributionError) throw contributionError;
 
-    await supabase.from("transactions").insert([
+    const { error: transactionError } = await supabase
+      .from("transactions")
+      .insert([
       {
         title: note,
         amount: value,
@@ -946,6 +1016,7 @@ export default function TabTwoScreen() {
         space_id: null,
       },
     ]);
+    if (transactionError) throw transactionError;
 
     await recordActivity(
       "space_income_created",
@@ -958,7 +1029,7 @@ export default function TabTwoScreen() {
     setSpaceIncomeDate(getTodayDate());
     setSpaceIncomeNote("");
     setSpaceIncomeModalVisible(false);
-    await loadAllRef.current();
+    await forceReloadAll();
     showActionMessage("Aportación registrada.");
   };
 
@@ -986,7 +1057,7 @@ export default function TabTwoScreen() {
 
     const expenseMonth = getMonthFromDate(fixedDate);
     const expenseDay = getDayFromDate(fixedDate);
-    await supabase.from("fixed_templates").insert([
+    const { error: templateError } = await supabase.from("fixed_templates").insert([
       {
         title: fixedTitle,
         amount: fixedExpenseAmount,
@@ -998,8 +1069,9 @@ export default function TabTwoScreen() {
         ...getSpacePayload(activeSpaceId),
       },
     ]);
+    if (templateError) throw templateError;
 
-    await supabase.from("fixed_expenses").insert([
+    const { error: fixedError } = await supabase.from("fixed_expenses").insert([
       {
         title: fixedTitle,
         amount: fixedExpenseAmount,
@@ -1012,6 +1084,7 @@ export default function TabTwoScreen() {
         ...getSpacePayload(activeSpaceId),
       },
     ]);
+    if (fixedError) throw fixedError;
     await recordActivity(
       "fixed_expense_created",
       "fixed_expense",
@@ -1026,7 +1099,7 @@ export default function TabTwoScreen() {
     setFixedAutoPay(true);
     setShowAddFixed(false);
     setShowFixedSection(true);
-    await loadAllRef.current();
+    await forceReloadAll();
     showActionMessage("Gasto fijo guardado.");
   };
 
@@ -1090,7 +1163,7 @@ export default function TabTwoScreen() {
     }
 
     if (editingType === "fixed") {
-      await supabase
+      const { error: fixedUpdateError } = await supabase
         .from("fixed_expenses")
         .update({
           amount: newAmount,
@@ -1100,6 +1173,7 @@ export default function TabTwoScreen() {
           auto_pay: editAutoPay,
         })
         .eq("id", editingItem.id);
+      if (fixedUpdateError) throw fixedUpdateError;
 
       const user = await getCurrentUser();
 
@@ -1116,11 +1190,16 @@ export default function TabTwoScreen() {
           .eq("title", editingItem.title)
           .eq("month", editingItem.month || selectedMonth);
 
-        await applySpaceFilter(templateUpdateQuery, user.id, activeSpaceId);
+        const { error: templateUpdateError } = await applySpaceFilter(
+          templateUpdateQuery,
+          user.id,
+          activeSpaceId,
+        );
+        if (templateUpdateError) throw templateUpdateError;
       }
 
       closeEditModal();
-      await loadAllRef.current();
+      await forceReloadAll();
       showActionMessage("Gasto fijo actualizado.");
       await recordActivity(
         "fixed_expense_updated",
@@ -1131,7 +1210,7 @@ export default function TabTwoScreen() {
       return;
     }
 
-    await supabase
+    const { error: transactionUpdateError } = await supabase
       .from("transactions")
       .update({
         amount: newAmount,
@@ -1140,9 +1219,10 @@ export default function TabTwoScreen() {
         category: editCategory,
       })
       .eq("id", editingItem.id);
+    if (transactionUpdateError) throw transactionUpdateError;
 
     closeEditModal();
-    await loadAllRef.current();
+    await forceReloadAll();
     showActionMessage("Gasto actualizado.");
     await recordActivity(
       "transaction_updated",
@@ -1153,12 +1233,13 @@ export default function TabTwoScreen() {
   };
 
   const togglePaid = async (item: any) => {
-    await supabase
+    const { error } = await supabase
       .from("fixed_expenses")
       .update({ is_paid: !item.is_paid })
       .eq("id", item.id);
+    if (error) throw error;
 
-    await loadAllRef.current();
+    await forceReloadAll();
     showActionMessage(item.is_paid ? "Marcado como pendiente." : "Marcado como pagado.");
     await recordActivity(
       "fixed_expense_toggled",
@@ -1174,16 +1255,25 @@ export default function TabTwoScreen() {
 
       if (!user) return;
 
-      await supabase.from("fixed_expenses").delete().eq("id", item.id);
+      const { error: fixedDeleteError } = await supabase
+        .from("fixed_expenses")
+        .delete()
+        .eq("id", item.id);
+      if (fixedDeleteError) throw fixedDeleteError;
 
       const templateDeleteQuery = supabase
         .from("fixed_templates")
         .delete()
         .eq("title", item.title)
         .eq("month", item.month || selectedMonth);
-      await applySpaceFilter(templateDeleteQuery, user.id, activeSpaceId);
+      const { error: templateDeleteError } = await applySpaceFilter(
+        templateDeleteQuery,
+        user.id,
+        activeSpaceId,
+      );
+      if (templateDeleteError) throw templateDeleteError;
 
-      await loadAllRef.current();
+      await forceReloadAll();
       showActionMessage("Gasto fijo eliminado.");
       await recordActivity(
         "fixed_expense_deleted",
@@ -1207,8 +1297,12 @@ export default function TabTwoScreen() {
 
   const deleteVariable = async (item: any) => {
     const executeDelete = async () => {
-      await supabase.from("transactions").delete().eq("id", item.id);
-      await loadAllRef.current();
+      const { error } = await supabase
+        .from("transactions")
+        .delete()
+        .eq("id", item.id);
+      if (error) throw error;
+      await forceReloadAll();
       showActionMessage("Gasto eliminado.");
       await recordActivity(
         "transaction_deleted",
@@ -1277,7 +1371,7 @@ export default function TabTwoScreen() {
         return;
       }
 
-      await supabase.from("fixed_templates").insert([
+      const { error: templateError } = await supabase.from("fixed_templates").insert([
         {
           title: item.title,
           amount: targetAmount,
@@ -1289,8 +1383,9 @@ export default function TabTwoScreen() {
           space_id: targetSpaceId,
         },
       ]);
+      if (templateError) throw templateError;
 
-      await supabase.from("fixed_expenses").insert([
+      const { error: fixedError } = await supabase.from("fixed_expenses").insert([
         {
           title: item.title,
           amount: targetAmount,
@@ -1303,6 +1398,7 @@ export default function TabTwoScreen() {
           space_id: targetSpaceId,
         },
       ]);
+      if (fixedError) throw fixedError;
 
       await recordActivity(
         "fixed_expense_transferred",
@@ -1311,7 +1407,7 @@ export default function TabTwoScreen() {
         `Se traspasó el gasto fijo ${item.title}.`,
       );
       showActionMessage("Gasto fijo copiado al destino.");
-      await loadAllRef.current();
+      await forceReloadAll();
     } else {
       const targetCategory = normalizeCategory(item.category);
       const targetAmount = Number(item.amount || 0);
@@ -1338,7 +1434,7 @@ export default function TabTwoScreen() {
         return;
       }
 
-      await supabase.from("transactions").insert([
+      const { error } = await supabase.from("transactions").insert([
         {
           title: item.title,
           amount: targetAmount,
@@ -1351,6 +1447,7 @@ export default function TabTwoScreen() {
           space_id: targetSpaceId,
         },
       ]);
+      if (error) throw error;
 
       await recordActivity(
         "transaction_transferred",
@@ -1359,7 +1456,7 @@ export default function TabTwoScreen() {
         `Se traspasó el gasto ${item.title}.`,
       );
       showActionMessage("Gasto copiado al destino.");
-      await loadAllRef.current();
+      await forceReloadAll();
     }
 
     setMovingExpenseKey(null);
@@ -1387,7 +1484,7 @@ export default function TabTwoScreen() {
           <Pressable
             key={space.id || "personal"}
             style={styles.moveTargetButton}
-            onPress={() => copyExpenseToSpace(item, type, space.id)}
+            onPress={() => runAction(() => copyExpenseToSpace(item, type, space.id))}
           >
             <Ionicons
               name={space.id ? "people-outline" : "person-outline"}
@@ -1501,7 +1598,7 @@ export default function TabTwoScreen() {
                 "Importe",
                 `${amountPrefix}${formatCompactMoney(Number(item.amount || 0))}`,
               )}
-              {renderDetailValue("Fecha", fullDate)}
+              {renderDetailValue("Fecha", formatDateText(fullDate))}
               {renderDetailValue("Categoría", normalizeCategory(item.category))}
               {isFixed &&
                 renderDetailValue(
@@ -1539,7 +1636,7 @@ export default function TabTwoScreen() {
                   dark: !item.is_paid,
                   onPress: async () => {
                     closeDetailModal();
-                    await togglePaid(item);
+                    await runAction(() => togglePaid(item));
                   },
                 })}
 
@@ -1561,9 +1658,9 @@ export default function TabTwoScreen() {
                   onPress: () => {
                     closeDetailModal();
                     if (isFixed) {
-                      deleteFixed(item);
+                      runAction(() => deleteFixed(item));
                     } else {
-                      deleteVariable(item);
+                      runAction(() => deleteVariable(item));
                     }
                   },
                 })}
@@ -1613,11 +1710,15 @@ export default function TabTwoScreen() {
     expenses.length > 0;
 
   const filteredFixedExpenses =
-    fixedFilterCategory === "Todas"
+    (fixedFilterCategory === "Todas"
       ? fixedExpenses
       : fixedExpenses.filter(
           (item) => normalizeCategory(item.category) === fixedFilterCategory,
-        );
+        )).filter((item) => {
+      if (fixedPaidFilter === "Pagados") return item.is_paid;
+      if (fixedPaidFilter === "Pendientes") return !item.is_paid;
+      return true;
+    });
 
   const filteredVariableExpenses =
     variableFilterCategory === "Todas"
@@ -1746,9 +1847,27 @@ export default function TabTwoScreen() {
 
   const renderDateButton = (date: string, onPress: () => void) => (
     <Pressable style={styles.dateButton} onPress={onPress}>
-      <Text style={styles.dateButtonText}>{date}</Text>
+      <Text style={styles.dateButtonText}>{formatDateText(date)}</Text>
       <Ionicons name="calendar-outline" size={16} color={colors.primaryDark} />
     </Pressable>
+  );
+
+  const renderMoneyInput = (
+    value: string,
+    onChangeText: (text: string) => void,
+    placeholder = "Importe",
+  ) => (
+    <View style={styles.moneyInputShell}>
+      <TextInput
+        style={[styles.input, styles.moneyInput]}
+        placeholder={placeholder}
+        value={value}
+        keyboardType="decimal-pad"
+        inputMode="decimal"
+        onChangeText={onChangeText}
+      />
+      <Text style={styles.moneyInputSuffix}>€</Text>
+    </View>
   );
 
   const renderPaymentModeSelector = (
@@ -1759,28 +1878,6 @@ export default function TabTwoScreen() {
       <Text style={styles.inputLabel}>Marcado de pago</Text>
 
       <View style={styles.paymentModeRow}>
-        <Pressable
-          style={[
-            styles.paymentModeButton,
-            !value && styles.paymentModeButtonActive,
-          ]}
-          onPress={() => onChange(false)}
-        >
-          <Ionicons
-            name="hand-left-outline"
-            size={16}
-            color={!value ? colors.white : colors.primaryDark}
-          />
-          <Text
-            style={[
-              styles.paymentModeText,
-              !value && styles.paymentModeTextActive,
-            ]}
-          >
-            Manual
-          </Text>
-        </Pressable>
-
         <Pressable
           style={[
             styles.paymentModeButton,
@@ -1802,11 +1899,33 @@ export default function TabTwoScreen() {
             Automático
           </Text>
         </Pressable>
+
+        <Pressable
+          style={[
+            styles.paymentModeButton,
+            !value && styles.paymentModeButtonActive,
+          ]}
+          onPress={() => onChange(false)}
+        >
+          <Ionicons
+            name="hand-left-outline"
+            size={16}
+            color={!value ? colors.white : colors.primaryDark}
+          />
+          <Text
+            style={[
+              styles.paymentModeText,
+              !value && styles.paymentModeTextActive,
+            ]}
+          >
+            Manual
+          </Text>
+        </Pressable>
       </View>
 
       <Text style={styles.paymentModeHelp}>
-        Automático se marcará al pasar el día. Manual espera a que pulses
-        pagar.
+        Automático se marca solo cuando pasa la fecha. Manual queda pendiente
+        hasta que lo confirmes.
       </Text>
     </View>
   );
@@ -1854,6 +1973,15 @@ export default function TabTwoScreen() {
 
   const renderCalendar = () => {
     const [year, month] = calendarMonth.split("-").map(Number);
+    const selectedDate =
+      calendarTarget === "fixedCreate"
+        ? fixedDate
+        : calendarTarget === "variableCreate"
+          ? variableDate
+          : calendarTarget === "spaceIncome"
+            ? spaceIncomeDate
+            : editDate;
+    const calendarTitle = formatMonthText(calendarMonth);
     const firstDay = new Date(year, month - 1, 1);
     const lastDay = new Date(year, month, 0);
     const totalDays = lastDay.getDate();
@@ -1882,7 +2010,7 @@ export default function TabTwoScreen() {
                 />
               </Pressable>
 
-              <Text style={styles.calendarTitle}>{calendarMonth}</Text>
+              <Text style={styles.calendarTitle}>{calendarTitle}</Text>
 
               <Pressable
                 style={styles.monthButton}
@@ -1911,14 +2039,25 @@ export default function TabTwoScreen() {
 
               {days.map((day) => {
                 const date = `${calendarMonth}-${String(day).padStart(2, "0")}`;
+                const selected = date === selectedDate;
 
                 return (
                   <Pressable
                     key={date}
-                    style={styles.dayButton}
+                    style={[
+                      styles.dayButton,
+                      selected && styles.dayButtonSelected,
+                    ]}
                     onPress={() => selectCalendarDate(date)}
                   >
-                    <Text style={styles.dayButtonText}>{day}</Text>
+                    <Text
+                      style={[
+                        styles.dayButtonText,
+                        selected && styles.dayButtonTextSelected,
+                      ]}
+                    >
+                      {day}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -1938,7 +2077,12 @@ export default function TabTwoScreen() {
 
   return (
     <View style={commonStyles.screen}>
-      <Header title="Gastos" />
+      <Header
+        title="Gastos"
+        headerStyle={{ backgroundColor: colors.surface }}
+        headerTintColor={colors.text}
+        headerTitleStyle={{ color: colors.text }}
+      />
 
       <Pressable
         style={commonStyles.settingsButton}
@@ -1946,13 +2090,13 @@ export default function TabTwoScreen() {
       >
         <Text style={commonStyles.settingsButtonText}>☰</Text>
       </Pressable>
+      <SpaceMenuButton isDesktop={isDesktop} />
 
       <ScrollView
         contentContainerStyle={commonStyles.container}
         keyboardShouldPersistTaps="handled"
       >
         <View style={commonStyles.content}>
-          <SpaceSwitcher />
           <DataState
             loading={isLoadingData && !hasLoadedData && !hasVisibleFinanceData}
             error={dataError}
@@ -1973,7 +2117,7 @@ export default function TabTwoScreen() {
               />
             </Pressable>
 
-            <Text style={styles.monthText}>{selectedMonth}</Text>
+            <Text style={styles.monthText}>{formatMonthText(selectedMonth)}</Text>
 
             <Pressable
               onPress={() => changeMonth(1)}
@@ -2012,41 +2156,21 @@ export default function TabTwoScreen() {
               </Text>
 
               {!editingSalary ? (
-                <View style={styles.amountWithAction}>
+                <Pressable
+                  style={styles.amountWithAction}
+                  onPress={() => {
+                    setSalaryInput(String(salary));
+                    setEditingSalary(true);
+                  }}
+                >
                   <Text style={styles.summaryAmount}>
                     {formatCompactMoney(salary)}
                   </Text>
-                  <Pressable
-                    style={styles.iconButtonSoft}
-                    onPress={() => {
-                      setSalaryInput(String(salary));
-                      setEditingSalary(true);
-                    }}
-                  >
-                    <Ionicons
-                      name="create-outline"
-                      size={16}
-                      color={colors.primaryDark}
-                    />
-                  </Pressable>
-                </View>
+                </Pressable>
               ) : (
-                <View style={styles.amountWithAction}>
-                  <TextInput
-                    style={styles.inlineInput}
-                    value={salaryInput}
-                    keyboardType="decimal-pad"
-                    inputMode="decimal"
-                    onChangeText={setSalaryInput}
-                  />
-                  <Pressable style={styles.iconButtonDark} onPress={saveIncome}>
-                    <Ionicons
-                      name="save-outline"
-                      size={15}
-                      color={colors.white}
-                    />
-                  </Pressable>
-                </View>
+                <Text style={styles.summaryAmount}>
+                  {formatCompactMoney(salary)}
+                </Text>
               )}
             </View>
 
@@ -2121,6 +2245,30 @@ export default function TabTwoScreen() {
             }
             styles={styles}
           >
+            <View style={styles.paidFilterRow}>
+              {(["Todas", "Pendientes", "Pagados"] as FixedPaidFilter[]).map(
+                (option) => (
+                  <Pressable
+                    key={option}
+                    style={[
+                      styles.paidFilterButton,
+                      fixedPaidFilter === option && styles.paidFilterButtonActive,
+                    ]}
+                    onPress={() => setFixedPaidFilter(option)}
+                  >
+                    <Text
+                      style={[
+                        styles.paidFilterText,
+                        fixedPaidFilter === option && styles.paidFilterTextActive,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                ),
+              )}
+            </View>
+
             {false && (
               <View style={styles.formBox}>
                 <TextInput
@@ -2129,14 +2277,7 @@ export default function TabTwoScreen() {
                   value={fixedTitle}
                   onChangeText={setFixedTitle}
                 />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Cantidad"
-                  value={fixedAmount}
-                  keyboardType="decimal-pad"
-                  inputMode="decimal"
-                  onChangeText={setFixedAmount}
-                />
+                {renderMoneyInput(fixedAmount, setFixedAmount, "Cantidad")}
                 <Text style={styles.inputLabel}>Fecha</Text>
                 {renderDateButton(fixedDate, () =>
                   openCalendar("fixedCreate", fixedDate),
@@ -2146,7 +2287,7 @@ export default function TabTwoScreen() {
                 {renderPaymentModeSelector(fixedAutoPay, setFixedAutoPay)}
                 <Pressable
                   style={styles.primaryButton}
-                  onPress={handleAddFixedExpense}
+                  onPress={() => runAction(handleAddFixedExpense)}
                 >
                   <Text style={styles.primaryButtonText}>Guardar fijo</Text>
                 </Pressable>
@@ -2195,9 +2336,11 @@ export default function TabTwoScreen() {
                     {item.is_transferred && (
                       <Text style={styles.expenseMeta}>Traspasado</Text>
                     )}
-                    <Text style={styles.expenseMeta}>
-                      {item.auto_pay ?? true ? "Pago automático" : "Pago manual"}
-                    </Text>
+                    <View style={styles.paymentTypeBadge}>
+                      <Text style={styles.paymentTypeBadgeText}>
+                        {item.auto_pay ?? true ? "Pago automático" : "Pago manual"}
+                      </Text>
+                    </View>
                   </View>
 
                   <Ionicons
@@ -2262,6 +2405,34 @@ export default function TabTwoScreen() {
               </Pressable>
             </View>
 
+            <View style={styles.bizumActionRow}>
+              <Pressable
+                style={[styles.bizumActionButton, styles.bizumReceivedButton]}
+                onPress={() => openBizumModal("refund")}
+              >
+                <Ionicons
+                  name="return-down-back-outline"
+                  size={18}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.bizumActionText}>Devolución</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.bizumActionButton, styles.owedButton]}
+                onPress={() => openBizumModal("owed")}
+              >
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color={colors.danger}
+                />
+                <Text style={[styles.bizumActionText, styles.owedButtonText]}>
+                  Me deben
+                </Text>
+              </Pressable>
+            </View>
+
             {false && (
               <View style={styles.formBox}>
                 <TextInput
@@ -2270,14 +2441,7 @@ export default function TabTwoScreen() {
                   value={title}
                   onChangeText={setTitle}
                 />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Cantidad"
-                  value={amount}
-                  keyboardType="decimal-pad"
-                  inputMode="decimal"
-                  onChangeText={setAmount}
-                />
+                {renderMoneyInput(amount, setAmount, "Cantidad")}
                 <Text style={styles.inputLabel}>Fecha</Text>
                 {renderDateButton(variableDate, () =>
                   openCalendar("variableCreate", variableDate),
@@ -2286,7 +2450,7 @@ export default function TabTwoScreen() {
                 {renderCategorySelector(variableCategory, setVariableCategory)}
                 <Pressable
                   style={styles.primaryButton}
-                  onPress={handleAddExpense}
+                  onPress={() => runAction(handleAddExpense)}
                 >
                   <Text style={styles.primaryButtonText}>Guardar gasto</Text>
                 </Pressable>
@@ -2306,6 +2470,7 @@ export default function TabTwoScreen() {
             {filteredVariableExpenses.map((item: any) => {
               const isIncome = item.type === "income" || item.is_income;
               const currentCategory = normalizeCategory(item.category);
+              const isOwed = currentCategory === "Pendiente de cobrar";
               const fullDate = getDateFromMonthAndDay(
                 item.month || selectedMonth,
                 item.day_of_month || 1,
@@ -2337,6 +2502,7 @@ export default function TabTwoScreen() {
                       style={[
                         styles.expenseMeta,
                         isIncome && styles.incomeMeta,
+                        isOwed && styles.owedMeta,
                       ]}
                     >
                       {fullDate} · {signedAmount}
@@ -2357,6 +2523,57 @@ export default function TabTwoScreen() {
       </ScrollView>
 
       <Modal
+        visible={editingSalary}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingSalary(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>
+                  {activeSpaceId ? "Editar ingresos del espacio" : "Editar sueldo"}
+                </Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  Indica el importe mensual que quieres usar para el resumen.
+                </Text>
+              </View>
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setEditingSalary(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            {renderMoneyInput(salaryInput, setSalaryInput)}
+
+            <View style={commonStyles.modalActions}>
+              <Pressable
+                style={commonStyles.modalCancelButton}
+                onPress={() => setEditingSalary(false)}
+              >
+                <Text style={commonStyles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                disabled={isActionBusy}
+                style={[
+                  commonStyles.modalSaveButton,
+                  isActionBusy && { opacity: 0.6 },
+                ]}
+                onPress={() => runAction(saveIncome)}
+              >
+                <Text style={commonStyles.modalSaveText}>
+                  {isActionBusy ? "Guardando..." : "Guardar"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={showAddFixed}
         transparent
         animationType="fade"
@@ -2368,7 +2585,7 @@ export default function TabTwoScreen() {
               <View style={commonStyles.modalTitleBlock}>
                 <Text style={commonStyles.modalTitle}>Añadir gasto fijo</Text>
                 <Text style={commonStyles.modalSubtitle}>
-                  Se crea como pendiente y se arrastra al mes siguiente.
+                  Registra un gasto que se repite cada mes. Podrás marcarlo como pagado manualmente o dejar que se marque automáticamente al pasar la fecha.
                 </Text>
               </View>
 
@@ -2386,14 +2603,7 @@ export default function TabTwoScreen() {
               value={fixedTitle}
               onChangeText={setFixedTitle}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="Cantidad"
-              value={fixedAmount}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-              onChangeText={setFixedAmount}
-            />
+            {renderMoneyInput(fixedAmount, setFixedAmount, "Cantidad")}
             <Text style={styles.inputLabel}>Fecha</Text>
             {renderDateButton(fixedDate, () =>
               openCalendar("fixedCreate", fixedDate),
@@ -2411,10 +2621,16 @@ export default function TabTwoScreen() {
               </Pressable>
 
               <Pressable
-                style={commonStyles.modalSaveButton}
-                onPress={handleAddFixedExpense}
+                disabled={isActionBusy}
+                style={[
+                  commonStyles.modalSaveButton,
+                  isActionBusy && { opacity: 0.6 },
+                ]}
+                onPress={() => runAction(handleAddFixedExpense)}
               >
-                <Text style={commonStyles.modalSaveText}>Guardar</Text>
+                <Text style={commonStyles.modalSaveText}>
+                  {isActionBusy ? "Guardando..." : "Guardar"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -2451,14 +2667,7 @@ export default function TabTwoScreen() {
               value={title}
               onChangeText={setTitle}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="Cantidad"
-              value={amount}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-              onChangeText={setAmount}
-            />
+            {renderMoneyInput(amount, setAmount, "Cantidad")}
             <Text style={styles.inputLabel}>Fecha</Text>
             {renderDateButton(variableDate, () =>
               openCalendar("variableCreate", variableDate),
@@ -2475,10 +2684,16 @@ export default function TabTwoScreen() {
               </Pressable>
 
               <Pressable
-                style={commonStyles.modalSaveButton}
-                onPress={handleAddExpense}
+                disabled={isActionBusy}
+                style={[
+                  commonStyles.modalSaveButton,
+                  isActionBusy && { opacity: 0.6 },
+                ]}
+                onPress={() => runAction(handleAddExpense)}
               >
-                <Text style={commonStyles.modalSaveText}>Guardar</Text>
+                <Text style={commonStyles.modalSaveText}>
+                  {isActionBusy ? "Guardando..." : "Guardar"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -2511,20 +2726,11 @@ export default function TabTwoScreen() {
               </Pressable>
             </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Importe"
-              value={spaceIncomeAmount}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-              onChangeText={setSpaceIncomeAmount}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Fecha YYYY-MM-DD"
-              value={spaceIncomeDate}
-              onChangeText={setSpaceIncomeDate}
-            />
+            {renderMoneyInput(spaceIncomeAmount, setSpaceIncomeAmount)}
+            <Text style={styles.inputLabel}>Fecha</Text>
+            {renderDateButton(spaceIncomeDate, () =>
+              openCalendar("spaceIncome", spaceIncomeDate),
+            )}
             <TextInput
               style={styles.input}
               placeholder="Nota"
@@ -2541,10 +2747,16 @@ export default function TabTwoScreen() {
               </Pressable>
 
               <Pressable
-                style={commonStyles.modalSaveButton}
-                onPress={handleAddSpaceIncome}
+                disabled={isActionBusy}
+                style={[
+                  commonStyles.modalSaveButton,
+                  isActionBusy && { opacity: 0.6 },
+                ]}
+                onPress={() => runAction(handleAddSpaceIncome)}
               >
-                <Text style={commonStyles.modalSaveText}>Guardar</Text>
+                <Text style={commonStyles.modalSaveText}>
+                  {isActionBusy ? "Guardando..." : "Guardar"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -2564,12 +2776,18 @@ export default function TabTwoScreen() {
                 <Text style={commonStyles.modalTitle}>
                   {bizumModalType === "received"
                     ? "Bizum recibido"
-                    : "Bizum enviado"}
+                    : bizumModalType === "sent"
+                      ? "Bizum enviado"
+                      : bizumModalType === "refund"
+                        ? "Devolución"
+                        : "Dinero pendiente de cobrar"}
                 </Text>
                 <Text style={commonStyles.modalSubtitle}>
-                  {bizumModalType === "received"
+                  {bizumModalType === "received" || bizumModalType === "refund"
                     ? "Se sumará al saldo disponible"
-                    : "Se descontará del saldo disponible"}
+                    : bizumModalType === "owed"
+                      ? "Se mostrará como importe pendiente en rojo"
+                      : "Se descontará del saldo disponible"}
                 </Text>
               </View>
 
@@ -2593,14 +2811,7 @@ export default function TabTwoScreen() {
               value={bizumConcept}
               onChangeText={setBizumConcept}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="Importe"
-              value={bizumAmount}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-              onChangeText={setBizumAmount}
-            />
+            {renderMoneyInput(bizumAmount, setBizumAmount)}
             <Text style={styles.inputLabel}>Fecha</Text>
             {renderDateButton(variableDate, () =>
               openCalendar("variableCreate", variableDate),
@@ -2615,10 +2826,16 @@ export default function TabTwoScreen() {
               </Pressable>
 
               <Pressable
-                style={commonStyles.modalSaveButton}
-                onPress={handleAddBizum}
+                disabled={isActionBusy}
+                style={[
+                  commonStyles.modalSaveButton,
+                  isActionBusy && { opacity: 0.6 },
+                ]}
+                onPress={() => runAction(handleAddBizum)}
               >
-                <Text style={commonStyles.modalSaveText}>Guardar</Text>
+                <Text style={commonStyles.modalSaveText}>
+                  {isActionBusy ? "Guardando..." : "Guardar"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -2654,13 +2871,7 @@ export default function TabTwoScreen() {
             </View>
 
             <Text style={styles.inputLabel}>Importe</Text>
-            <TextInput
-              style={styles.input}
-              value={editAmount}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-              onChangeText={setEditAmount}
-            />
+            {renderMoneyInput(editAmount, setEditAmount)}
 
             <Text style={styles.inputLabel}>Fecha</Text>
             {renderDateButton(editDate, () => openCalendar("edit", editDate))}
@@ -2754,10 +2965,16 @@ export default function TabTwoScreen() {
               </Pressable>
 
               <Pressable
-                style={commonStyles.modalSaveButton}
-                onPress={saveEdit}
+                disabled={isActionBusy}
+                style={[
+                  commonStyles.modalSaveButton,
+                  isActionBusy && { opacity: 0.6 },
+                ]}
+                onPress={() => runAction(saveEdit)}
               >
-                <Text style={commonStyles.modalSaveText}>Guardar</Text>
+                <Text style={commonStyles.modalSaveText}>
+                  {isActionBusy ? "Guardando..." : "Guardar"}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -3108,6 +3325,24 @@ const createStyles = (isDesktop: boolean) =>
       color: colors.text,
     },
 
+    moneyInputShell: {
+      position: "relative",
+      justifyContent: "center",
+    },
+
+    moneyInput: {
+      paddingRight: 40,
+    },
+
+    moneyInputSuffix: {
+      position: "absolute",
+      right: 14,
+      top: isDesktop ? 14 : 12,
+      color: colors.mutedText,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 12,
+      fontWeight: "900",
+    },
+
     inlineInput: {
       width: isDesktop ? 82 : 68,
       borderWidth: 1,
@@ -3155,6 +3390,37 @@ const createStyles = (isDesktop: boolean) =>
 
     filterDropdown: {
       marginBottom: isDesktop ? 16 : 14,
+    },
+
+    paidFilterRow: {
+      flexDirection: "row",
+      gap: 7,
+      marginBottom: 12,
+    },
+
+    paidFilterButton: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.white,
+      borderRadius: 999,
+      paddingVertical: 8,
+      alignItems: "center",
+    },
+
+    paidFilterButtonActive: {
+      backgroundColor: colors.primaryDark,
+      borderColor: colors.primaryDark,
+    },
+
+    paidFilterText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
+    paidFilterTextActive: {
+      color: colors.white,
     },
 
     filterDropdownButton: {
@@ -3287,6 +3553,15 @@ const createStyles = (isDesktop: boolean) =>
     bizumReceivedButton: {
       backgroundColor: "#ECFDF5",
       borderColor: "#BBF7D0",
+    },
+
+    owedButton: {
+      backgroundColor: "#FEF2F2",
+      borderColor: "#FECACA",
+    },
+
+    owedButtonText: {
+      color: colors.danger,
     },
 
     bizumActionText: {
@@ -3522,8 +3797,29 @@ const createStyles = (isDesktop: boolean) =>
       fontWeight: "600",
     },
 
+    paymentTypeBadge: {
+      alignSelf: "flex-start",
+      marginTop: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 999,
+      paddingVertical: isDesktop ? 5 : 4,
+      paddingHorizontal: isDesktop ? 10 : 8,
+      backgroundColor: colors.surface,
+    },
+
+    paymentTypeBadgeText: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "800",
+    },
+
     incomeMeta: {
       color: "#047857",
+    },
+
+    owedMeta: {
+      color: colors.danger,
     },
 
     detailBox: {
@@ -3720,6 +4016,11 @@ const createStyles = (isDesktop: boolean) =>
       justifyContent: "center",
     },
 
+    dayButtonSelected: {
+      backgroundColor: colors.primaryDark,
+      borderRadius: 999,
+    },
+
     dayButtonText: {
       width: isDesktop ? 34 : 30,
       height: isDesktop ? 34 : 30,
@@ -3731,6 +4032,11 @@ const createStyles = (isDesktop: boolean) =>
       textAlign: "center",
       textAlignVertical: "center",
       lineHeight: isDesktop ? 34 : 30,
+    },
+
+    dayButtonTextSelected: {
+      backgroundColor: colors.primaryDark,
+      color: colors.white,
     },
   });
 

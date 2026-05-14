@@ -153,7 +153,7 @@ export const createCommonStyles = (isDesktop: boolean) => {
     },
 
     input: {
-      backgroundColor: colors.white,
+      backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 11,
@@ -170,6 +170,20 @@ export const createCommonStyles = (isDesktop: boolean) => {
 
     inputWithIcon: {
       paddingRight: 44,
+    },
+
+    inputSuffix: {
+      position: "absolute",
+      right: 13,
+      height: "100%",
+      justifyContent: "center",
+      pointerEvents: "none",
+    },
+
+    inputSuffixText: {
+      color: colors.mutedText,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 14 : 12,
+      fontWeight: "900",
     },
 
     inputIconButton: {
@@ -209,6 +223,28 @@ export const createCommonStyles = (isDesktop: boolean) => {
       fontSize: isDesktop ? 22 : 20,
       lineHeight: 24,
       color: colors.text,
+      fontWeight: "900",
+    },
+
+    topSpaceBadge: {
+      position: "absolute",
+      top: isDesktop ? 27 : 23,
+      right: isDesktop ? 74 : 64,
+      maxWidth: 180,
+      minHeight: isDesktop ? 36 : 32,
+      borderRadius: 999,
+      backgroundColor: colors.primarySoft,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 20,
+    },
+
+    topSpaceBadgeText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
       fontWeight: "900",
     },
 

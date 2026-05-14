@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppBottomMenu } from "@/src/components/AppBottomMenu";
 import { AppTextInput } from "@/src/components/AppTextInput";
-import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
+import { SpaceMenuButton } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
@@ -51,6 +51,8 @@ export default function SettingsScreen() {
   const [sharedSpaceName, setSharedSpaceName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [spaceMessage, setSpaceMessage] = useState("");
+  const [themeMessage, setThemeMessage] = useState("");
+  const [isChangingTheme, setIsChangingTheme] = useState(false);
   const [tutorialVisible, setTutorialVisible] = useState(false);
   const [spaceMessageType, setSpaceMessageType] = useState<
     "success" | "error" | null
@@ -120,6 +122,20 @@ export default function SettingsScreen() {
     router.replace("/login");
   };
 
+  const applyTheme = async (nextThemeId: typeof themeId) => {
+    setThemeMessage("");
+    setIsChangingTheme(true);
+
+    try {
+      await setThemeId(nextThemeId);
+      setThemeMessage("Tema actualizado.");
+    } catch {
+      setThemeMessage("No se pudo guardar el tema. Inténtalo de nuevo.");
+    } finally {
+      setIsChangingTheme(false);
+    }
+  };
+
   const confirmThemeChange = (nextThemeId: typeof themeId) => {
     if (nextThemeId === themeId) return;
 
@@ -128,7 +144,7 @@ export default function SettingsScreen() {
 
     if (Platform.OS === "web") {
       if (window.confirm(message)) {
-        setThemeId(nextThemeId);
+        applyTheme(nextThemeId);
       }
 
       return;
@@ -141,7 +157,7 @@ export default function SettingsScreen() {
         { text: "Cancelar", style: "cancel" },
         {
           text: "Cambiar",
-          onPress: () => setThemeId(nextThemeId),
+          onPress: () => applyTheme(nextThemeId),
         },
       ],
     );
@@ -153,7 +169,13 @@ export default function SettingsScreen() {
 
   return (
     <View style={commonStyles.screen}>
-      <Header title="Ajustes" />
+      <Header
+        title="Ajustes"
+        headerStyle={{ backgroundColor: colors.surface }}
+        headerTintColor={colors.text}
+        headerTitleStyle={{ color: colors.text }}
+      />
+      <SpaceMenuButton isDesktop={isDesktop} />
 
       <ScrollView contentContainerStyle={commonStyles.container}>
         <View style={commonStyles.content}>
@@ -237,6 +259,7 @@ export default function SettingsScreen() {
                       styles.themeOption,
                       active && styles.themeOptionActive,
                     ]}
+                    disabled={isChangingTheme}
                     onPress={() => confirmThemeChange(option.id)}
                   >
                     <View style={styles.themeSwatches}>
@@ -279,6 +302,10 @@ export default function SettingsScreen() {
               })}
             </View>
 
+            {Boolean(themeMessage) && (
+              <Text style={styles.themeMessage}>{themeMessage}</Text>
+            )}
+
             <Pressable
               style={styles.tutorialButton}
               onPress={() => setTutorialVisible(true)}
@@ -313,8 +340,6 @@ export default function SettingsScreen() {
               Usa Personal para tus datos privados y crea un espacio compartido
               para una cuenta común.
             </Text>
-
-            <SpaceSwitcher />
 
             <AppTextInput
               label="Nuevo espacio compartido"
@@ -457,7 +482,7 @@ export default function SettingsScreen() {
               <TutorialStep
                 number="3"
                 title="Revisa el resumen"
-                text="En Inicio verás el balance del mes y el gráfico por categoría para detectar dónde se va más dinero."
+                text="En Resumen verás el balance del mes y el gráfico por categoría para detectar dónde se va más dinero."
                 styles={styles}
               />
               <TutorialStep
@@ -651,6 +676,13 @@ const createStyles = (isDesktop: boolean, isTablet: boolean) =>
       fontSize: isDesktop ? 10 : 9,
       fontWeight: "700",
       color: colors.mutedText,
+    },
+
+    themeMessage: {
+      marginTop: 10,
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
     },
 
     tutorialButton: {

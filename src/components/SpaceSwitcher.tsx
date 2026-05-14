@@ -1,13 +1,73 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  Alert,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { ActivityFeed } from "@/src/components/ActivityFeed";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { useAppTheme } from "@/src/context/ThemeContext";
 import { colors } from "@/src/theme/colors";
+import { createCommonStyles } from "@/src/theme/commonStyles";
 
-export function SpaceSwitcher() {
+export function SpaceMenuButton({ isDesktop }: { isDesktop: boolean }) {
+  const { activeSpace } = useSpaces();
+  const { themeId } = useAppTheme();
+  const [visible, setVisible] = useState(false);
+  const commonStyles = useMemo(() => {
+    void themeId;
+    return createCommonStyles(isDesktop);
+  }, [isDesktop, themeId]);
+
+  return (
+    <>
+      <Pressable
+        style={commonStyles.topSpaceBadge}
+        onPress={() => setVisible(true)}
+      >
+        <Text style={commonStyles.topSpaceBadgeText} numberOfLines={1}>
+          {activeSpace.name}
+        </Text>
+      </Pressable>
+
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVisible(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>Cambiar espacio</Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  Elige el espacio de trabajo activo.
+                </Text>
+              </View>
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setVisible(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <SpaceSwitcher onChanged={() => setVisible(false)} />
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+export function SpaceSwitcher({ onChanged }: { onChanged?: () => void }) {
   const { themeId } = useAppTheme();
   const {
     activeSpaceId,
@@ -21,6 +81,31 @@ export function SpaceSwitcher() {
     void themeId;
     return createStyles();
   }, [themeId]);
+
+  const confirmSpaceChange = (spaceId: string | null, spaceName: string) => {
+    if (activeSpaceId === spaceId) return;
+
+    const message = `¿Quieres cambiar al espacio "${spaceName}"?`;
+
+    if (Platform.OS === "web") {
+      if (window.confirm(message)) {
+        selectSpace(spaceId);
+        onChanged?.();
+      }
+      return;
+    }
+
+    Alert.alert("Cambiar espacio", message, [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Cambiar",
+        onPress: () => {
+          selectSpace(spaceId);
+          onChanged?.();
+        },
+      },
+    ]);
+  };
 
   return (
     <>
@@ -47,7 +132,7 @@ export function SpaceSwitcher() {
               <Pressable
                 key={space.id || "personal"}
                 style={[styles.chip, active && styles.chipActive]}
-                onPress={() => selectSpace(space.id)}
+                onPress={() => confirmSpaceChange(space.id, space.name)}
               >
                 <Ionicons
                   name={shared ? "people" : "person"}

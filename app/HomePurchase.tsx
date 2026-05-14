@@ -7,7 +7,7 @@ import { AppBottomMenu } from "@/src/components/AppBottomMenu";
 import { AppTextInput } from "@/src/components/AppTextInput";
 import { KpiCard } from "@/src/components/KpiCard";
 import { ResultRow } from "@/src/components/ResultRow";
-import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
+import { SpaceMenuButton } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
@@ -551,12 +551,16 @@ export default function HomePurchaseScreen() {
 
   return (
     <View style={commonStyles.screen}>
-      <Header title="Simulador de casa" />
+      <Header
+        title="Simulador de casa"
+        headerStyle={{ backgroundColor: colors.surface }}
+        headerTintColor={colors.text}
+        headerTitleStyle={{ color: colors.text }}
+      />
+      <SpaceMenuButton isDesktop={isDesktop} />
 
       <ScrollView contentContainerStyle={commonStyles.container}>
         <View style={commonStyles.content}>
-          <SpaceSwitcher />
-
           <View style={[commonStyles.card, styles.libraryCard]}>
             <View style={styles.libraryHeader}>
               <View style={styles.titleTextBlock}>
