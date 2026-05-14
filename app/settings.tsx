@@ -32,7 +32,8 @@ export default function SettingsScreen() {
   } = useSpaces();
   const { themeId, setThemeId, options: themeOptions } = useAppTheme();
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 768;
+  const isDesktop = width >= 1024;
+  const isTablet = width >= 600 && width < 1024;
 
   const commonStyles = useMemo(() => {
     void themeId;
@@ -41,8 +42,8 @@ export default function SettingsScreen() {
 
   const styles = useMemo(() => {
     void themeId;
-    return createStyles(isDesktop);
-  }, [isDesktop, themeId]);
+    return createStyles(isDesktop, isTablet);
+  }, [isDesktop, isTablet, themeId]);
 
   const [email, setEmail] = useState("");
   const [sharedSpaceName, setSharedSpaceName] = useState("");
@@ -114,6 +115,24 @@ export default function SettingsScreen() {
     }
 
     router.replace("/login");
+  };
+
+  const confirmThemeChange = (nextThemeId: typeof themeId) => {
+    if (nextThemeId === themeId) return;
+
+    const option = themeOptions.find((item) => item.id === nextThemeId);
+
+    Alert.alert(
+      "Cambiar tema",
+      `¿Quieres aplicar el tema ${option?.name || "seleccionado"}?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Cambiar",
+          onPress: () => setThemeId(nextThemeId),
+        },
+      ],
+    );
   };
 
   useEffect(() => {
@@ -206,7 +225,7 @@ export default function SettingsScreen() {
                       styles.themeOption,
                       active && styles.themeOptionActive,
                     ]}
-                    onPress={() => setThemeId(option.id)}
+                    onPress={() => confirmThemeChange(option.id)}
                   >
                     <View style={styles.themeSwatches}>
                       <View
@@ -360,7 +379,7 @@ export default function SettingsScreen() {
   );
 }
 
-const createStyles = (isDesktop: boolean) =>
+const createStyles = (isDesktop: boolean, isTablet: boolean) =>
   StyleSheet.create({
     heroCard: {
       backgroundColor: colors.primaryDark,
@@ -444,24 +463,25 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     themeGrid: {
-      flexDirection: isDesktop ? "row" : "column",
+      flexDirection: "row",
       flexWrap: "wrap",
-      gap: 10,
-      marginTop: 6,
+      gap: isTablet ? 8 : 7,
+      marginTop: 4,
     },
 
     themeOption: {
       flexGrow: 1,
-      flexBasis: isDesktop ? "48%" : "100%",
-      minHeight: 72,
+      flexBasis: isDesktop ? "23%" : "47%",
+      minHeight: isDesktop ? 64 : 56,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 14,
+      borderRadius: 12,
       backgroundColor: colors.background,
-      padding: 12,
+      paddingVertical: isDesktop ? 10 : 8,
+      paddingHorizontal: isDesktop ? 10 : 8,
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
+      gap: 8,
     },
 
     themeOptionActive: {
@@ -471,9 +491,9 @@ const createStyles = (isDesktop: boolean) =>
 
     themeSwatches: {
       flexDirection: "row",
-      width: 52,
-      height: 32,
-      borderRadius: 10,
+      width: isDesktop ? 42 : 34,
+      height: isDesktop ? 26 : 22,
+      borderRadius: 8,
       overflow: "hidden",
       borderWidth: 1,
       borderColor: colors.border,
@@ -489,14 +509,14 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     themeName: {
-      fontSize: isDesktop ? 14 : 12,
+      fontSize: isDesktop ? 12 : 11,
       fontWeight: "900",
       color: colors.text,
     },
 
     themeDescription: {
-      marginTop: 2,
-      fontSize: isDesktop ? 12 : 10,
+      marginTop: 1,
+      fontSize: isDesktop ? 10 : 9,
       fontWeight: "700",
       color: colors.mutedText,
     },

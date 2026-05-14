@@ -56,7 +56,7 @@ export default function LoginScreen() {
   const { refreshSession } = useAuth();
   const { themeId } = useAppTheme();
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 768;
+  const isDesktop = width >= 1024;
   const commonStyles = useMemo(() => {
     void themeId;
     return createCommonStyles(isDesktop);

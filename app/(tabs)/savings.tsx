@@ -55,7 +55,7 @@ export default function SavingsScreen() {
   const { activeSpaceId, recordActivity } = useSpaces();
   const { themeId } = useAppTheme();
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 768;
+  const isDesktop = width >= 1024;
 
   const commonStyles = useMemo(() => {
     void themeId;
