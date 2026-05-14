@@ -29,7 +29,7 @@ import {
   getTodayDate,
 } from "@/src/utils/dates";
 import { getCurrentUser } from "@/src/utils/auth";
-import { formatCompactMoney } from "@/src/utils/money";
+import { formatCompactMoney, parseMoneyInput } from "@/src/utils/money";
 import {
   canDeleteExpense,
   canEditExpense,
@@ -709,8 +709,8 @@ export default function TabTwoScreen() {
 
     if (!user) return;
 
-    const value = Number(salaryInput);
-    if (isNaN(value) || value < 0) {
+    const value = parseMoneyInput(salaryInput);
+    if (value < 0) {
       Alert.alert("Importe no valido", "Introduce un importe igual o mayor que 0.");
       return;
     }
@@ -744,7 +744,9 @@ export default function TabTwoScreen() {
       return;
     }
 
-    if (!amount || Number(amount) <= 0) {
+    const expenseAmount = parseMoneyInput(amount);
+
+    if (expenseAmount <= 0) {
       Alert.alert("Importe no valido", "El gasto debe ser mayor que 0.");
       return;
     }
@@ -759,7 +761,7 @@ export default function TabTwoScreen() {
     await supabase.from("transactions").insert([
       {
         title,
-        amount: Number(amount),
+        amount: expenseAmount,
         type: "expense",
         user_id: user.id,
         created_at: new Date().toISOString(),
@@ -788,7 +790,7 @@ export default function TabTwoScreen() {
 
   const handleAddSpaceIncome = async () => {
     const user = await getCurrentUser();
-    const value = Number(spaceIncomeAmount);
+    const value = parseMoneyInput(spaceIncomeAmount);
 
     if (!user || !activeSpaceId) return;
 
@@ -848,7 +850,9 @@ export default function TabTwoScreen() {
       return;
     }
 
-    if (!fixedAmount || Number(fixedAmount) <= 0) {
+    const fixedExpenseAmount = parseMoneyInput(fixedAmount);
+
+    if (fixedExpenseAmount <= 0) {
       Alert.alert("Importe no valido", "El gasto fijo debe ser mayor que 0.");
       return;
     }
@@ -867,7 +871,7 @@ export default function TabTwoScreen() {
     await supabase.from("fixed_templates").insert([
       {
         title: fixedTitle,
-        amount: Number(fixedAmount),
+        amount: fixedExpenseAmount,
         day_of_month: expenseDay,
         user_id: user.id,
         month: expenseMonth,
@@ -879,7 +883,7 @@ export default function TabTwoScreen() {
     await supabase.from("fixed_expenses").insert([
       {
         title: fixedTitle,
-        amount: Number(fixedAmount),
+        amount: fixedExpenseAmount,
         day_of_month: expenseDay,
         user_id: user.id,
         month: expenseMonth,
@@ -948,11 +952,11 @@ export default function TabTwoScreen() {
   const saveEdit = async () => {
     if (!editingItem || !editingType) return;
 
-    const newAmount = Number(editAmount);
+    const newAmount = parseMoneyInput(editAmount);
     const newMonth = getMonthFromDate(editDate);
     const newDay = getDayFromDate(editDate);
 
-    if (isNaN(newAmount)) {
+    if (newAmount <= 0) {
       Alert.alert("Error", "El importe no es válido.");
       return;
     }
@@ -1639,7 +1643,8 @@ export default function TabTwoScreen() {
                   <TextInput
                     style={styles.inlineInput}
                     value={salaryInput}
-                    keyboardType="numeric"
+                    keyboardType="decimal-pad"
+                    inputMode="decimal"
                     onChangeText={setSalaryInput}
                   />
                   <Pressable style={styles.iconButtonDark} onPress={saveIncome}>
@@ -1726,7 +1731,8 @@ export default function TabTwoScreen() {
                   style={styles.input}
                   placeholder="Cantidad"
                   value={fixedAmount}
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
+                  inputMode="decimal"
                   onChangeText={setFixedAmount}
                 />
                 <Text style={styles.inputLabel}>Fecha</Text>
@@ -1871,7 +1877,8 @@ export default function TabTwoScreen() {
                   style={styles.input}
                   placeholder="Cantidad"
                   value={amount}
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
+                  inputMode="decimal"
                   onChangeText={setAmount}
                 />
                 <Text style={styles.inputLabel}>Fecha</Text>
@@ -2008,7 +2015,8 @@ export default function TabTwoScreen() {
               style={styles.input}
               placeholder="Cantidad"
               value={fixedAmount}
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
+              inputMode="decimal"
               onChangeText={setFixedAmount}
             />
             <Text style={styles.inputLabel}>Fecha</Text>
@@ -2071,7 +2079,8 @@ export default function TabTwoScreen() {
               style={styles.input}
               placeholder="Cantidad"
               value={amount}
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
+              inputMode="decimal"
               onChangeText={setAmount}
             />
             <Text style={styles.inputLabel}>Fecha</Text>
@@ -2130,7 +2139,8 @@ export default function TabTwoScreen() {
               style={styles.input}
               placeholder="Importe"
               value={spaceIncomeAmount}
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
+              inputMode="decimal"
               onChangeText={setSpaceIncomeAmount}
             />
             <TextInput
@@ -2197,7 +2207,8 @@ export default function TabTwoScreen() {
             <TextInput
               style={styles.input}
               value={editAmount}
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
+              inputMode="decimal"
               onChangeText={setEditAmount}
             />
 

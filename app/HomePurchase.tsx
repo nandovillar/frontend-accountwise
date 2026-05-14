@@ -13,7 +13,11 @@ import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
-import { formatCompactMoney, formatMoney } from "@/src/utils/money";
+import {
+  formatCompactMoney,
+  formatMoney,
+  parseMoneyInput,
+} from "@/src/utils/money";
 import { applySpaceFilter, getSpacePayload } from "@/src/utils/spaceQueries";
 
 import {
@@ -160,7 +164,7 @@ export default function HomePurchaseScreen() {
   const [simulatorModalVisible, setSimulatorModalVisible] = useState(false);
 
   const toNumber = (value: string | number) => {
-    return Number(String(value).replace(",", ".")) || 0;
+    return parseMoneyInput(value);
   };
 
   const buildDefaultSnapshot = (): FormSnapshot => ({

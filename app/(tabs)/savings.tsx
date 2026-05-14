@@ -17,7 +17,11 @@ import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
 import { getNextYearDate, getTodayDate } from "@/src/utils/dates";
-import { formatCompactMoney, formatMoney } from "@/src/utils/money";
+import {
+  formatCompactMoney,
+  formatMoney,
+  parseMoneyInput,
+} from "@/src/utils/money";
 import { applySpaceFilter, getSpacePayload } from "@/src/utils/spaceQueries";
 
 import {
@@ -259,7 +263,11 @@ export default function SavingsScreen() {
       return;
     }
 
-    if (Number(goal) <= 0) {
+    const goalAmount = parseMoneyInput(goal);
+    const monthlyAmount = parseMoneyInput(monthly);
+    const contributedAmount = parseMoneyInput(contributed);
+
+    if (goalAmount <= 0) {
       Alert.alert("Importe no valido", "El objetivo debe ser mayor que 0.");
       return;
     }
@@ -267,11 +275,11 @@ export default function SavingsScreen() {
     const payload = {
       user_id: user.id,
       name: name.trim() || "Ahorro sin nombre",
-      goal: Number(goal) || 0,
+      goal: goalAmount,
       start_date: startDate,
       end_date: endDate,
-      monthly_amount: Number(monthly) || 0,
-      contributed: Number(contributed) || 0,
+      monthly_amount: monthlyAmount,
+      contributed: contributedAmount,
       borrowed: borrowed.trim(),
       ...getSpacePayload(activeSpaceId),
     };
@@ -353,7 +361,7 @@ export default function SavingsScreen() {
 
     if (!user) return;
 
-    const amount = Number(String(movementAmount).replace(",", "."));
+    const amount = parseMoneyInput(movementAmount);
 
     if (!amount || amount <= 0) {
       Alert.alert("Importe no valido", "Introduce un importe mayor que 0.");
@@ -571,9 +579,9 @@ export default function SavingsScreen() {
   const currentFormResult = calculateSaving(
     startDate,
     endDate,
-    Number(monthly) || 0,
-    Number(contributed) || 0,
-    Number(goal) || 0,
+    parseMoneyInput(monthly),
+    parseMoneyInput(contributed),
+    parseMoneyInput(goal),
   );
 
   return (
@@ -889,7 +897,7 @@ export default function SavingsScreen() {
 
                 <ResultRow
                   label="Objetivo"
-                  value={formatMoney(Number(goal) || 0)}
+                  value={formatMoney(parseMoneyInput(goal))}
                   styles={styles}
                 />
 
