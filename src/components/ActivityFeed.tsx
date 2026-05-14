@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { SpaceActivity } from "@/src/context/SpaceContext";
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { colors } from "@/src/theme/colors";
 
 const formatTime = (value: string) => {
@@ -15,6 +17,12 @@ const formatTime = (value: string) => {
 };
 
 export function ActivityFeed({ items }: { items: SpaceActivity[] }) {
+  const { themeId } = useAppTheme();
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles();
+  }, [themeId]);
+
   if (!items.length) return null;
 
   return (
@@ -39,7 +47,8 @@ export function ActivityFeed({ items }: { items: SpaceActivity[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () =>
+  StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -94,4 +103,4 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginTop: 2,
   },
-});
+  });

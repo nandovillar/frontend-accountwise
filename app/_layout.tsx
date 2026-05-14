@@ -1,12 +1,14 @@
 import { AuthProvider } from "@/src/context/AuthContext";
 import { SpaceProvider } from "@/src/context/SpaceContext";
+import { ThemeProvider } from "@/src/context/ThemeContext";
 import { Stack } from "expo-router";
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <SpaceProvider>
-        <Stack>
+    <ThemeProvider>
+      <AuthProvider>
+        <SpaceProvider>
+          <Stack>
           <Stack.Screen
             name="login"
             options={{
@@ -49,8 +51,9 @@ export default function RootLayout() {
               title: "Modal",
             }}
           />
-        </Stack>
-      </SpaceProvider>
-    </AuthProvider>
+          </Stack>
+        </SpaceProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { colors } from "@/src/theme/colors";
 
 type EmptyStateProps = {
@@ -18,6 +20,12 @@ export function EmptyState({
   icon = "add-circle-outline",
   onAction,
 }: EmptyStateProps) {
+  const { themeId } = useAppTheme();
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles();
+  }, [themeId]);
+
   return (
     <View style={styles.box}>
       <View style={styles.iconWrap}>
@@ -36,7 +44,8 @@ export function EmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () =>
+  StyleSheet.create({
   box: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -85,4 +94,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-});
+  });

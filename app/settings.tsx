@@ -7,8 +7,9 @@ import { AppBottomMenu } from "@/src/components/AppBottomMenu";
 import { AppTextInput } from "@/src/components/AppTextInput";
 import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
-import { colors } from "@/src/theme/colors";
+import { colors, themePalettes } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
 
@@ -29,15 +30,19 @@ export default function SettingsScreen() {
     inviteMemberByEmail,
     refreshSpaces,
   } = useSpaces();
+  const { themeId, setThemeId, options: themeOptions } = useAppTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
-  const commonStyles = useMemo(
-    () => createCommonStyles(isDesktop),
-    [isDesktop],
-  );
+  const commonStyles = useMemo(() => {
+    void themeId;
+    return createCommonStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
-  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
   const [email, setEmail] = useState("");
   const [sharedSpaceName, setSharedSpaceName] = useState("");
@@ -184,9 +189,63 @@ export default function SettingsScreen() {
                 <Text style={styles.optionTitle}>Tema visual</Text>
 
                 <Text style={styles.optionDescription}>
-                  Tema turquesa con diseno financiero limpio.
+                  Elige entre 2 temas claros y 2 oscuros.
                 </Text>
               </View>
+            </View>
+
+            <View style={styles.themeGrid}>
+              {themeOptions.map((option) => {
+                const palette = themePalettes[option.id];
+                const active = option.id === themeId;
+
+                return (
+                  <Pressable
+                    key={option.id}
+                    style={[
+                      styles.themeOption,
+                      active && styles.themeOptionActive,
+                    ]}
+                    onPress={() => setThemeId(option.id)}
+                  >
+                    <View style={styles.themeSwatches}>
+                      <View
+                        style={[
+                          styles.themeSwatch,
+                          { backgroundColor: palette.background },
+                        ]}
+                      />
+                      <View
+                        style={[
+                          styles.themeSwatch,
+                          { backgroundColor: palette.primaryDark },
+                        ]}
+                      />
+                      <View
+                        style={[
+                          styles.themeSwatch,
+                          { backgroundColor: palette.surface },
+                        ]}
+                      />
+                    </View>
+
+                    <View style={styles.themeTextBlock}>
+                      <Text style={styles.themeName}>{option.name}</Text>
+                      <Text style={styles.themeDescription}>
+                        {option.description}
+                      </Text>
+                    </View>
+
+                    {active && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color={colors.primaryDark}
+                      />
+                    )}
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
 
@@ -382,6 +441,64 @@ const createStyles = (isDesktop: boolean) =>
       color: colors.mutedText,
       fontWeight: "600",
       lineHeight: isDesktop ? 18 : 16,
+    },
+
+    themeGrid: {
+      flexDirection: isDesktop ? "row" : "column",
+      flexWrap: "wrap",
+      gap: 10,
+      marginTop: 6,
+    },
+
+    themeOption: {
+      flexGrow: 1,
+      flexBasis: isDesktop ? "48%" : "100%",
+      minHeight: 72,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      backgroundColor: colors.background,
+      padding: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+
+    themeOptionActive: {
+      borderColor: colors.primaryDark,
+      backgroundColor: colors.primarySoft,
+    },
+
+    themeSwatches: {
+      flexDirection: "row",
+      width: 52,
+      height: 32,
+      borderRadius: 10,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    themeSwatch: {
+      flex: 1,
+    },
+
+    themeTextBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    themeName: {
+      fontSize: isDesktop ? 14 : 12,
+      fontWeight: "900",
+      color: colors.text,
+    },
+
+    themeDescription: {
+      marginTop: 2,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "700",
+      color: colors.mutedText,
     },
 
     spaceActionButton: {

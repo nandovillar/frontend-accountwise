@@ -1,18 +1,27 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { colors } from "@/src/theme/colors";
 
 type ActiveTab = "home" | "expenses" | "savings" | "settings";
 
 export function AppBottomMenu({ active }: { active?: ActiveTab }) {
+  const { themeId } = useAppTheme();
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles();
+  }, [themeId]);
+
   return (
     <View style={styles.bottomBar}>
       <MenuItem
         label="Inicio"
         icon="home-outline"
         active={active === "home"}
+        styles={styles}
         onPress={() => router.replace("/")}
       />
 
@@ -20,6 +29,7 @@ export function AppBottomMenu({ active }: { active?: ActiveTab }) {
         label="Gastos"
         icon="card-outline"
         active={active === "expenses"}
+        styles={styles}
         onPress={() => router.replace("/expenses")}
       />
 
@@ -27,6 +37,7 @@ export function AppBottomMenu({ active }: { active?: ActiveTab }) {
         label="Ahorros"
         icon="wallet-outline"
         active={active === "savings"}
+        styles={styles}
         onPress={() => router.replace("/savings")}
       />
     </View>
@@ -37,11 +48,13 @@ function MenuItem({
   label,
   icon,
   active,
+  styles,
   onPress,
 }: {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   active?: boolean;
+  styles: ReturnType<typeof createStyles>;
   onPress: () => void;
 }) {
   return (
@@ -57,7 +70,8 @@ function MenuItem({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () =>
+  StyleSheet.create({
   bottomBar: {
     position: "absolute",
     left: 0,
@@ -92,4 +106,4 @@ const styles = StyleSheet.create({
   labelActive: {
     color: colors.primaryDark,
   },
-});
+  });

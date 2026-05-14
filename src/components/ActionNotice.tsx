@@ -1,9 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { colors } from "@/src/theme/colors";
 
 export function ActionNotice({ message }: { message: string }) {
+  const { themeId } = useAppTheme();
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles();
+  }, [themeId]);
+
   if (!message) return null;
 
   return (
@@ -14,7 +22,8 @@ export function ActionNotice({ message }: { message: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () =>
+  StyleSheet.create({
   box: {
     flexDirection: "row",
     alignItems: "center",
@@ -34,4 +43,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-});
+  });

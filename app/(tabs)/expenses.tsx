@@ -17,6 +17,7 @@ import { DataState } from "@/src/components/DataState";
 import { EmptyState } from "@/src/components/EmptyState";
 import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
@@ -64,6 +65,10 @@ const defaultCategories = [
 
 type EditingType = "fixed" | "variable" | null;
 type ExpenseSectionType = "fixed" | "variable";
+type ExpenseDetail = {
+  item: any;
+  type: ExpenseSectionType;
+} | null;
 
 const sectionTitleDefaults: Record<ExpenseSectionType, string> = {
   fixed: "Gastos fijos",
@@ -97,15 +102,19 @@ const getExpenseDuplicateKey = (item: any) => {
 
 export default function TabTwoScreen() {
   const { activeSpaceId, recordActivity, spaces } = useSpaces();
+  const { themeId } = useAppTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
-  const commonStyles = useMemo(
-    () => createCommonStyles(isDesktop),
-    [isDesktop],
-  );
+  const commonStyles = useMemo(() => {
+    void themeId;
+    return createCommonStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
-  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
   const normalizeCategory = (category?: string) => {
     if (!category || category === "General") return "Otros";
@@ -124,6 +133,7 @@ export default function TabTwoScreen() {
   const [editingSalary, setEditingSalary] = useState(false);
 
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [incomeTransactions, setIncomeTransactions] = useState<any[]>([]);
   const [fixedExpenses, setFixedExpenses] = useState<any[]>([]);
 
   const [title, setTitle] = useState("");
@@ -137,6 +147,7 @@ export default function TabTwoScreen() {
     getDateFromMonthAndDay(getCurrentMonth(), 1),
   );
   const [fixedCategory, setFixedCategory] = useState("Otros");
+  const [fixedAutoPay, setFixedAutoPay] = useState(true);
 
   const [categories, setCategories] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState("");
@@ -148,6 +159,12 @@ export default function TabTwoScreen() {
 
   const [showAddFixed, setShowAddFixed] = useState(false);
   const [showAddVariable, setShowAddVariable] = useState(false);
+  const [bizumModalType, setBizumModalType] = useState<
+    "received" | "sent" | null
+  >(null);
+  const [bizumName, setBizumName] = useState("");
+  const [bizumConcept, setBizumConcept] = useState("");
+  const [bizumAmount, setBizumAmount] = useState("");
 
   const [showFixedSection, setShowFixedSection] = useState(false);
   const [showVariableSection, setShowVariableSection] = useState(false);
@@ -163,9 +180,11 @@ export default function TabTwoScreen() {
 
   const [editingType, setEditingType] = useState<EditingType>(null);
   const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [detailExpense, setDetailExpense] = useState<ExpenseDetail>(null);
   const [editAmount, setEditAmount] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editCategory, setEditCategory] = useState("Otros");
+  const [editAutoPay, setEditAutoPay] = useState(true);
 
   const [showEditCategoryDropdown, setShowEditCategoryDropdown] =
     useState(false);
@@ -388,7 +407,9 @@ export default function TabTwoScreen() {
     const loaded = data.map((item: { name: string }) =>
       normalizeCategory(item.name),
     );
-    setCategories(sortCategories(loaded));
+    setCategories(
+      sortCategories([...loaded, "Bizum recibido", "Bizum enviado"]),
+    );
   };
 
   const createCategory = async (onCreated?: (category: string) => void) => {
@@ -444,6 +465,21 @@ export default function TabTwoScreen() {
     );
 
     setExpenses(data || []);
+
+    const incomeQuery = supabase
+      .from("transactions")
+      .select("*")
+      .eq("type", "income")
+      .eq("month", selectedMonth)
+      .order("day_of_month", { ascending: true })
+      .order("created_at", { ascending: true });
+    const { data: incomeData } = await applySpaceFilter(
+      incomeQuery,
+      user.id,
+      activeSpaceId,
+    );
+
+    setIncomeTransactions(incomeData || []);
   };
 
   const autoMarkPersonalDueFixedExpenses = async () => {
@@ -462,6 +498,7 @@ export default function TabTwoScreen() {
       .is("space_id", null)
       .eq("month", selectedMonth)
       .eq("is_paid", false)
+      .eq("auto_pay", true)
       .lte("day_of_month", todayDay);
   };
 
@@ -540,6 +577,7 @@ export default function TabTwoScreen() {
       user_id: activeSpaceId ? item.user_id || user.id : user.id,
       month: selectedMonth,
       category: normalizeCategory(item.category),
+      auto_pay: item.auto_pay ?? true,
       ...getSpacePayload(activeSpaceId),
     }));
 
@@ -602,6 +640,7 @@ export default function TabTwoScreen() {
         month: selectedMonth,
         is_paid: false,
         category: normalizeCategory(item.category),
+        auto_pay: item.auto_pay ?? true,
         ...getSpacePayload(activeSpaceId),
       }));
 
@@ -642,6 +681,11 @@ export default function TabTwoScreen() {
   const loadMonthDataRef = useRef(loadAll);
 
   loadAllRef.current = loadAll;
+  const retryLoadAll = useCallback(() => {
+    loadInProgressRef.current = false;
+    loadAllRef.current();
+  }, []);
+
   loadMonthDataRef.current = async () => {
     setFixedExpenses([]);
     setExpenses([]);
@@ -678,6 +722,7 @@ export default function TabTwoScreen() {
     setCategories([]);
     setFixedExpenses([]);
     setExpenses([]);
+    setIncomeTransactions([]);
     setFixedFilterCategory("Todas");
     setVariableFilterCategory("Todas");
     loadAllRef.current();
@@ -788,6 +833,79 @@ export default function TabTwoScreen() {
     showActionMessage("Gasto guardado.");
   };
 
+  const openBizumModal = (type: "received" | "sent") => {
+    setBizumModalType(type);
+    setBizumName("");
+    setBizumConcept("");
+    setBizumAmount("");
+    setVariableDate(getTodayDate());
+  };
+
+  const closeBizumModal = () => {
+    setBizumModalType(null);
+    setBizumName("");
+    setBizumConcept("");
+    setBizumAmount("");
+    setVariableDate(getTodayDate());
+  };
+
+  const handleAddBizum = async () => {
+    if (!bizumModalType) return;
+
+    const user = await getCurrentUser();
+
+    if (!user) return;
+
+    if (!bizumName.trim()) {
+      Alert.alert("Falta el nombre", "Pon el nombre de la persona.");
+      return;
+    }
+
+    if (!bizumConcept.trim()) {
+      Alert.alert("Falta el concepto", "Pon el concepto del Bizum.");
+      return;
+    }
+
+    const value = parseMoneyInput(bizumAmount);
+
+    if (value <= 0) {
+      Alert.alert("Importe no valido", "El importe debe ser mayor que 0.");
+      return;
+    }
+
+    const bizumMonth = getMonthFromDate(variableDate);
+    const bizumDay = getDayFromDate(variableDate);
+    const isReceived = bizumModalType === "received";
+    const category = isReceived ? "Bizum recibido" : "Bizum enviado";
+    const title = `${bizumName.trim()} - ${bizumConcept.trim()}`;
+
+    await supabase.from("transactions").insert([
+      {
+        title,
+        amount: value,
+        type: isReceived ? "income" : "expense",
+        user_id: user.id,
+        created_at: new Date().toISOString(),
+        month: bizumMonth,
+        day_of_month: bizumDay,
+        category,
+        ...getSpacePayload(activeSpaceId),
+      },
+    ]);
+
+    await recordActivity(
+      isReceived ? "bizum_received_created" : "bizum_sent_created",
+      "transaction",
+      null,
+      `${isReceived ? "Se registro un Bizum recibido de" : "Se registro un Bizum enviado a"} ${bizumName.trim()} por ${bizumConcept.trim()}.`,
+    );
+
+    closeBizumModal();
+    setShowVariableSection(true);
+    await loadAllRef.current();
+    showActionMessage(isReceived ? "Bizum recibido añadido." : "Bizum enviado añadido.");
+  };
+
   const handleAddSpaceIncome = async () => {
     const user = await getCurrentUser();
     const value = parseMoneyInput(spaceIncomeAmount);
@@ -876,6 +994,7 @@ export default function TabTwoScreen() {
         user_id: user.id,
         month: expenseMonth,
         category: fixedCategory,
+        auto_pay: fixedAutoPay,
         ...getSpacePayload(activeSpaceId),
       },
     ]);
@@ -889,6 +1008,7 @@ export default function TabTwoScreen() {
         month: expenseMonth,
         is_paid: false,
         category: fixedCategory,
+        auto_pay: fixedAutoPay,
         ...getSpacePayload(activeSpaceId),
       },
     ]);
@@ -903,6 +1023,7 @@ export default function TabTwoScreen() {
     setFixedAmount("");
     setFixedDate(getDateFromMonthAndDay(selectedMonth, 1));
     setFixedCategory("Otros");
+    setFixedAutoPay(true);
     setShowAddFixed(false);
     setShowFixedSection(true);
     await loadAllRef.current();
@@ -917,6 +1038,7 @@ export default function TabTwoScreen() {
       getDateFromMonthAndDay(item.month || selectedMonth, item.day_of_month),
     );
     setEditCategory(normalizeCategory(item.category));
+    setEditAutoPay(item.auto_pay ?? true);
     setShowEditCategoryDropdown(false);
     setShowAddCategoryInModal(false);
     setNewCategory("");
@@ -944,9 +1066,15 @@ export default function TabTwoScreen() {
     setEditAmount("");
     setEditDate("");
     setEditCategory("Otros");
+    setEditAutoPay(true);
     setShowEditCategoryDropdown(false);
     setShowAddCategoryInModal(false);
     setNewCategory("");
+  };
+
+  const closeDetailModal = () => {
+    setDetailExpense(null);
+    setMovingExpenseKey(null);
   };
 
   const saveEdit = async () => {
@@ -969,6 +1097,7 @@ export default function TabTwoScreen() {
           month: newMonth,
           day_of_month: newDay,
           category: editCategory,
+          auto_pay: editAutoPay,
         })
         .eq("id", editingItem.id);
 
@@ -982,6 +1111,7 @@ export default function TabTwoScreen() {
             month: newMonth,
             day_of_month: newDay,
             category: editCategory,
+            auto_pay: editAutoPay,
           })
           .eq("title", editingItem.title)
           .eq("month", editingItem.month || selectedMonth);
@@ -1155,6 +1285,7 @@ export default function TabTwoScreen() {
           user_id: user.id,
           month: sourceMonth,
           category: targetCategory,
+          auto_pay: item.auto_pay ?? true,
           space_id: targetSpaceId,
         },
       ]);
@@ -1168,6 +1299,7 @@ export default function TabTwoScreen() {
           month: sourceMonth,
           is_paid: false,
           category: targetCategory,
+          auto_pay: item.auto_pay ?? true,
           space_id: targetSpaceId,
         },
       ]);
@@ -1269,6 +1401,181 @@ export default function TabTwoScreen() {
     );
   };
 
+  const renderDetailValue = (label: string, value: string) => (
+    <View style={styles.detailValueRow}>
+      <Text style={styles.detailValueLabel}>{label}</Text>
+      <Text style={styles.detailValueText}>{value}</Text>
+    </View>
+  );
+
+  const renderDetailAction = ({
+    label,
+    icon,
+    onPress,
+    danger,
+    dark,
+  }: {
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    onPress: () => void;
+    danger?: boolean;
+    dark?: boolean;
+  }) => (
+    <Pressable
+      style={[
+        styles.detailActionButton,
+        dark && styles.detailActionButtonDark,
+        danger && styles.detailActionButtonDanger,
+      ]}
+      onPress={onPress}
+    >
+      <Ionicons
+        name={icon}
+        size={18}
+        color={dark ? colors.white : danger ? colors.danger : colors.primaryDark}
+      />
+      <Text
+        style={[
+          styles.detailActionText,
+          dark && styles.detailActionTextDark,
+          danger && styles.detailActionTextDanger,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+
+  const renderDetailModal = () => {
+    if (!detailExpense) return null;
+
+    const { item, type } = detailExpense;
+    const isFixed = type === "fixed";
+    const isIncome = item.type === "income" || item.is_income;
+    const fullDate = getDateFromMonthAndDay(
+      item.month || selectedMonth,
+      item.day_of_month || 1,
+    );
+    const moveKey = `${isFixed ? "fixed" : isIncome ? "income" : "variable"}-${item.id}`;
+    const permissionInput = {
+      activeSpaceId,
+      currentUserId,
+      ownerUserId: item.user_id,
+    };
+    const canEditItem = isFixed
+      ? canEditSharedFixedDetails(permissionInput)
+      : canEditExpense(permissionInput);
+    const canDeleteItem = isFixed
+      ? canEditSharedFixedDetails(permissionInput)
+      : canDeleteExpense(permissionInput);
+    const canMoveItem = !isIncome && canMoveExpense(permissionInput);
+    const amountPrefix = isFixed ? "" : isIncome ? "+ " : "- ";
+
+    return (
+      <Modal
+        visible={!!detailExpense}
+        transparent
+        animationType="fade"
+        onRequestClose={closeDetailModal}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>{item.title}</Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  {isFixed ? "Gasto fijo mensual" : isIncome ? "Ingreso puntual" : "Gasto puntual"}
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={closeDetailModal}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <View style={styles.detailBox}>
+              {renderDetailValue(
+                "Importe",
+                `${amountPrefix}${formatCompactMoney(Number(item.amount || 0))}`,
+              )}
+              {renderDetailValue("Fecha", fullDate)}
+              {renderDetailValue("Categoría", normalizeCategory(item.category))}
+              {isFixed &&
+                renderDetailValue(
+                  "Estado",
+                  item.is_paid ? "Pagado" : "Pendiente",
+                )}
+              {isFixed &&
+                renderDetailValue(
+                  "Marcado",
+                  item.auto_pay ?? true ? "Pago automático" : "Pago manual",
+                )}
+              {item.is_transferred &&
+                renderDetailValue("Traspaso", "Copiado a otro espacio")}
+            </View>
+
+            <View style={styles.detailActionsGrid}>
+              {canEditItem &&
+                renderDetailAction({
+                  label: "Editar",
+                  icon: "create-outline",
+                  onPress: () => {
+                    closeDetailModal();
+                    if (isFixed) {
+                      openEditFixed(item);
+                    } else {
+                      openEditVariable(item);
+                    }
+                  },
+                })}
+
+              {isFixed &&
+                renderDetailAction({
+                  label: item.is_paid ? "Deshacer pagado" : "Marcar pagado",
+                  icon: item.is_paid ? "refresh-outline" : "checkmark",
+                  dark: !item.is_paid,
+                  onPress: async () => {
+                    closeDetailModal();
+                    await togglePaid(item);
+                  },
+                })}
+
+              {canMoveItem &&
+                renderDetailAction({
+                  label: "Mover",
+                  icon: "swap-horizontal-outline",
+                  onPress: () =>
+                    setMovingExpenseKey(
+                      movingExpenseKey === moveKey ? null : moveKey,
+                    ),
+                })}
+
+              {canDeleteItem &&
+                renderDetailAction({
+                  label: "Eliminar",
+                  icon: "trash-outline",
+                  danger: true,
+                  onPress: () => {
+                    closeDetailModal();
+                    if (isFixed) {
+                      deleteFixed(item);
+                    } else {
+                      deleteVariable(item);
+                    }
+                  },
+                })}
+            </View>
+
+            {canMoveItem && renderMoveTargets(item, type, moveKey)}
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   const totalFixed = fixedExpenses.reduce(
     (sum, item) => sum + Number(item.amount),
     0,
@@ -1277,13 +1584,33 @@ export default function TabTwoScreen() {
     (sum, item) => sum + Number(item.amount),
     0,
   );
+  const totalIncomeTransactions = incomeTransactions.reduce(
+    (sum, item) => sum + Number(item.amount || 0),
+    0,
+  );
+  const variableItems = [...expenses, ...incomeTransactions]
+    .map((item) => ({
+      ...item,
+      is_income: item.type === "income",
+    }))
+    .sort((a, b) => {
+      const dayDiff = Number(a.day_of_month || 1) - Number(b.day_of_month || 1);
+      if (dayDiff !== 0) return dayDiff;
+
+      return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+    });
+  const variableNetTotal = totalExpenses - totalIncomeTransactions;
   const fixedPaidTotal = fixedExpenses
     .filter((item) => item.is_paid)
     .reduce((sum, item) => sum + Number(item.amount), 0);
 
-  const available = salary - fixedPaidTotal - totalExpenses;
+  const available =
+    salary + totalIncomeTransactions - fixedPaidTotal - totalExpenses;
   const hasVisibleFinanceData =
-    salary > 0 || fixedExpenses.length > 0 || expenses.length > 0;
+    salary > 0 ||
+    totalIncomeTransactions > 0 ||
+    fixedExpenses.length > 0 ||
+    expenses.length > 0;
 
   const filteredFixedExpenses =
     fixedFilterCategory === "Todas"
@@ -1294,10 +1621,13 @@ export default function TabTwoScreen() {
 
   const filteredVariableExpenses =
     variableFilterCategory === "Todas"
-      ? expenses
-      : expenses.filter(
+      ? variableItems
+      : variableItems.filter(
           (item) => normalizeCategory(item.category) === variableFilterCategory,
         );
+  const variableFilterCategories = variableItems.map((item) =>
+    normalizeCategory(item.category),
+  );
 
   const renderCategorySelector = (
     selected: string,
@@ -1357,8 +1687,9 @@ export default function TabTwoScreen() {
     onSelect: (category: string) => void,
     isOpen: boolean,
     setIsOpen: (value: boolean) => void,
+    extraCategories: string[] = [],
   ) => {
-    const options = ["Todas", ...categories];
+    const options = ["Todas", ...sortCategories([...categories, ...extraCategories])];
 
     return (
       <View style={styles.filterDropdown}>
@@ -1418,6 +1749,66 @@ export default function TabTwoScreen() {
       <Text style={styles.dateButtonText}>{date}</Text>
       <Ionicons name="calendar-outline" size={16} color={colors.primaryDark} />
     </Pressable>
+  );
+
+  const renderPaymentModeSelector = (
+    value: boolean,
+    onChange: (nextValue: boolean) => void,
+  ) => (
+    <View style={styles.paymentModeBox}>
+      <Text style={styles.inputLabel}>Marcado de pago</Text>
+
+      <View style={styles.paymentModeRow}>
+        <Pressable
+          style={[
+            styles.paymentModeButton,
+            !value && styles.paymentModeButtonActive,
+          ]}
+          onPress={() => onChange(false)}
+        >
+          <Ionicons
+            name="hand-left-outline"
+            size={16}
+            color={!value ? colors.white : colors.primaryDark}
+          />
+          <Text
+            style={[
+              styles.paymentModeText,
+              !value && styles.paymentModeTextActive,
+            ]}
+          >
+            Manual
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={[
+            styles.paymentModeButton,
+            value && styles.paymentModeButtonActive,
+          ]}
+          onPress={() => onChange(true)}
+        >
+          <Ionicons
+            name="sync-outline"
+            size={16}
+            color={value ? colors.white : colors.primaryDark}
+          />
+          <Text
+            style={[
+              styles.paymentModeText,
+              value && styles.paymentModeTextActive,
+            ]}
+          >
+            Automático
+          </Text>
+        </Pressable>
+      </View>
+
+      <Text style={styles.paymentModeHelp}>
+        Automático se marcará al pasar el día. Manual espera a que pulses
+        pagar.
+      </Text>
+    </View>
   );
 
   const renderEditableTitle = (
@@ -1565,7 +1956,8 @@ export default function TabTwoScreen() {
           <DataState
             loading={isLoadingData && !hasLoadedData && !hasVisibleFinanceData}
             error={dataError}
-            onRetry={() => loadAllRef.current()}
+            autoRetryMs={2000}
+            onRetry={retryLoadAll}
           />
           <ActionNotice message={actionMessage} />
 
@@ -1659,6 +2051,16 @@ export default function TabTwoScreen() {
             </View>
 
             <View style={styles.separator} />
+            {totalIncomeTransactions > 0 && (
+              <>
+                <SummaryRow
+                  label="Bizum recibido"
+                  value={formatCompactMoney(totalIncomeTransactions)}
+                  styles={styles}
+                />
+                <View style={styles.separator} />
+              </>
+            )}
             {Boolean(activeSpaceId) && (
               <>
                 <SummaryRow
@@ -1741,6 +2143,7 @@ export default function TabTwoScreen() {
                 )}
                 <Text style={styles.categoryTitle}>Categoría</Text>
                 {renderCategorySelector(fixedCategory, setFixedCategory)}
+                {renderPaymentModeSelector(fixedAutoPay, setFixedAutoPay)}
                 <Pressable
                   style={styles.primaryButton}
                   onPress={handleAddFixedExpense}
@@ -1766,18 +2169,12 @@ export default function TabTwoScreen() {
                 item.month || selectedMonth,
                 item.day_of_month,
               );
-              const moveKey = `fixed-${item.id}`;
-              const permissionInput = {
-                activeSpaceId,
-                currentUserId,
-                ownerUserId: item.user_id,
-              };
-              const canEditFixedItem = canEditSharedFixedDetails(permissionInput);
-              const canMoveFixedItem = canMoveExpense(permissionInput);
-
               return (
-                <View key={moveKey}>
-                  <View style={styles.expenseRow}>
+                <View key={`fixed-${item.id}`}>
+                  <Pressable
+                    style={styles.expenseRow}
+                    onPress={() => setDetailExpense({ item, type: "fixed" })}
+                  >
                   <View style={styles.expenseInfo}>
                     <View style={styles.expenseTopLine}>
                       <Text
@@ -1798,44 +2195,17 @@ export default function TabTwoScreen() {
                     {item.is_transferred && (
                       <Text style={styles.expenseMeta}>Traspasado</Text>
                     )}
+                    <Text style={styles.expenseMeta}>
+                      {item.auto_pay ?? true ? "Pago automático" : "Pago manual"}
+                    </Text>
                   </View>
 
-                  <View style={styles.rowActions}>
-                    {canEditFixedItem && (
-                      <IconAction
-                        icon="create-outline"
-                        onPress={() => openEditFixed(item)}
-                        styles={styles}
-                      />
-                    )}
-                    <IconAction
-                      icon={item.is_paid ? "refresh-outline" : "checkmark"}
-                      dark={!item.is_paid}
-                      onPress={() => togglePaid(item)}
-                      styles={styles}
-                    />
-                    {canMoveFixedItem && (
-                      <IconAction
-                        icon="swap-horizontal-outline"
-                        onPress={() =>
-                          setMovingExpenseKey(
-                            movingExpenseKey === moveKey ? null : moveKey,
-                          )
-                        }
-                        styles={styles}
-                      />
-                    )}
-                    {canEditFixedItem && (
-                      <IconAction
-                        icon="trash-outline"
-                        danger
-                        onPress={() => deleteFixed(item)}
-                        styles={styles}
-                      />
-                    )}
-                  </View>
-                  </View>
-                  {canMoveFixedItem && renderMoveTargets(item, "fixed", moveKey)}
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={colors.mutedText}
+                  />
+                  </Pressable>
                 </View>
               );
             })}
@@ -1847,8 +2217,8 @@ export default function TabTwoScreen() {
             setIsOpen={setShowVariableSection}
             title={variableSectionTitle}
             renderEditableTitle={renderEditableTitle}
-            count={expenses.length}
-            total={formatCompactMoney(totalExpenses)}
+            count={variableItems.length}
+            total={formatCompactMoney(variableNetTotal)}
             showAdd={showAddVariable}
             setShowAdd={(value) => {
               setShowAddVariable(value);
@@ -1861,10 +2231,37 @@ export default function TabTwoScreen() {
                 setVariableFilterCategory,
                 showVariableFilter,
                 setShowVariableFilter,
+                variableFilterCategories,
               )
             }
             styles={styles}
           >
+            <View style={styles.bizumActionRow}>
+              <Pressable
+                style={[styles.bizumActionButton, styles.bizumReceivedButton]}
+                onPress={() => openBizumModal("received")}
+              >
+                <Ionicons
+                  name="arrow-down-circle-outline"
+                  size={18}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.bizumActionText}>Bizum recibido</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.bizumActionButton}
+                onPress={() => openBizumModal("sent")}
+              >
+                <Ionicons
+                  name="arrow-up-circle-outline"
+                  size={18}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.bizumActionText}>Bizum enviado</Text>
+              </Pressable>
+            </View>
+
             {false && (
               <View style={styles.formBox}>
                 <TextInput
@@ -1907,30 +2304,27 @@ export default function TabTwoScreen() {
             )}
 
             {filteredVariableExpenses.map((item: any) => {
+              const isIncome = item.type === "income" || item.is_income;
               const currentCategory = normalizeCategory(item.category);
               const fullDate = getDateFromMonthAndDay(
                 item.month || selectedMonth,
                 item.day_of_month || 1,
               );
-              const moveKey = `variable-${item.id}`;
-              const permissionInput = {
-                activeSpaceId,
-                currentUserId,
-                ownerUserId: item.user_id,
-              };
-              const canEditVariableItem = canEditExpense(permissionInput);
-              const canDeleteVariableItem = canDeleteExpense(permissionInput);
-              const canMoveVariableItem = canMoveExpense(permissionInput);
+              const moveKey = `${isIncome ? "income" : "variable"}-${item.id}`;
+              const signedAmount = `${isIncome ? "+" : "-"} ${formatCompactMoney(Number(item.amount || 0))}`;
 
               return (
                 <View key={moveKey}>
-                  <View style={styles.expenseRow}>
+                  <Pressable
+                    style={styles.expenseRow}
+                    onPress={() => setDetailExpense({ item, type: "variable" })}
+                  >
                   <View style={styles.expenseInfo}>
                     <View style={styles.expenseTopLine}>
                       <Text
                         style={[
                           styles.expenseTitle,
-                          item.is_transferred && styles.expensePaid,
+                          !isIncome && item.is_transferred && styles.expensePaid,
                         ]}
                         numberOfLines={1}
                       >
@@ -1939,41 +2333,22 @@ export default function TabTwoScreen() {
                       {renderCategoryBadge(currentCategory)}
                     </View>
 
-                    <Text style={styles.expenseMeta}>
-                      {fullDate} · {formatCompactMoney(Number(item.amount || 0))}
+                    <Text
+                      style={[
+                        styles.expenseMeta,
+                        isIncome && styles.incomeMeta,
+                      ]}
+                    >
+                      {fullDate} · {signedAmount}
                     </Text>
                   </View>
 
-                  <View style={styles.rowActions}>
-                    {canEditVariableItem && (
-                      <IconAction
-                        icon="create-outline"
-                        onPress={() => openEditVariable(item)}
-                        styles={styles}
-                      />
-                    )}
-                    {canMoveVariableItem && (
-                      <IconAction
-                        icon="swap-horizontal-outline"
-                        onPress={() =>
-                          setMovingExpenseKey(
-                            movingExpenseKey === moveKey ? null : moveKey,
-                          )
-                        }
-                        styles={styles}
-                      />
-                    )}
-                    {canDeleteVariableItem && (
-                      <IconAction
-                        icon="trash-outline"
-                        danger
-                        onPress={() => deleteVariable(item)}
-                        styles={styles}
-                      />
-                    )}
-                  </View>
-                  </View>
-                  {canMoveVariableItem && renderMoveTargets(item, "variable", moveKey)}
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={colors.mutedText}
+                  />
+                  </Pressable>
                 </View>
               );
             })}
@@ -2025,6 +2400,7 @@ export default function TabTwoScreen() {
             )}
             <Text style={styles.categoryTitle}>Categoría</Text>
             {renderCategorySelector(fixedCategory, setFixedCategory)}
+            {renderPaymentModeSelector(fixedAutoPay, setFixedAutoPay)}
 
             <View style={commonStyles.modalActions}>
               <Pressable
@@ -2176,6 +2552,80 @@ export default function TabTwoScreen() {
       </Modal>
 
       <Modal
+        visible={!!bizumModalType}
+        transparent
+        animationType="fade"
+        onRequestClose={closeBizumModal}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCardSmall}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>
+                  {bizumModalType === "received"
+                    ? "Bizum recibido"
+                    : "Bizum enviado"}
+                </Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  {bizumModalType === "received"
+                    ? "Se sumará al saldo disponible"
+                    : "Se descontará del saldo disponible"}
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={closeBizumModal}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Nombre"
+              value={bizumName}
+              onChangeText={setBizumName}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Concepto"
+              value={bizumConcept}
+              onChangeText={setBizumConcept}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Importe"
+              value={bizumAmount}
+              keyboardType="decimal-pad"
+              inputMode="decimal"
+              onChangeText={setBizumAmount}
+            />
+            <Text style={styles.inputLabel}>Fecha</Text>
+            {renderDateButton(variableDate, () =>
+              openCalendar("variableCreate", variableDate),
+            )}
+
+            <View style={commonStyles.modalActions}>
+              <Pressable
+                style={commonStyles.modalCancelButton}
+                onPress={closeBizumModal}
+              >
+                <Text style={commonStyles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+
+              <Pressable
+                style={commonStyles.modalSaveButton}
+                onPress={handleAddBizum}
+              >
+                <Text style={commonStyles.modalSaveText}>Guardar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={!!editingItem}
         transparent
         animationType="fade"
@@ -2292,6 +2742,9 @@ export default function TabTwoScreen() {
               )}
             </View>
 
+            {editingType === "fixed" &&
+              renderPaymentModeSelector(editAutoPay, setEditAutoPay)}
+
             <View style={commonStyles.modalActions}>
               <Pressable
                 style={commonStyles.modalCancelButton}
@@ -2311,6 +2764,7 @@ export default function TabTwoScreen() {
         </View>
       </Modal>
 
+      {renderDetailModal()}
       {renderCalendar()}
     </View>
   );
@@ -2330,37 +2784,6 @@ function SummaryRow({
       <Text style={styles.summaryLabel}>{label}</Text>
       <Text style={styles.summaryAmount}>{value}</Text>
     </View>
-  );
-}
-
-function IconAction({
-  icon,
-  dark,
-  danger,
-  onPress,
-  styles,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  dark?: boolean;
-  danger?: boolean;
-  onPress: () => void;
-  styles: ReturnType<typeof createStyles>;
-}) {
-  return (
-    <Pressable
-      style={[
-        styles.iconAction,
-        dark && styles.iconActionDark,
-        danger && styles.iconActionDanger,
-      ]}
-      onPress={onPress}
-    >
-      <Ionicons
-        name={icon}
-        size={18}
-        color={dark ? colors.white : danger ? "#B91C1C" : colors.primaryDark}
-      />
-    </Pressable>
   );
 }
 
@@ -2748,7 +3171,7 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     filterDropdownText: {
-      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 12,
+      fontSize: isDesktop ? 14 : 13,
       color: colors.text,
       fontWeight: "900",
     },
@@ -2763,8 +3186,8 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     filterDropdownOption: {
-      paddingVertical: isDesktop ? 10 : 9,
-      paddingHorizontal: 11,
+      paddingVertical: isDesktop ? 9 : 8,
+      paddingHorizontal: 12,
       borderBottomWidth: 1,
       borderBottomColor: colors.borderSoft,
     },
@@ -2774,7 +3197,7 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     filterDropdownOptionText: {
-      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 12,
+      fontSize: isDesktop ? 13 : 12,
       color: colors.mutedText,
       fontWeight: "800",
     },
@@ -2790,6 +3213,87 @@ const createStyles = (isDesktop: boolean) =>
       color: colors.text,
       marginTop: 8,
       marginBottom: 8,
+    },
+
+    paymentModeBox: {
+      marginTop: 10,
+      marginBottom: 12,
+    },
+
+    paymentModeRow: {
+      flexDirection: "row",
+      gap: 8,
+    },
+
+    paymentModeButton: {
+      flex: 1,
+      minHeight: 38,
+      borderRadius: 11,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.white,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+    },
+
+    paymentModeButtonActive: {
+      backgroundColor: colors.primaryDark,
+      borderColor: colors.primaryDark,
+    },
+
+    paymentModeText: {
+      fontSize: isDesktop ? 12 : 11,
+      color: colors.primaryDark,
+      fontWeight: "900",
+    },
+
+    paymentModeTextActive: {
+      color: colors.white,
+    },
+
+    paymentModeHelp: {
+      marginTop: 7,
+      fontSize: isDesktop ? 11 : 10,
+      color: colors.mutedText,
+      fontWeight: "700",
+      lineHeight: isDesktop ? 16 : 14,
+    },
+
+    bizumActionRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: isDesktop ? 14 : 12,
+    },
+
+    bizumActionButton: {
+      flex: 1,
+      minHeight: 42,
+      borderRadius: 12,
+      backgroundColor: colors.primarySoft,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: isDesktop ? 10 : 9,
+      paddingHorizontal: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+    },
+
+    bizumReceivedButton: {
+      backgroundColor: "#ECFDF5",
+      borderColor: "#BBF7D0",
+    },
+
+    bizumActionText: {
+      flexShrink: 1,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+      color: colors.primaryDark,
     },
 
     categoryList: {
@@ -3016,6 +3520,93 @@ const createStyles = (isDesktop: boolean) =>
       color: colors.mutedText,
       marginTop: 7,
       fontWeight: "600",
+    },
+
+    incomeMeta: {
+      color: "#047857",
+    },
+
+    detailBox: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      backgroundColor: colors.background,
+      marginBottom: 14,
+      overflow: "hidden",
+    },
+
+    detailValueRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 11,
+      paddingHorizontal: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSoft,
+    },
+
+    detailValueLabel: {
+      flex: 1,
+      fontSize: isDesktop ? 12 : 11,
+      color: colors.mutedText,
+      fontWeight: "800",
+    },
+
+    detailValueText: {
+      flex: 1.3,
+      textAlign: "right",
+      fontSize: isDesktop ? 13 : 12,
+      color: colors.text,
+      fontWeight: "900",
+    },
+
+    detailActionsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 12,
+    },
+
+    detailActionButton: {
+      flexGrow: 1,
+      flexBasis: isDesktop ? "31%" : "47%",
+      minHeight: 42,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.primarySoft,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      paddingVertical: 9,
+      paddingHorizontal: 10,
+    },
+
+    detailActionButtonDark: {
+      backgroundColor: colors.primaryDark,
+      borderColor: colors.primaryDark,
+    },
+
+    detailActionButtonDanger: {
+      backgroundColor: "#FEF2F2",
+      borderColor: "#FECACA",
+    },
+
+    detailActionText: {
+      fontSize: isDesktop ? 12 : 11,
+      color: colors.primaryDark,
+      fontWeight: "900",
+      textAlign: "center",
+    },
+
+    detailActionTextDark: {
+      color: colors.white,
+    },
+
+    detailActionTextDanger: {
+      color: colors.danger,
     },
 
     rowActions: {

@@ -1,15 +1,37 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { colors } from "@/src/theme/colors";
 
 type DataStateProps = {
   loading?: boolean;
   error?: string;
+  autoRetryMs?: number;
   onRetry?: () => void;
 };
 
-export function DataState({ loading, error, onRetry }: DataStateProps) {
+export function DataState({
+  loading,
+  error,
+  autoRetryMs,
+  onRetry,
+}: DataStateProps) {
+  const { themeId } = useAppTheme();
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles();
+  }, [themeId]);
+
+  useEffect(() => {
+    if (!loading || error || !autoRetryMs || !onRetry) return;
+
+    const timeout = setTimeout(onRetry, autoRetryMs);
+
+    return () => clearTimeout(timeout);
+  }, [autoRetryMs, error, loading, onRetry]);
+
   if (!loading && !error) return null;
 
   return (
@@ -35,7 +57,8 @@ export function DataState({ loading, error, onRetry }: DataStateProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () =>
+  StyleSheet.create({
   box: {
     flexDirection: "row",
     alignItems: "center",
@@ -86,4 +109,4 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
   },
-});
+  });

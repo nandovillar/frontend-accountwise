@@ -12,6 +12,7 @@ import {
 
 import { AppTextInput } from "@/src/components/AppTextInput";
 import { useAuth } from "@/src/context/AuthContext";
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
@@ -53,13 +54,17 @@ const getSignupErrorMessage = (error: AuthErrorLike) => {
 
 export default function LoginScreen() {
   const { refreshSession } = useAuth();
+  const { themeId } = useAppTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
-  const commonStyles = useMemo(
-    () => createCommonStyles(isDesktop),
-    [isDesktop],
-  );
-  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+  const commonStyles = useMemo(() => {
+    void themeId;
+    return createCommonStyles(isDesktop);
+  }, [isDesktop, themeId]);
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
   const [mode, setMode] = useState<AuthMode>("login");
 

@@ -9,6 +9,7 @@ import { KpiCard } from "@/src/components/KpiCard";
 import { ResultRow } from "@/src/components/ResultRow";
 import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
@@ -92,15 +93,19 @@ const defaultSimulation = {
 
 export default function HomePurchaseScreen() {
   const { activeSpaceId, recordActivity } = useSpaces();
+  const { themeId } = useAppTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
-  const commonStyles = useMemo(
-    () => createCommonStyles(isDesktop),
-    [isDesktop],
-  );
+  const commonStyles = useMemo(() => {
+    void themeId;
+    return createCommonStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
-  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
   const [simulations, setSimulations] = useState<Simulation[]>([]);
   const [selectedSimulationId, setSelectedSimulationId] = useState<

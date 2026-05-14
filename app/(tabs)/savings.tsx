@@ -12,6 +12,7 @@ import { KpiCard } from "@/src/components/KpiCard";
 import { ResultRow } from "@/src/components/ResultRow";
 import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
@@ -52,15 +53,19 @@ type SavingItem = {
 
 export default function SavingsScreen() {
   const { activeSpaceId, recordActivity } = useSpaces();
+  const { themeId } = useAppTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
-  const commonStyles = useMemo(
-    () => createCommonStyles(isDesktop),
-    [isDesktop],
-  );
+  const commonStyles = useMemo(() => {
+    void themeId;
+    return createCommonStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
-  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
   const [savings, setSavings] = useState<SavingItem[]>([]);
   const [selectedSaving, setSelectedSaving] = useState<SavingItem | null>(null);
@@ -199,6 +204,11 @@ export default function SavingsScreen() {
       loadInProgressRef.current = false;
     }
   }, [loadSavings]);
+
+  const retrySavings = useCallback(() => {
+    loadInProgressRef.current = false;
+    refreshSavings();
+  }, [refreshSavings]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -604,7 +614,8 @@ export default function SavingsScreen() {
           <DataState
             loading={isLoadingData && !hasLoadedData && !hasVisibleSavingsData}
             error={dataError}
-            onRetry={refreshSavings}
+            autoRetryMs={2000}
+            onRetry={retrySavings}
           />
           <ActionNotice message={actionMessage} />
 
@@ -683,7 +694,11 @@ export default function SavingsScreen() {
                 );
 
                 return (
-                  <View key={item.id} style={styles.savingRow}>
+                  <Pressable
+                    key={item.id}
+                    style={styles.savingRow}
+                    onPress={() => openSavingDetail(item)}
+                  >
                     <View style={styles.savingTopRow}>
                       <View style={styles.savingTextBlock}>
                         <Text style={styles.savingName} numberOfLines={1}>
@@ -736,53 +751,7 @@ export default function SavingsScreen() {
                         value={formatCompactMoney(result.pending)}
                       />
                     </View>
-
-                    <View style={styles.actionsRowRight}>
-                      <Pressable
-                        style={styles.iconButton}
-                        onPress={() => openMovementForm(item)}
-                      >
-                        <Ionicons
-                          name="swap-horizontal-outline"
-                          size={18}
-                          color={colors.primaryDark}
-                        />
-                      </Pressable>
-
-                      <Pressable
-                        style={styles.iconButton}
-                        onPress={() => openSavingDetail(item)}
-                      >
-                        <Ionicons
-                          name="eye-outline"
-                          size={18}
-                          color={colors.primaryDark}
-                        />
-                      </Pressable>
-
-                      <Pressable
-                        style={styles.iconButton}
-                        onPress={() => openEditForm(item)}
-                      >
-                        <Ionicons
-                          name="create-outline"
-                          size={18}
-                          color={colors.primaryDark}
-                        />
-                      </Pressable>
-
-                      <Pressable
-                        style={styles.deleteIconButton}
-                        onPress={() => deleteSaving(item)}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={18}
-                          color="#B91C1C"
-                        />
-                      </Pressable>
-                    </View>
-                  </View>
+                  </Pressable>
                 );
               })
             )}
@@ -1050,7 +1019,24 @@ export default function SavingsScreen() {
                       styles={styles}
                     />
 
-                    <View style={commonStyles.modalActions}>
+                    <View
+                      style={[commonStyles.modalActions, styles.detailActionsGrid]}
+                    >
+                      <Pressable
+                        style={commonStyles.secondaryButton}
+                        onPress={() => openMovementForm(selectedSaving)}
+                      >
+                        <Ionicons
+                          name="swap-horizontal-outline"
+                          size={18}
+                          color={colors.primaryDark}
+                        />
+
+                        <Text style={commonStyles.secondaryButtonText}>
+                          Mover
+                        </Text>
+                      </Pressable>
+
                       <Pressable
                         style={commonStyles.secondaryButton}
                         onPress={() => openEditForm(selectedSaving)}
@@ -1591,5 +1577,9 @@ const createStyles = (isDesktop: boolean) =>
       opacity: 0.85,
       fontWeight: "700",
       marginTop: 4,
+    },
+
+    detailActionsGrid: {
+      flexWrap: "wrap",
     },
   });

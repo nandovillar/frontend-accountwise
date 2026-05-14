@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DataState } from "@/src/components/DataState";
 import { SpaceSwitcher } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
@@ -36,15 +37,19 @@ type Summary = {
 
 export default function HomeScreen() {
   const { activeSpaceId } = useSpaces();
+  const { themeId } = useAppTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
-  const commonStyles = useMemo(
-    () => createCommonStyles(isDesktop),
-    [isDesktop],
-  );
+  const commonStyles = useMemo(() => {
+    void themeId;
+    return createCommonStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
-  const styles = useMemo(() => createStyles(isDesktop), [isDesktop]);
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles(isDesktop);
+  }, [isDesktop, themeId]);
 
   const [selectedMonth, setSelectedMonth] = useState(
     new Date().toISOString().slice(0, 7),
@@ -262,6 +267,11 @@ export default function HomeScreen() {
     }
   }, [loadMonthlySummary]);
 
+  const retryMonthlySummary = useCallback(() => {
+    loadInProgressRef.current = false;
+    refreshMonthlySummary();
+  }, [refreshMonthlySummary]);
+
   useEffect(() => {
     const init = async () => {
       const user = await getCurrentUser();
@@ -319,7 +329,8 @@ export default function HomeScreen() {
           <DataState
             loading={isLoadingData && !hasLoadedData && !hasVisibleFinanceData}
             error={dataError}
-            onRetry={refreshMonthlySummary}
+            autoRetryMs={2000}
+            onRetry={retryMonthlySummary}
           />
 
           <View style={styles.monthCard}>

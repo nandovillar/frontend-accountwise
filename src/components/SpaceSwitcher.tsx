@@ -1,11 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ActivityFeed } from "@/src/components/ActivityFeed";
 import { useSpaces } from "@/src/context/SpaceContext";
+import { useAppTheme } from "@/src/context/ThemeContext";
 import { colors } from "@/src/theme/colors";
 
 export function SpaceSwitcher() {
+  const { themeId } = useAppTheme();
   const {
     activeSpaceId,
     markActiveSpaceSeen,
@@ -14,6 +17,10 @@ export function SpaceSwitcher() {
     spaces,
     unreadCount,
   } = useSpaces();
+  const styles = useMemo(() => {
+    void themeId;
+    return createStyles();
+  }, [themeId]);
 
   return (
     <>
@@ -77,7 +84,8 @@ export function SpaceSwitcher() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = () =>
+  StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -172,4 +180,4 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: colors.white,
   },
-});
+  });
