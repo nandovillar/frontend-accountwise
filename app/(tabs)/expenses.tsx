@@ -4,6 +4,7 @@ import { Header } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import {
+  createElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -173,6 +174,7 @@ export default function TabTwoScreen() {
   const [variableFilterCategory, setVariableFilterCategory] = useState("Todas");
   const [showFixedFilter, setShowFixedFilter] = useState(false);
   const [showVariableFilter, setShowVariableFilter] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
 
   const [showAddFixed, setShowAddFixed] = useState(false);
   const [showAddVariable, setShowAddVariable] = useState(false);
@@ -205,7 +207,6 @@ export default function TabTwoScreen() {
 
   const [showEditCategoryDropdown, setShowEditCategoryDropdown] =
     useState(false);
-  const [showAddCategoryInModal, setShowAddCategoryInModal] = useState(false);
 
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [calendarTarget, setCalendarTarget] = useState<
@@ -477,7 +478,6 @@ export default function TabTwoScreen() {
       setEditCategory(cleanName);
       setNewCategory("");
       setNewCategoryColor(colorOptions[0]);
-      setShowAddCategoryInModal(false);
       return;
     }
 
@@ -510,7 +510,6 @@ export default function TabTwoScreen() {
     onCreated?.(cleanName);
     setNewCategory("");
     setNewCategoryColor(colorOptions[0]);
-    setShowAddCategoryInModal(false);
     await loadCategories();
   };
 
@@ -1227,7 +1226,6 @@ export default function TabTwoScreen() {
     setEditCategory(normalizeCategory(item.category));
     setEditAutoPay(item.auto_pay ?? true);
     setShowEditCategoryDropdown(false);
-    setShowAddCategoryInModal(false);
     setNewCategory("");
   };
 
@@ -1243,7 +1241,6 @@ export default function TabTwoScreen() {
     );
     setEditCategory(normalizeCategory(item.category));
     setShowEditCategoryDropdown(false);
-    setShowAddCategoryInModal(false);
     setNewCategory("");
   };
 
@@ -1255,7 +1252,6 @@ export default function TabTwoScreen() {
     setEditCategory("Otros");
     setEditAutoPay(true);
     setShowEditCategoryDropdown(false);
-    setShowAddCategoryInModal(false);
     setNewCategory("");
   };
 
@@ -1848,9 +1844,6 @@ export default function TabTwoScreen() {
     selected: string,
     onSelect: (category: string) => void,
   ) => {
-    const selectedColor = getCategoryColor(selected, categoryColors);
-    const colorDraft = categoryColorDrafts[selected] || selectedColor;
-
     return (
       <View>
         <View style={styles.categoryList}>
@@ -1889,95 +1882,7 @@ export default function TabTwoScreen() {
               </Pressable>
             );
           })}
-          <Pressable
-            style={styles.categoryAddButton}
-            onPress={() => setShowAddCategoryInModal(!showAddCategoryInModal)}
-          >
-            <Ionicons name="add" size={16} color={colors.primaryDark} />
-            <Text style={styles.categoryAddButtonText}>Crear categoría</Text>
-          </Pressable>
         </View>
-
-        {selected && (
-          <View style={styles.categoryColorBox}>
-            <Text style={styles.categoryColorTitle}>Color de {selected}</Text>
-            <View style={styles.colorSwatchRow}>
-              {colorOptions.map((option) => (
-                <Pressable
-                  key={option}
-                  style={[
-                    styles.colorSwatchButton,
-                    { backgroundColor: option },
-                    normalizeColor(colorDraft) === option &&
-                      styles.colorSwatchButtonActive,
-                  ]}
-                  onPress={() =>
-                    setCategoryColorDrafts((current) => ({
-                      ...current,
-                      [selected]: option,
-                    }))
-                  }
-                />
-              ))}
-            </View>
-            <View style={styles.categoryColorEditRow}>
-              <TextInput
-                style={styles.categoryColorInput}
-                value={colorDraft}
-                placeholder="#38BDF8 o rgb(56,189,248)"
-                onChangeText={(value) =>
-                  setCategoryColorDrafts((current) => ({
-                    ...current,
-                    [selected]: value,
-                  }))
-                }
-              />
-              <Pressable
-                style={styles.saveCategoryButton}
-                onPress={() => saveCategoryColor(selected)}
-              >
-                <Text style={styles.saveCategoryButtonText}>Guardar color</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        {showAddCategoryInModal && (
-          <View style={styles.addCategoryBox}>
-            <TextInput
-              style={styles.categoryInput}
-              placeholder="Nueva categoría"
-              value={newCategory}
-              onChangeText={setNewCategory}
-            />
-            <View style={styles.colorSwatchRow}>
-              {colorOptions.map((option) => (
-                <Pressable
-                  key={option}
-                  style={[
-                    styles.colorSwatchButton,
-                    { backgroundColor: option },
-                    normalizeColor(newCategoryColor) === option &&
-                      styles.colorSwatchButtonActive,
-                  ]}
-                  onPress={() => setNewCategoryColor(option)}
-                />
-              ))}
-            </View>
-            <TextInput
-              style={styles.categoryInput}
-              placeholder="#38BDF8 o rgb(56,189,248)"
-              value={newCategoryColor}
-              onChangeText={setNewCategoryColor}
-            />
-            <Pressable
-              style={styles.saveCategoryButton}
-              onPress={() => createCategory(onSelect)}
-            >
-              <Text style={styles.saveCategoryButtonText}>Crear</Text>
-            </Pressable>
-          </View>
-        )}
       </View>
     );
   };
@@ -1988,8 +1893,15 @@ export default function TabTwoScreen() {
     isOpen: boolean,
     setIsOpen: (value: boolean) => void,
     extraCategories: string[] = [],
+    excludedCategories: string[] = [],
   ) => {
-    const options = ["Todas", ...sortCategories([...categories, ...extraCategories])];
+    const excluded = new Set(excludedCategories);
+    const options = [
+      "Todas",
+      ...sortCategories([...categories, ...extraCategories]).filter(
+        (category) => !excluded.has(category),
+      ),
+    ];
 
     return (
       <View style={styles.filterDropdown}>
@@ -2082,131 +1994,46 @@ export default function TabTwoScreen() {
     </View>
   );
 
-  /*
-              style={[
-                styles.categoryButtonText,
-                selected === category && styles.categoryButtonTextActive,
-              ]}
-            >
-              {category}
-            </Text>
-          </Pressable>
-        ))}
-        <Pressable
-          style={styles.categoryAddButton}
-          onPress={() => setShowAddCategoryInModal(!showAddCategoryInModal)}
-        >
-          <Ionicons name="add" size={16} color={colors.primaryDark} />
-          <Text style={styles.categoryAddButtonText}>Crear categoría</Text>
-        </Pressable>
-      </View>
-
-      {showAddCategoryInModal && (
-        <View style={styles.addCategoryBox}>
-          <TextInput
-            style={styles.categoryInput}
-            placeholder="Nueva categoría"
-            value={newCategory}
-            onChangeText={setNewCategory}
-          />
-          <Pressable
-            style={styles.saveCategoryButton}
-            onPress={() => createCategory(onSelect)}
-          >
-            <Text style={styles.saveCategoryButtonText}>Crear</Text>
-          </Pressable>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderFilterSelector = (
-    selected: string,
-    onSelect: (category: string) => void,
-    isOpen: boolean,
-    setIsOpen: (value: boolean) => void,
-    extraCategories: string[] = [],
+  const renderColorPicker = (
+    value: string,
+    onChange: (nextColor: string) => void,
   ) => {
-    const options = ["Todas", ...sortCategories([...categories, ...extraCategories])];
+    const pickerColor = normalizeColor(value) || colorOptions[0];
+
+    if (Platform.OS === "web") {
+      return createElement("input", {
+        type: "color",
+        value: pickerColor,
+        onChange: (event: { target: { value: string } }) =>
+          onChange(event.target.value),
+        style: {
+          width: "100%",
+          height: 44,
+          border: "none",
+          borderRadius: 12,
+          background: "transparent",
+          padding: 0,
+          cursor: "pointer",
+        },
+      });
+    }
 
     return (
-      <View style={styles.filterDropdown}>
-        <Pressable
-          style={styles.filterDropdownButton}
-          onPress={() => setIsOpen(!isOpen)}
-        >
-          <Text style={styles.filterDropdownText}>{selected}</Text>
-          <Ionicons
-            name={isOpen ? "chevron-up" : "chevron-down"}
-            size={16}
-            color={colors.primaryDark}
+      <View style={styles.colorSwatchRow}>
+        {colorOptions.map((option) => (
+          <Pressable
+            key={option}
+            style={[
+              styles.colorSwatchButton,
+              { backgroundColor: option },
+              pickerColor === option && styles.colorSwatchButtonActive,
+            ]}
+            onPress={() => onChange(option)}
           />
-        </Pressable>
-
-        {isOpen && (
-          <View style={styles.filterDropdownOptions}>
-            {options.map((category) => (
-              <Pressable
-                key={category}
-                style={[
-                  styles.filterDropdownOption,
-                  selected === category && styles.filterDropdownOptionActive,
-                ]}
-                onPress={() => {
-                  onSelect(category);
-                  setIsOpen(false);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.filterDropdownOptionText,
-                    selected === category &&
-                      styles.filterDropdownOptionTextActive,
-                  ]}
-                >
-                  {category}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+        ))}
       </View>
     );
   };
-
-  const renderCategoryBadge = (category: string) => (
-    <View style={styles.categoryBadge}>
-      <Text style={styles.categoryBadgeText}>
-        {normalizeCategory(category)}
-      </Text>
-    </View>
-  );
-
-  const renderDateButton = (date: string, onPress: () => void) => (
-    <Pressable style={styles.dateButton} onPress={onPress}>
-      <Text style={styles.dateButtonText}>{formatDateText(date)}</Text>
-      <Ionicons name="calendar-outline" size={16} color={colors.primaryDark} />
-    </Pressable>
-  );
-
-  const renderMoneyInput = (
-    value: string,
-    onChangeText: (text: string) => void,
-    placeholder = "Importe",
-  ) => (
-    <View style={styles.moneyInputShell}>
-      <TextInput
-        style={[styles.input, styles.moneyInput]}
-        placeholder={placeholder}
-        value={value}
-        keyboardType="decimal-pad"
-        inputMode="decimal"
-        onChangeText={onChangeText}
-      />
-      <Text style={styles.moneyInputSuffix}>€</Text>
-    </View>
-  );
-  */
 
   const renderPaymentModeSelector = (
     value: boolean,
@@ -2562,6 +2389,20 @@ export default function TabTwoScreen() {
             </Pressable>
           )}
 
+          <Pressable
+            style={styles.categoryManagerButton}
+            onPress={() => setShowCategoryManager(true)}
+          >
+            <Ionicons
+              name="color-palette-outline"
+              size={18}
+              color={colors.primaryDark}
+            />
+            <Text style={styles.categoryManagerButtonText}>
+              Categorías y colores
+            </Text>
+          </Pressable>
+
           <ExpenseSection
             type="fixed"
             isOpen={showFixedSection}
@@ -2579,6 +2420,13 @@ export default function TabTwoScreen() {
                 setFixedFilterCategory,
                 showFixedFilter,
                 setShowFixedFilter,
+                [],
+                [
+                  "Bizum recibido",
+                  "Bizum enviado",
+                  "Devoluciones",
+                  "Pendiente de cobrar",
+                ],
               )
             }
             styles={styles}
@@ -2665,21 +2513,21 @@ export default function TabTwoScreen() {
                       >
                         {item.title}
                       </Text>
-                      <View style={styles.categoryMetaStack}>
-                        {renderCategoryBadge(currentCategory)}
-                        <View style={styles.paymentTypeBadge}>
-                          <Text style={styles.paymentTypeBadgeText}>
-                            {item.auto_pay ?? true
-                              ? "Pago automático"
-                              : "Pago manual"}
-                          </Text>
-                        </View>
-                      </View>
+                      {renderCategoryBadge(currentCategory)}
                     </View>
 
-                    <Text style={styles.expenseMeta}>
-                      {fullDate} · {formatCompactMoney(Number(item.amount || 0))}
-                    </Text>
+                    <View style={styles.expenseMetaRow}>
+                      <Text style={styles.expenseMeta}>
+                        {fullDate} · {formatCompactMoney(Number(item.amount || 0))}
+                      </Text>
+                      <View style={styles.paymentTypeBadge}>
+                        <Text style={styles.paymentTypeBadgeText}>
+                          {item.auto_pay ?? true
+                            ? "Pago automático"
+                            : "Pago manual"}
+                        </Text>
+                      </View>
+                    </View>
                     {item.is_transferred && (
                       <Text style={styles.expenseMeta}>Traspasado</Text>
                     )}
@@ -2863,6 +2711,109 @@ export default function TabTwoScreen() {
           </ExpenseSection>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showCategoryManager}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCategoryManager(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCard}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>Categorías</Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  Crea categorías y cambia su color para gastos y resumen.
+                </Text>
+              </View>
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setShowCategoryManager(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={commonStyles.modalScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.categoryManagerCreateBox}>
+                <Text style={styles.categoryColorTitle}>Nueva categoría</Text>
+                <TextInput
+                  style={styles.categoryInput}
+                  placeholder="Nombre"
+                  value={newCategory}
+                  onChangeText={setNewCategory}
+                />
+                {renderColorPicker(newCategoryColor, setNewCategoryColor)}
+                <Pressable
+                  style={styles.saveCategoryButton}
+                  onPress={() => createCategory()}
+                >
+                  <Text style={styles.saveCategoryButtonText}>
+                    Crear categoría
+                  </Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.categoryManagerList}>
+                {categories.map((category) => {
+                  const categoryColor = getCategoryColor(
+                    category,
+                    categoryColors,
+                  );
+                  const draftColor =
+                    categoryColorDrafts[category] || categoryColor;
+                  const normalizedDraft =
+                    normalizeColor(draftColor) || categoryColor;
+
+                  return (
+                    <View key={category} style={styles.categoryManagerItem}>
+                      <View style={styles.categoryManagerHeader}>
+                        <View
+                          style={[
+                            styles.categoryBadge,
+                            {
+                              backgroundColor:
+                                getCategorySoftColor(normalizedDraft),
+                              borderColor: normalizedDraft,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.categoryBadgeText,
+                              { color: normalizedDraft },
+                            ]}
+                          >
+                            {category}
+                          </Text>
+                        </View>
+                        <Pressable
+                          style={styles.categoryManagerSaveButton}
+                          onPress={() => saveCategoryColor(category)}
+                        >
+                          <Text style={styles.categoryManagerSaveText}>
+                            Guardar
+                          </Text>
+                        </Pressable>
+                      </View>
+                      {renderColorPicker(draftColor, (nextColor) =>
+                        setCategoryColorDrafts((current) => ({
+                          ...current,
+                          [category]: nextColor,
+                        })),
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={editingSalary}
@@ -3221,49 +3172,19 @@ export default function TabTwoScreen() {
             <Text style={styles.inputLabel}>Categoría</Text>
 
             <View style={styles.dropdownBox}>
-              <View style={styles.dropdownTopRow}>
-                <Pressable
-                  style={styles.dropdownButton}
-                  onPress={() =>
-                    setShowEditCategoryDropdown(!showEditCategoryDropdown)
-                  }
-                >
-                  <Text style={styles.dropdownButtonText}>{editCategory}</Text>
-                  <Ionicons
-                    name={
-                      showEditCategoryDropdown ? "chevron-up" : "chevron-down"
-                    }
-                    size={16}
-                    color={colors.primaryDark}
-                  />
-                </Pressable>
-
-                <Pressable
-                  style={styles.addCategoryIconButton}
-                  onPress={() =>
-                    setShowAddCategoryInModal(!showAddCategoryInModal)
-                  }
-                >
-                  <Ionicons name="add" size={20} color={colors.white} />
-                </Pressable>
-              </View>
-
-              {showAddCategoryInModal && (
-                <View style={styles.addCategoryBox}>
-                  <TextInput
-                    style={styles.categoryInput}
-                    placeholder="Nueva categoría"
-                    value={newCategory}
-                    onChangeText={setNewCategory}
-                  />
-                  <Pressable
-                    style={styles.saveCategoryButton}
-                    onPress={() => createCategory()}
-                  >
-                    <Text style={styles.saveCategoryButtonText}>Crear</Text>
-                  </Pressable>
-                </View>
-              )}
+              <Pressable
+                style={styles.dropdownButton}
+                onPress={() =>
+                  setShowEditCategoryDropdown(!showEditCategoryDropdown)
+                }
+              >
+                <Text style={styles.dropdownButtonText}>{editCategory}</Text>
+                <Ionicons
+                  name={showEditCategoryDropdown ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color={colors.primaryDark}
+                />
+              </Pressable>
 
               {showEditCategoryDropdown && (
                 <View style={styles.dropdownOptions}>
@@ -3955,24 +3876,6 @@ const createStyles = (isDesktop: boolean) =>
       borderColor: "rgba(255,255,255,0.8)",
     },
 
-    categoryAddButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      backgroundColor: colors.primarySoft,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 999,
-      paddingVertical: 6,
-      paddingHorizontal: 10,
-    },
-
-    categoryAddButtonText: {
-      color: colors.primaryDark,
-      fontSize: isDesktop ? 12 : 10,
-      fontWeight: "900",
-    },
-
     categoryInput: {
       flex: 1,
       backgroundColor: colors.white,
@@ -3986,11 +3889,6 @@ const createStyles = (isDesktop: boolean) =>
 
     dropdownBox: {
       marginBottom: 10,
-    },
-
-    dropdownTopRow: {
-      flexDirection: "row",
-      gap: 8,
     },
 
     dropdownButton: {
@@ -4010,30 +3908,6 @@ const createStyles = (isDesktop: boolean) =>
       fontSize: isDesktop ? 13 : 11,
       fontWeight: "800",
       color: colors.text,
-    },
-
-    addCategoryIconButton: {
-      width: isDesktop ? 40 : 36,
-      height: isDesktop ? 40 : 36,
-      borderRadius: 10,
-      backgroundColor: colors.primaryDark,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-
-    addCategoryBox: {
-      marginTop: 8,
-      gap: 8,
-    },
-
-    categoryColorBox: {
-      marginTop: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      padding: 10,
-      backgroundColor: colors.background,
-      gap: 8,
     },
 
     categoryColorTitle: {
@@ -4058,23 +3932,6 @@ const createStyles = (isDesktop: boolean) =>
 
     colorSwatchButtonActive: {
       borderColor: colors.text,
-    },
-
-    categoryColorEditRow: {
-      flexDirection: isDesktop ? "row" : "column",
-      gap: 8,
-    },
-
-    categoryColorInput: {
-      flex: 1,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: Platform.OS === "web" ? 10 : 8,
-      color: colors.text,
-      backgroundColor: colors.surface,
-      fontWeight: "800",
     },
 
     saveCategoryButton: {
@@ -4134,6 +3991,26 @@ const createStyles = (isDesktop: boolean) =>
       flexDirection: "row",
       justifyContent: "center",
       gap: 8,
+    },
+
+    categoryManagerButton: {
+      marginBottom: 16,
+      minHeight: 44,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.primarySoft,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingHorizontal: 12,
+    },
+
+    categoryManagerButtonText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
     },
 
     primaryButtonText: {
@@ -4204,8 +4081,15 @@ const createStyles = (isDesktop: boolean) =>
     expenseMeta: {
       fontSize: isDesktop ? 13 : 11,
       color: colors.mutedText,
-      marginTop: 7,
       fontWeight: "600",
+    },
+
+    expenseMetaRow: {
+      marginTop: 9,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
     },
 
     paymentTypeBadge: {
@@ -4215,6 +4099,49 @@ const createStyles = (isDesktop: boolean) =>
       paddingVertical: isDesktop ? 4 : 3,
       paddingHorizontal: isDesktop ? 9 : 7,
       backgroundColor: colors.surface,
+    },
+
+    categoryManagerCreateBox: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      padding: 12,
+      backgroundColor: colors.background,
+      gap: 10,
+      marginBottom: 12,
+    },
+
+    categoryManagerList: {
+      gap: 10,
+    },
+
+    categoryManagerItem: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      padding: 12,
+      backgroundColor: colors.surface,
+      gap: 10,
+    },
+
+    categoryManagerHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+
+    categoryManagerSaveButton: {
+      borderRadius: 999,
+      backgroundColor: colors.primaryDark,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+    },
+
+    categoryManagerSaveText: {
+      color: colors.white,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
     },
 
     paymentTypeBadgeText: {
