@@ -54,11 +54,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     initSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      async (event, newSession) => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
-        if (!newSession) {
+        if (event === "SIGNED_OUT") {
           router.replace("/login");
         }
       },

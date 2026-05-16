@@ -3,7 +3,7 @@ import { supabase } from "@/src/lib/supabase";
 const wait = (milliseconds: number) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-const withTimeout = async <T>(task: Promise<T>, milliseconds = 2500) => {
+const withTimeout = async <T>(task: Promise<T>, milliseconds = 8000) => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(
@@ -30,10 +30,11 @@ export const getCurrentUser = async () => {
         return session.user;
       }
     } catch {
-      return null;
+      await wait(250);
+      continue;
     }
 
-    await wait(120);
+    await wait(250);
   }
 
   return null;
