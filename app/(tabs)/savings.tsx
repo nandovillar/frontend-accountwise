@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { Header } from "@react-navigation/elements";
@@ -24,9 +25,11 @@ import {
   parseMoneyInput,
 } from "@/src/utils/money";
 import { applySpaceFilter, getSpacePayload } from "@/src/utils/spaceQueries";
+import HomePurchaseScreen from "../HomePurchase";
 
 import {
   Alert,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -50,6 +53,12 @@ type SavingItem = {
   borrowed?: string;
   created_at?: string;
 };
+
+const defaultIpremAnnual = 8400;
+const officialIpremUrl =
+  "https://sede.agenciatributaria.gob.es/Sede/ayuda/manuales-videos-folletos/manuales-practicos/irpf-2025/guia-principales-novedades/otras-cuestiones-interes.html";
+
+const getIpremStorageKey = (userId: string) => `accountwise_iprem_${userId}`;
 
 const withLoadTimeout = async (task: Promise<void>) => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -90,6 +99,9 @@ export default function SavingsScreen() {
   const [dataError, setDataError] = useState("");
   const [hasLoadedData, setHasLoadedData] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [showSavingsList, setShowSavingsList] = useState(false);
+  const [showIpremCalculator, setShowIpremCalculator] = useState(false);
+  const [showHomeSimulator, setShowHomeSimulator] = useState(false);
   const loadInProgressRef = useRef(false);
 
   const [formVisible, setFormVisible] = useState(false);
@@ -102,6 +114,12 @@ export default function SavingsScreen() {
   const [borrowed, setBorrowed] = useState("");
   const [movementAmount, setMovementAmount] = useState("");
   const [isMovingSavingMoney, setIsMovingSavingMoney] = useState(false);
+  const [ipremAnnual, setIpremAnnual] = useState(String(defaultIpremAnnual));
+  const [userGeneralBase, setUserGeneralBase] = useState("");
+  const [userSavingsBase, setUserSavingsBase] = useState("");
+  const [partnerGeneralBase, setPartnerGeneralBase] = useState("");
+  const [partnerSavingsBase, setPartnerSavingsBase] = useState("");
+  const [ipremSavedMessage, setIpremSavedMessage] = useState("");
 
   const [startDate, setStartDate] = useState(getTodayDate());
   const [endDate, setEndDate] = useState(getNextYearDate());
@@ -110,6 +128,60 @@ export default function SavingsScreen() {
     setActionMessage(message);
     setTimeout(() => setActionMessage(""), 2600);
   };
+
+  const loadIpremDraft = useCallback(async (userId: string) => {
+    const stored = await AsyncStorage.getItem(getIpremStorageKey(userId));
+
+    if (!stored) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as {
+        ipremAnnual?: string;
+        userGeneralBase?: string;
+        userSavingsBase?: string;
+        partnerGeneralBase?: string;
+        partnerSavingsBase?: string;
+      };
+
+      setIpremAnnual(parsed.ipremAnnual || String(defaultIpremAnnual));
+      setUserGeneralBase(parsed.userGeneralBase || "");
+      setUserSavingsBase(parsed.userSavingsBase || "");
+      setPartnerGeneralBase(parsed.partnerGeneralBase || "");
+      setPartnerSavingsBase(parsed.partnerSavingsBase || "");
+    } catch {
+      await AsyncStorage.removeItem(getIpremStorageKey(userId));
+    }
+  }, []);
+
+  const saveIpremDraft = useCallback(async (showMessage = false) => {
+    const user = await getCurrentUser();
+
+    if (!user) return;
+
+    await AsyncStorage.setItem(
+      getIpremStorageKey(user.id),
+      JSON.stringify({
+        ipremAnnual,
+        userGeneralBase,
+        userSavingsBase,
+        partnerGeneralBase,
+        partnerSavingsBase,
+      }),
+    );
+
+    if (showMessage) {
+      setIpremSavedMessage("IPREM guardado correctamente.");
+      setTimeout(() => setIpremSavedMessage(""), 2600);
+    }
+  }, [
+    ipremAnnual,
+    userGeneralBase,
+    userSavingsBase,
+    partnerGeneralBase,
+    partnerSavingsBase,
+  ]);
 
   const calculateSaving = (
     startDateValue: string,
@@ -229,6 +301,14 @@ export default function SavingsScreen() {
   const retrySavings = useCallback(() => {
     forceRefreshSavings();
   }, [forceRefreshSavings]);
+
+  const openOfficialIprem = async () => {
+    const canOpen = await Linking.canOpenURL(officialIpremUrl);
+
+    if (canOpen) {
+      await Linking.openURL(officialIpremUrl);
+    }
+  };
 
   const resetForm = () => {
     setEditingId(null);
@@ -581,6 +661,7 @@ export default function SavingsScreen() {
         return;
       }
 
+      await loadIpremDraft(user.id);
       await forceRefreshSavings();
     };
 
@@ -589,13 +670,14 @@ export default function SavingsScreen() {
     const { data: subscription } = supabase.auth.onAuthStateChange(
       async (_, session) => {
         if (session?.user) {
+          await loadIpremDraft(session.user.id);
           await forceRefreshSavings();
         }
       },
     );
 
     return () => subscription.subscription.unsubscribe();
-  }, [forceRefreshSavings]);
+  }, [forceRefreshSavings, loadIpremDraft]);
 
   useFocusEffect(
     useCallback(() => {
@@ -605,6 +687,17 @@ export default function SavingsScreen() {
 
   const totals = getTotals();
   const hasVisibleSavingsData = savings.length > 0;
+  const ipremBase = parseMoneyInput(ipremAnnual) || defaultIpremAnnual;
+  const userIpremIncome =
+    parseMoneyInput(userGeneralBase) + parseMoneyInput(userSavingsBase);
+  const partnerIpremIncome =
+    parseMoneyInput(partnerGeneralBase) + parseMoneyInput(partnerSavingsBase);
+  const householdIpremIncome = userIpremIncome + partnerIpremIncome;
+  const hasIpremIncome = householdIpremIncome > 0;
+  const vppbLimit = ipremBase * 5.5;
+  const vpplLimit = ipremBase * 7.5;
+  const vppbEligible = hasIpremIncome && householdIpremIncome <= vppbLimit;
+  const vpplEligible = hasIpremIncome && householdIpremIncome <= vpplLimit;
 
   const currentFormResult = calculateSaving(
     startDate,
@@ -617,7 +710,7 @@ export default function SavingsScreen() {
   return (
     <View style={commonStyles.screen}>
       <Header
-        title="Ahorros"
+        title="Planes"
         headerStyle={{ backgroundColor: colors.surface }}
         headerTintColor={colors.text}
         headerTitleStyle={{ color: colors.text }}
@@ -687,19 +780,69 @@ export default function SavingsScreen() {
             />
           </View>
 
+          <Pressable
+            style={[commonStyles.card, styles.toolCard]}
+            onPress={() => setShowSavingsList(true)}
+          >
+            <View style={styles.toolCardIcon}>
+              <Ionicons
+                name="flag-outline"
+                size={20}
+                color={colors.primaryDark}
+              />
+            </View>
+            <View style={styles.cardHeaderText}>
+              <Text style={commonStyles.smallText}>Ahorro</Text>
+              <Text style={commonStyles.cardTitle}>Mis objetivos</Text>
+              <Text style={styles.collapsedHint}>
+                {savings.length} objetivo{savings.length === 1 ? "" : "s"} guardado{savings.length === 1 ? "" : "s"}
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.primaryDark}
+            />
+          </Pressable>
+
+          {false && (
           <View style={commonStyles.card}>
-            <View style={styles.cardHeader}>
+            <Pressable
+              style={styles.cardHeader}
+              onPress={() => setShowSavingsList(true)}
+            >
               <View style={styles.cardHeaderText}>
-                <Text style={commonStyles.smallText}>Listado</Text>
+                <Text style={commonStyles.smallText}>Ahorro</Text>
                 <Text style={commonStyles.cardTitle}>Mis objetivos</Text>
+                <Text style={styles.collapsedHint}>
+                  {showSavingsList
+                    ? "Objetivos abiertos"
+                    : `${savings.length} objetivo${savings.length === 1 ? "" : "s"} guardado${savings.length === 1 ? "" : "s"}`}
+                </Text>
               </View>
 
-              <Pressable style={styles.addButton} onPress={openCreateForm}>
-                <Ionicons name="add" size={21} color={colors.white} />
-              </Pressable>
-            </View>
+              <View style={styles.headerActions}>
+                <Pressable
+                  style={styles.addButton}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    openCreateForm();
+                  }}
+                >
+                  <Ionicons name="add" size={21} color={colors.white} />
+                </Pressable>
 
-            {savings.length === 0 ? (
+                <View style={styles.expandButton}>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={19}
+                    color={colors.primaryDark}
+                  />
+                </View>
+              </View>
+            </Pressable>
+
+            {!showSavingsList ? null : savings.length === 0 ? (
               <EmptyState
                 title="No tienes ahorros todavía"
                 text="Crea tu primer objetivo para ver el resumen y el progreso."
@@ -781,23 +924,359 @@ export default function SavingsScreen() {
               })
             )}
           </View>
+          )}
 
           <Pressable
-            style={[commonStyles.secondaryButton, styles.homeButton]}
-            onPress={() => router.push("/HomePurchase")}
+            style={[commonStyles.card, styles.toolCard]}
+            onPress={() => setShowHomeSimulator(true)}
           >
+            <View style={styles.toolCardIcon}>
+              <Ionicons
+                name="home-outline"
+                size={20}
+                color={colors.primaryDark}
+              />
+            </View>
+            <View style={styles.cardHeaderText}>
+              <Text style={commonStyles.smallText}>Compra de vivienda</Text>
+              <Text style={commonStyles.cardTitle}>Simular hipoteca</Text>
+              <Text style={styles.collapsedHint}>
+                Pulsa para abrir tus simulaciones guardadas
+              </Text>
+            </View>
             <Ionicons
-              name="home-outline"
+              name="chevron-forward"
               size={18}
               color={colors.primaryDark}
             />
+          </Pressable>
 
-            <Text style={commonStyles.secondaryButtonText}>
-              Simulador de casa
-            </Text>
+          <Pressable
+            style={[commonStyles.card, styles.toolCard]}
+            onPress={() => setShowIpremCalculator(true)}
+          >
+            <View style={styles.toolCardIcon}>
+              <Ionicons
+                name="calculator-outline"
+                size={20}
+                color={colors.primaryDark}
+              />
+            </View>
+            <View style={styles.cardHeaderText}>
+              <Text style={commonStyles.smallText}>Vivienda protegida</Text>
+              <Text style={commonStyles.cardTitle}>Calcular IPREM</Text>
+              <Text style={styles.collapsedHint}>
+                Pulsa para abrir la calculadora VPPB / VPPL
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.primaryDark}
+            />
           </Pressable>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showSavingsList}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSavingsList(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCard}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>Mis objetivos</Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  Revisa tus objetivos de ahorro y abre cualquiera para ver el
+                  detalle.
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setShowSavingsList(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={[commonStyles.primaryButton, styles.modalCreateButton]}
+              onPress={() => {
+                setShowSavingsList(false);
+                openCreateForm();
+              }}
+            >
+              <Ionicons name="add" size={18} color={colors.white} />
+              <Text style={commonStyles.primaryButtonText}>Nuevo objetivo</Text>
+            </Pressable>
+
+            <ScrollView
+              style={commonStyles.modalScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              {savings.length === 0 ? (
+                <EmptyState
+                  title="No tienes ahorros todavía"
+                  text="Crea tu primer objetivo para ver el resumen y el progreso."
+                  actionLabel="Crear objetivo"
+                  icon="wallet-outline"
+                  onAction={() => {
+                    setShowSavingsList(false);
+                    openCreateForm();
+                  }}
+                />
+              ) : (
+                savings.map((item) => {
+                  const result = calculateSaving(
+                    item.start_date,
+                    item.end_date,
+                    Number(item.monthly_amount || 0),
+                    Number(item.contributed || 0),
+                    Number(item.goal || 0),
+                    Number(item.withdrawn_amount || 0),
+                  );
+
+                  return (
+                    <Pressable
+                      key={item.id}
+                      style={styles.savingRow}
+                      onPress={() => {
+                        setShowSavingsList(false);
+                        openSavingDetail(item);
+                      }}
+                    >
+                      <View style={styles.savingTopRow}>
+                        <View style={styles.savingTextBlock}>
+                          <Text style={styles.savingName} numberOfLines={1}>
+                            {item.name}
+                          </Text>
+
+                          <Text style={styles.savingStatus}>
+                            {result.completed ? "Cumplido" : "En progreso"} ·{" "}
+                            {result.progress.toFixed(0)}%
+                            {Number(item.withdrawn_amount || 0) > 0
+                              ? ` · ${formatCompactMoney(Number(item.withdrawn_amount || 0))} recogidos`
+                              : ""}
+                          </Text>
+                        </View>
+
+                        <Text
+                          style={styles.savingAmount}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.65}
+                        >
+                          {formatCompactMoney(result.currentSaved)}
+                        </Text>
+                      </View>
+
+                      <View style={styles.progressTrack}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            { width: `${result.progress}%` },
+                          ]}
+                        />
+                      </View>
+
+                      <View style={styles.infoLine}>
+                        <InfoPill
+                          label="Objetivo"
+                          value={formatCompactMoney(Number(item.goal || 0))}
+                        />
+
+                        <InfoPill
+                          label="Recogido"
+                          value={formatCompactMoney(
+                            Number(item.withdrawn_amount || 0),
+                          )}
+                        />
+
+                        <InfoPill
+                          label="Pendiente"
+                          value={formatCompactMoney(result.pending)}
+                        />
+                      </View>
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showIpremCalculator}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowIpremCalculator(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={commonStyles.modalCard}>
+            <View style={commonStyles.modalHeader}>
+              <View style={commonStyles.modalTitleBlock}>
+                <Text style={commonStyles.modalTitle}>Calcular IPREM</Text>
+                <Text style={commonStyles.modalSubtitle}>
+                  En la declaración de la renta busca el apartado Base imponible.
+                  Suele corresponder a base imponible general y base imponible
+                  del ahorro; en muchos modelos aparecen como casillas 435 y
+                  460. Confirma siempre el ejercicio que estés usando.
+                </Text>
+              </View>
+
+              <Pressable
+                style={commonStyles.closeButton}
+                onPress={() => setShowIpremCalculator(false)}
+              >
+                <Ionicons name="close" size={22} color={colors.primaryDark} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={commonStyles.modalScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Pressable style={styles.officialLink} onPress={openOfficialIprem}>
+                <Ionicons
+                  name="open-outline"
+                  size={16}
+                  color={colors.primaryDark}
+                />
+                <Text style={styles.officialLinkText}>
+                  Consultar IPREM oficial
+                </Text>
+              </Pressable>
+
+              <AppTextInput
+                label="IPREM anual (€)"
+                value={ipremAnnual}
+                onChange={setIpremAnnual}
+                commonStyles={commonStyles}
+              />
+
+              <View style={styles.ipremPersonGrid}>
+                <View style={styles.ipremPersonBox}>
+                  <Text style={styles.ipremPersonTitle}>Usuario</Text>
+                  <AppTextInput
+                    label="Base imponible general (€)"
+                    value={userGeneralBase}
+                    onChange={setUserGeneralBase}
+                    commonStyles={commonStyles}
+                  />
+                  <AppTextInput
+                    label="Base imponible del ahorro (€)"
+                    value={userSavingsBase}
+                    onChange={setUserSavingsBase}
+                    commonStyles={commonStyles}
+                  />
+                </View>
+
+                <View style={styles.ipremPersonBox}>
+                  <Text style={styles.ipremPersonTitle}>Pareja opcional</Text>
+                  <AppTextInput
+                    label="Base imponible general (€)"
+                    value={partnerGeneralBase}
+                    onChange={setPartnerGeneralBase}
+                    commonStyles={commonStyles}
+                  />
+                  <AppTextInput
+                    label="Base imponible del ahorro (€)"
+                    value={partnerSavingsBase}
+                    onChange={setPartnerSavingsBase}
+                    commonStyles={commonStyles}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.ipremResultGrid}>
+                <IpremResultCard
+                  title="VPPB"
+                  description="Límite 5,5 veces IPREM anual"
+                  limit={vppbLimit}
+                  eligible={vppbEligible}
+                  hasIncome={hasIpremIncome}
+                  styles={styles}
+                />
+
+                <IpremResultCard
+                  title="VPPL"
+                  description="Límite 7,5 veces IPREM anual"
+                  limit={vpplLimit}
+                  eligible={vpplEligible}
+                  hasIncome={hasIpremIncome}
+                  styles={styles}
+                />
+              </View>
+
+              <View style={styles.summaryBox}>
+                <Text style={styles.summaryTitle}>Resumen IPREM</Text>
+                <ResultRow
+                  label="Ingresos usuario"
+                  value={formatMoney(userIpremIncome)}
+                  styles={styles}
+                />
+                <ResultRow
+                  label="Ingresos pareja"
+                  value={
+                    partnerIpremIncome > 0
+                      ? formatMoney(partnerIpremIncome)
+                      : "No indicado"
+                  }
+                  styles={styles}
+                />
+                <ResultRow
+                  label="Ingresos totales"
+                  value={formatMoney(householdIpremIncome)}
+                  strong
+                  styles={styles}
+                />
+              </View>
+
+              {ipremSavedMessage ? (
+                <View style={styles.ipremSavedNotice}>
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={18}
+                    color={colors.primaryDark}
+                  />
+                  <Text style={styles.ipremSavedText}>{ipremSavedMessage}</Text>
+                </View>
+              ) : null}
+
+              <Pressable
+                style={[commonStyles.primaryButton, styles.ipremSaveButton]}
+                onPress={() => saveIpremDraft(true)}
+              >
+                <Ionicons name="save-outline" size={18} color={colors.white} />
+                <Text style={commonStyles.primaryButtonText}>
+                  Guardar IPREM
+                </Text>
+              </Pressable>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showHomeSimulator}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowHomeSimulator(false)}
+      >
+        <View style={commonStyles.modalOverlay}>
+          <View style={styles.homeSimulatorModalCard}>
+            <HomePurchaseScreen
+              embedded
+              onClose={() => setShowHomeSimulator(false)}
+            />
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={formVisible}
@@ -1246,6 +1725,43 @@ function InfoPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+function IpremResultCard({
+  title,
+  description,
+  limit,
+  eligible,
+  hasIncome,
+  styles,
+}: {
+  title: string;
+  description: string;
+  limit: number;
+  eligible: boolean;
+  hasIncome: boolean;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const statusText = !hasIncome ? "Sin datos" : eligible ? "Cumple" : "Supera";
+  const statusStyle = !hasIncome
+    ? styles.ipremStatusNeutral
+    : eligible
+      ? styles.ipremStatusOk
+      : styles.ipremStatusBad;
+
+  return (
+    <View style={styles.ipremResultCard}>
+      <View style={styles.ipremResultTop}>
+        <Text style={styles.ipremResultTitle}>{title}</Text>
+        <View style={[styles.ipremStatus, statusStyle]}>
+          <Text style={styles.ipremStatusText}>{statusText}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.ipremResultDescription}>{description}</Text>
+      <Text style={styles.ipremResultLimit}>{formatMoney(limit)}</Text>
+    </View>
+  );
+}
+
 const infoPillStyles = StyleSheet.create({
   pill: {
     flex: 1,
@@ -1366,6 +1882,19 @@ const createStyles = (isDesktop: boolean) =>
       minWidth: 0,
     },
 
+    collapsedHint: {
+      marginTop: 3,
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "800",
+    },
+
+    headerActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
     addButton: {
       width: 38,
       height: 38,
@@ -1373,6 +1902,20 @@ const createStyles = (isDesktop: boolean) =>
       backgroundColor: colors.primaryDark,
       alignItems: "center",
       justifyContent: "center",
+    },
+
+    expandButton: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    modalCreateButton: {
+      width: "100%",
+      marginBottom: 12,
     },
 
     emptyBox: {
@@ -1491,6 +2034,174 @@ const createStyles = (isDesktop: boolean) =>
 
     homeButton: {
       marginBottom: 14,
+    },
+
+    toolCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      marginBottom: 14,
+    },
+
+    toolCardIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    homeSimulatorModalCard: {
+      width: isDesktop ? "78%" : "94%",
+      maxWidth: 820,
+      maxHeight: "88%",
+      backgroundColor: colors.background,
+      borderRadius: isDesktop ? 22 : 18,
+      padding: isDesktop ? 14 : 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    ipremHelpText: {
+      marginTop: 6,
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "700",
+      lineHeight: isDesktop ? 18 : 15,
+    },
+
+    officialLink: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 7,
+      minHeight: 42,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.primarySoft,
+      marginBottom: 12,
+    },
+
+    officialLinkText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
+    ipremPersonGrid: {
+      flexDirection: isDesktop ? "row" : "column",
+      gap: 10,
+    },
+
+    ipremPersonBox: {
+      flex: 1,
+      minWidth: 0,
+      borderWidth: 1,
+      borderColor: colors.borderSoft,
+      borderRadius: 14,
+      padding: isDesktop ? 12 : 10,
+      backgroundColor: colors.background,
+    },
+
+    ipremPersonTitle: {
+      color: colors.text,
+      fontSize: isDesktop ? 14 : 12,
+      fontWeight: "900",
+      marginBottom: 8,
+    },
+
+    ipremResultGrid: {
+      flexDirection: isDesktop ? "row" : "column",
+      gap: 10,
+      marginTop: 12,
+      marginBottom: 10,
+    },
+
+    ipremResultCard: {
+      flex: 1,
+      minWidth: 0,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      padding: isDesktop ? 14 : 12,
+      backgroundColor: colors.surface,
+      gap: 7,
+    },
+
+    ipremResultTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+
+    ipremResultTitle: {
+      color: colors.text,
+      fontSize: isDesktop ? 16 : 14,
+      fontWeight: "900",
+    },
+
+    ipremResultDescription: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "800",
+    },
+
+    ipremResultLimit: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 18 : 16,
+      fontWeight: "900",
+    },
+
+    ipremStatus: {
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+    },
+
+    ipremStatusNeutral: {
+      backgroundColor: colors.primarySoft,
+    },
+
+    ipremStatusOk: {
+      backgroundColor: "#DCFCE7",
+    },
+
+    ipremStatusBad: {
+      backgroundColor: "#FEE2E2",
+    },
+
+    ipremStatusText: {
+      color: colors.text,
+      fontSize: isDesktop ? 11 : 9,
+      fontWeight: "900",
+    },
+
+    ipremSavedNotice: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.primarySoft,
+      borderRadius: 13,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      marginTop: 10,
+    },
+
+    ipremSavedText: {
+      flex: 1,
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
+    ipremSaveButton: {
+      width: "100%",
+      marginTop: 12,
     },
 
     dateGrid: {

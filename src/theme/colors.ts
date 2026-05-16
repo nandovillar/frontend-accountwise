@@ -96,7 +96,7 @@ export const themePalettes: Record<ThemeId, AppColors> = {
     success: "#4ADE80",
     danger: "#F87171",
     warning: "#FBBF24",
-    white: "#FFFFFF",
+    white: "#08111F",
   },
   "graphite-dark": {
     background: "#101113",
@@ -112,13 +112,57 @@ export const themePalettes: Record<ThemeId, AppColors> = {
     success: "#86EFAC",
     danger: "#FCA5A5",
     warning: "#FDE68A",
-    white: "#FFFFFF",
+    white: "#101113",
   },
 };
 
 export const defaultThemeId: ThemeId = "aqua-light";
 
 export const colors: AppColors = { ...themePalettes[defaultThemeId] };
+
+const getRgbFromHex = (value: string) => {
+  const hex = value.replace("#", "");
+  const normalized =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((char) => `${char}${char}`)
+          .join("")
+      : hex;
+
+  if (normalized.length !== 6) return null;
+
+  return {
+    r: parseInt(normalized.slice(0, 2), 16),
+    g: parseInt(normalized.slice(2, 4), 16),
+    b: parseInt(normalized.slice(4, 6), 16),
+  };
+};
+
+const getRelativeLuminance = (value: string) => {
+  const rgb = getRgbFromHex(value);
+
+  if (!rgb) return 0;
+
+  const transform = (channel: number) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928
+      ? normalized / 12.92
+      : Math.pow((normalized + 0.055) / 1.055, 2.4);
+  };
+
+  return (
+    0.2126 * transform(rgb.r) +
+    0.7152 * transform(rgb.g) +
+    0.0722 * transform(rgb.b)
+  );
+};
+
+export const getReadableTextColor = (
+  backgroundColor: string,
+  lightText = "#FFFFFF",
+  darkText = "#0F172A",
+) => (getRelativeLuminance(backgroundColor) > 0.52 ? darkText : lightText);
 
 export const applyThemeColors = (themeId: ThemeId) => {
   Object.assign(colors, themePalettes[themeId]);

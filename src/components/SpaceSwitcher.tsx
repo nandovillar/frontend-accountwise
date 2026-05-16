@@ -13,7 +13,7 @@ import {
 import { ActivityFeed } from "@/src/components/ActivityFeed";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { useAppTheme } from "@/src/context/ThemeContext";
-import { colors } from "@/src/theme/colors";
+import { colors, getReadableTextColor } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 
 export function SpaceMenuButton({ isDesktop }: { isDesktop: boolean }) {
@@ -137,7 +137,15 @@ export function SpaceSwitcher({ onChanged }: { onChanged?: () => void }) {
                 <Ionicons
                   name={shared ? "people" : "person"}
                   size={14}
-                  color={active ? colors.white : colors.primaryDark}
+                  color={
+                    active
+                      ? getReadableTextColor(colors.primaryDark)
+                      : getReadableTextColor(
+                          colors.primarySoft,
+                          colors.text,
+                          colors.text,
+                        )
+                  }
                 />
 
                 <View style={styles.chipTextBlock}>
@@ -242,7 +250,7 @@ const createStyles = () =>
   },
 
   chipText: {
-    color: colors.primaryDark,
+    color: getReadableTextColor(colors.primarySoft, colors.text, colors.text),
     fontSize: 11,
     fontWeight: "900",
   },
@@ -259,10 +267,10 @@ const createStyles = () =>
   },
 
   chipMetaActive: {
-    color: colors.primarySoft,
+    color: getReadableTextColor(colors.primaryDark),
   },
 
   chipTextActive: {
-    color: colors.white,
+    color: getReadableTextColor(colors.primaryDark),
   },
   });

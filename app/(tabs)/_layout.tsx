@@ -5,10 +5,11 @@ import { useAppTheme } from "@/src/context/ThemeContext";
 import { colors } from "@/src/theme/colors";
 
 export default function TabLayout() {
-  useAppTheme();
+  const { themeId } = useAppTheme();
 
   return (
     <Tabs
+      key={themeId}
       screenOptions={{
         headerShown: false,
 
@@ -22,6 +23,10 @@ export default function TabLayout() {
           borderTopColor: colors.border,
           paddingTop: 6,
           paddingBottom: 8,
+        },
+
+        sceneStyle: {
+          backgroundColor: colors.background,
         },
 
         tabBarLabelStyle: {
@@ -57,7 +62,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="savings"
         options={{
-          title: "Ahorros",
+          title: "Planes",
           tabBarIcon: ({ color }) => (
             <Ionicons name="wallet-outline" size={24} color={color} />
           ),

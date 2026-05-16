@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAppTheme } from "@/src/context/ThemeContext";
-import { colors } from "@/src/theme/colors";
+import { colors, getReadableTextColor } from "@/src/theme/colors";
 
 type ActiveTab = "home" | "expenses" | "savings" | "settings";
 
@@ -34,7 +34,7 @@ export function AppBottomMenu({ active }: { active?: ActiveTab }) {
       />
 
       <MenuItem
-        label="Ahorros"
+        label="Planes"
         icon="wallet-outline"
         active={active === "savings"}
         styles={styles}
@@ -58,11 +58,15 @@ function MenuItem({
   onPress: () => void;
 }) {
   return (
-    <Pressable style={styles.item} onPress={onPress}>
+    <Pressable style={[styles.item, active && styles.itemActive]} onPress={onPress}>
       <Ionicons
         name={icon}
         size={23}
-        color={active ? colors.primaryDark : colors.mutedText}
+        color={
+          active
+            ? getReadableTextColor(colors.primarySoft, colors.text, colors.text)
+            : colors.mutedText
+        }
       />
 
       <Text style={[styles.label, active && styles.labelActive]}>{label}</Text>
@@ -94,6 +98,13 @@ const createStyles = () =>
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    marginHorizontal: 4,
+    minHeight: 54,
+    borderRadius: 16,
+  },
+
+  itemActive: {
+    backgroundColor: colors.primarySoft,
   },
 
   label: {
@@ -104,6 +115,6 @@ const createStyles = () =>
   },
 
   labelActive: {
-    color: colors.primaryDark,
+    color: getReadableTextColor(colors.primarySoft, colors.text, colors.text),
   },
   });

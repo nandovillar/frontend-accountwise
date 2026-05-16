@@ -1,5 +1,5 @@
 import { Platform, StyleSheet } from "react-native";
-import { colors } from "./colors";
+import { colors, getReadableTextColor } from "./colors";
 import { spacing } from "./spacing";
 import { createTypography } from "./typography";
 
@@ -107,7 +107,7 @@ export const createCommonStyles = (isDesktop: boolean) => {
 
     primaryButtonText: {
       ...typography.button,
-      color: colors.white,
+      color: getReadableTextColor(colors.primaryDark),
     },
 
     secondaryButton: {
@@ -123,7 +123,7 @@ export const createCommonStyles = (isDesktop: boolean) => {
 
     secondaryButtonText: {
       ...typography.button,
-      color: colors.primaryDark,
+      color: getReadableTextColor(colors.primarySoft, colors.text, colors.text),
     },
 
     dangerButton: {
@@ -208,7 +208,9 @@ export const createCommonStyles = (isDesktop: boolean) => {
       width: isDesktop ? 42 : 38,
       height: isDesktop ? 42 : 38,
       borderRadius: 999,
-      backgroundColor: colors.white,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
       alignItems: "center",
       justifyContent: "center",
       shadowColor: "#000",
@@ -243,7 +245,7 @@ export const createCommonStyles = (isDesktop: boolean) => {
     },
 
     topSpaceBadgeText: {
-      color: colors.primaryDark,
+      color: getReadableTextColor(colors.primarySoft, colors.text, colors.text),
       fontSize: isDesktop ? 12 : 10,
       fontWeight: "900",
     },
@@ -344,7 +346,7 @@ export const createCommonStyles = (isDesktop: boolean) => {
 
     modalSaveText: {
       ...typography.button,
-      color: colors.white,
+      color: getReadableTextColor(colors.primaryDark),
     },
   });
 };

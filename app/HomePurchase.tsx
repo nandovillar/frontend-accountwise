@@ -91,7 +91,15 @@ const defaultSimulation = {
   home_insurance: 0,
 };
 
-export default function HomePurchaseScreen() {
+type HomePurchaseScreenProps = {
+  embedded?: boolean;
+  onClose?: () => void;
+};
+
+export default function HomePurchaseScreen({
+  embedded = false,
+  onClose,
+}: HomePurchaseScreenProps = {}) {
   const { activeSpaceId, recordActivity } = useSpaces();
   const { themeId } = useAppTheme();
   const { width } = useWindowDimensions();
@@ -279,6 +287,53 @@ export default function HomePurchaseScreen() {
 
   const totalBankCost = monthlyPayment * totalMonths;
   const totalInterest = Math.max(0, totalBankCost - mortgage);
+
+  const getSimulationSummary = (simulation: Simulation) => {
+    const simulationPrice = Number(simulation.property_price || 0);
+    const simulationAgency =
+      (simulationPrice * Number(simulation.agency_percent || 0)) / 100;
+    const simulationTax =
+      (simulationPrice * Number(simulation.tax_percent || 0)) / 100;
+    const simulationFinancial = Number(simulation.financial_fee || 0);
+    const simulationNotary =
+      (simulationPrice * Number(simulation.notary_percent || 0)) / 100;
+    const simulationTotal =
+      simulationPrice +
+      simulationAgency +
+      simulationTax +
+      simulationFinancial +
+      simulationNotary;
+    const simulationDown = Number(simulation.down_payment || 0);
+    const simulationMortgage = Math.max(0, simulationTotal - simulationDown);
+    const simulationCovered =
+      simulationTotal > 0 ? (simulationDown / simulationTotal) * 100 : 0;
+    const simulationMonths = Number(simulation.years || 0) * 12;
+    const simulationBonus =
+      Number(simulation.bonus || 0) +
+      Number(simulation.salary_bonus || 0) +
+      Number(simulation.life_insurance || 0) +
+      Number(simulation.home_insurance || 0);
+    const simulationTin = Math.max(0, Number(simulation.tin || 0) - simulationBonus);
+    const simulationRate = simulationTin / 100 / 12;
+    const simulationPayment =
+      simulationRate > 0 && simulationMonths > 0
+        ? (simulationMortgage *
+            (simulationRate * Math.pow(1 + simulationRate, simulationMonths))) /
+          (Math.pow(1 + simulationRate, simulationMonths) - 1)
+        : simulationMonths > 0
+          ? simulationMortgage / simulationMonths
+          : 0;
+
+    return {
+      price: simulationPrice,
+      expenses: Math.max(0, simulationTotal - simulationPrice),
+      total: simulationTotal,
+      down: simulationDown,
+      mortgage: simulationMortgage,
+      covered: simulationCovered,
+      monthlyPayment: simulationPayment,
+    };
+  };
 
   const cleanSimulationForm = () => {
     const snapshot = buildEmptySnapshot();
@@ -550,16 +605,25 @@ export default function HomePurchaseScreen() {
   }, [loadSimulations]);
 
   return (
-    <View style={commonStyles.screen}>
-      <Header
-        title="Simulador de casa"
-        headerStyle={{ backgroundColor: colors.surface }}
-        headerTintColor={colors.text}
-        headerTitleStyle={{ color: colors.text }}
-      />
-      <SpaceMenuButton isDesktop={isDesktop} />
+    <View style={embedded ? styles.embeddedScreen : commonStyles.screen}>
+      {!embedded && (
+        <>
+          <Header
+            title="Simulador de casa"
+            headerStyle={{ backgroundColor: colors.surface }}
+            headerTintColor={colors.text}
+            headerTitleStyle={{ color: colors.text }}
+          />
+          <SpaceMenuButton isDesktop={isDesktop} />
+        </>
+      )}
 
-      <ScrollView contentContainerStyle={commonStyles.container}>
+      <ScrollView
+        contentContainerStyle={[
+          commonStyles.container,
+          embedded && styles.embeddedContainer,
+        ]}
+      >
         <View style={commonStyles.content}>
           <View style={[commonStyles.card, styles.libraryCard]}>
             <View style={styles.libraryHeader}>
@@ -573,6 +637,16 @@ export default function HomePurchaseScreen() {
                   necesites.
                 </Text>
               </View>
+
+              {embedded && onClose && (
+                <Pressable style={commonStyles.closeButton} onPress={onClose}>
+                  <Ionicons
+                    name="close"
+                    size={22}
+                    color={colors.primaryDark}
+                  />
+                </Pressable>
+              )}
             </View>
 
             <View style={styles.libraryActions}>
@@ -623,35 +697,80 @@ export default function HomePurchaseScreen() {
             </View>
           ) : (
             <View style={styles.savedGrid}>
-              {simulations.map((simulation) => (
-                <Pressable
-                  key={simulation.id}
-                  style={styles.savedCard}
-                  onPress={() => openSavedSimulation(simulation)}
-                >
-                  <View style={styles.savedCardTop}>
-                    <Text style={styles.savedCardTitle} numberOfLines={1}>
-                      {simulation.name}
-                    </Text>
+              {simulations.map((simulation) => {
+                const summary = getSimulationSummary(simulation);
 
-                    <View style={styles.savedCardIcon}>
-                      <Ionicons
-                        name="open-outline"
-                        size={17}
-                        color={colors.primaryDark}
+                return (
+                  <Pressable
+                    key={simulation.id}
+                    style={styles.savedCard}
+                    onPress={() => openSavedSimulation(simulation)}
+                  >
+                    <View style={styles.savedCardTop}>
+                      <Text style={styles.savedCardTitle} numberOfLines={1}>
+                        {simulation.name}
+                      </Text>
+
+                      <View style={styles.savedCardIcon}>
+                        <Ionicons
+                          name="open-outline"
+                          size={17}
+                          color={colors.white}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.savedHero}>
+                      <View style={styles.savedHeroText}>
+                        <Text style={styles.savedHeroLabel}>
+                          Precio del inmueble
+                        </Text>
+                        <Text
+                          style={styles.savedHeroAmount}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.55}
+                        >
+                          {formatMoney(summary.price)}
+                        </Text>
+                        <Text style={styles.savedHeroSubtext}>
+                          Coste total estimado: {formatCompactMoney(summary.total)}
+                        </Text>
+                      </View>
+
+                      <View style={styles.savedCoveredBox}>
+                        <Text style={styles.savedCoveredValue}>
+                          {summary.covered.toFixed(0)}%
+                        </Text>
+                        <Text style={styles.savedCoveredLabel}>cubierto</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.savedKpiGrid}>
+                      <MiniSummaryCard
+                        label="Entrada"
+                        value={formatCompactMoney(summary.down)}
+                        styles={styles}
+                      />
+                      <MiniSummaryCard
+                        label="Gastos"
+                        value={formatCompactMoney(summary.expenses)}
+                        styles={styles}
+                      />
+                      <MiniSummaryCard
+                        label="Préstamo"
+                        value={formatCompactMoney(summary.mortgage)}
+                        styles={styles}
+                      />
+                      <MiniSummaryCard
+                        label="Cuota"
+                        value={formatCompactMoney(summary.monthlyPayment)}
+                        styles={styles}
                       />
                     </View>
-                  </View>
-
-                  <Text style={styles.savedCardAmount}>
-                    {formatMoney(Number(simulation.property_price || 0))}
-                  </Text>
-
-                  <Text style={styles.savedCardSubtitle}>
-                    Pulsa para abrirla
-                  </Text>
-                </Pressable>
-              ))}
+                  </Pressable>
+                );
+              })}
             </View>
           )}
 
@@ -729,6 +848,37 @@ export default function HomePurchaseScreen() {
             </Pressable>
           </View>
 
+          <View style={styles.propertyPriceCard}>
+            <View style={styles.heroTextBlock}>
+              <Text style={styles.heroLabel}>Precio del piso</Text>
+
+              <Text
+                style={[styles.heroAmount, styles.heroCardAmount]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.45}
+              >
+                {formatMoney(price)}
+              </Text>
+
+              <Text style={styles.propertyPriceHint}>
+                Es el precio que ves anunciado; los gastos se suman aparte.
+              </Text>
+            </View>
+
+            <Pressable
+              style={styles.priceEditButton}
+              onPress={() => openEdit("property")}
+            >
+              <Ionicons
+                name="create-outline"
+                size={18}
+                color={colors.primaryDark}
+              />
+              <Text style={styles.priceEditText}>Editar</Text>
+            </Pressable>
+          </View>
+
           <View style={styles.heroCard}>
             <View style={styles.heroTextBlock}>
               <Text style={styles.heroLabel}>Coste total estimado</Text>
@@ -749,6 +899,34 @@ export default function HomePurchaseScreen() {
               </Text>
               <Text style={styles.coveredLabel}>cubierto</Text>
             </View>
+          </View>
+
+          <View style={styles.purchaseFlowCard}>
+            <FlowStep
+              label="Precio piso"
+              value={formatCompactMoney(price)}
+              styles={styles}
+            />
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={colors.mutedText}
+            />
+            <FlowStep
+              label="Gastos"
+              value={formatCompactMoney(totalProperty - price)}
+              styles={styles}
+            />
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={colors.mutedText}
+            />
+            <FlowStep
+              label="A financiar"
+              value={formatCompactMoney(mortgage)}
+              styles={styles}
+            />
           </View>
 
           <View style={styles.kpiGrid}>
@@ -967,7 +1145,7 @@ export default function HomePurchaseScreen() {
         </View>
       </ScrollView>
 
-      <AppBottomMenu active="savings" />
+      {!embedded && <AppBottomMenu active="savings" />}
 
       <Modal
         visible={editMode !== null}
@@ -1226,8 +1404,67 @@ function SectionHeader({
   );
 }
 
+function MiniSummaryCard({
+  label,
+  value,
+  styles,
+}: {
+  label: string;
+  value: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.savedMiniCard}>
+      <Text style={styles.savedMiniLabel}>{label}</Text>
+      <Text
+        style={styles.savedMiniValue}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.65}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function FlowStep({
+  label,
+  value,
+  styles,
+}: {
+  label: string;
+  value: string;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  return (
+    <View style={styles.flowStep}>
+      <Text style={styles.flowStepLabel}>{label}</Text>
+      <Text
+        style={styles.flowStepValue}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.65}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const createStyles = (isDesktop: boolean) =>
   StyleSheet.create({
+    embeddedScreen: {
+      flex: 1,
+      backgroundColor: "transparent",
+    },
+
+    embeddedContainer: {
+      paddingHorizontal: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+    },
+
     libraryCard: {
       gap: isDesktop ? 16 : 12,
     },
@@ -1271,8 +1508,8 @@ const createStyles = (isDesktop: boolean) =>
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: isDesktop ? 18 : 16,
-      padding: isDesktop ? 18 : 14,
-      gap: 8,
+      overflow: "hidden",
+      gap: 0,
     },
 
     savedCardTop: {
@@ -1280,6 +1517,9 @@ const createStyles = (isDesktop: boolean) =>
       alignItems: "center",
       justifyContent: "space-between",
       gap: 10,
+      paddingHorizontal: isDesktop ? 18 : 14,
+      paddingTop: isDesktop ? 16 : 14,
+      paddingBottom: 10,
     },
 
     savedCardTitle: {
@@ -1294,21 +1534,100 @@ const createStyles = (isDesktop: boolean) =>
       width: 36,
       height: 36,
       borderRadius: 12,
-      backgroundColor: colors.primarySoft,
+      backgroundColor: colors.primaryDark,
       alignItems: "center",
       justifyContent: "center",
     },
 
-    savedCardAmount: {
-      fontSize: isDesktop ? 24 : 21,
-      color: colors.primaryDark,
+    savedHero: {
+      backgroundColor: colors.primaryDark,
+      padding: isDesktop ? 22 : 16,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+
+    savedHeroText: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    savedHeroLabel: {
+      color: colors.white,
+      fontSize: isDesktop ? 13 : 11,
+      fontWeight: "900",
+      opacity: 0.9,
+      marginBottom: 8,
+    },
+
+    savedHeroAmount: {
+      color: colors.white,
+      fontSize: isDesktop ? 34 : 25,
       fontWeight: "900",
     },
 
-    savedCardSubtitle: {
+    savedHeroSubtext: {
+      color: colors.white,
+      opacity: 0.86,
       fontSize: isDesktop ? 12 : 10,
-      color: colors.mutedText,
       fontWeight: "800",
+      marginTop: 6,
+    },
+
+    savedCoveredBox: {
+      width: isDesktop ? 96 : 76,
+      height: isDesktop ? 76 : 66,
+      backgroundColor: "rgba(255,255,255,0.16)",
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    savedCoveredValue: {
+      color: colors.white,
+      fontSize: isDesktop ? 24 : 20,
+      fontWeight: "900",
+    },
+
+    savedCoveredLabel: {
+      color: colors.white,
+      fontSize: isDesktop ? 11 : 9,
+      fontWeight: "800",
+      opacity: 0.9,
+    },
+
+    savedKpiGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: isDesktop ? 12 : 7,
+      padding: isDesktop ? 16 : 12,
+      backgroundColor: colors.surface,
+    },
+
+    savedMiniCard: {
+      flex: 1,
+      flexBasis: isDesktop ? "22%" : "47%",
+      minWidth: 0,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingVertical: isDesktop ? 13 : 10,
+      paddingHorizontal: isDesktop ? 12 : 8,
+      backgroundColor: colors.white,
+    },
+
+    savedMiniLabel: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+      marginBottom: 8,
+    },
+
+    savedMiniValue: {
+      color: colors.text,
+      fontSize: isDesktop ? 19 : 14,
+      fontWeight: "900",
     },
 
     simulatorModalCard: {
@@ -1355,16 +1674,54 @@ const createStyles = (isDesktop: boolean) =>
       justifyContent: "center",
     },
 
-    heroCard: {
+    propertyPriceCard: {
       backgroundColor: colors.primaryDark,
       borderRadius: isDesktop ? 20 : 18,
       padding: isDesktop ? 22 : 16,
-      marginBottom: isDesktop ? 14 : 12,
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
       gap: 12,
-      minHeight: isDesktop ? 132 : 112,
+      minHeight: isDesktop ? 128 : 112,
+    },
+
+    propertyPriceHint: {
+      color: colors.white,
+      opacity: 0.86,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "700",
+      marginTop: 8,
+    },
+
+    priceEditButton: {
+      minWidth: isDesktop ? 88 : 74,
+      minHeight: isDesktop ? 46 : 42,
+      borderRadius: 14,
+      backgroundColor: colors.white,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingHorizontal: 10,
+    },
+
+    priceEditText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
+    heroCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: isDesktop ? 20 : 18,
+      padding: isDesktop ? 22 : 16,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      minHeight: isDesktop ? 112 : 96,
     },
 
     heroTextBlock: {
@@ -1374,8 +1731,7 @@ const createStyles = (isDesktop: boolean) =>
 
     heroLabel: {
       fontSize: isDesktop ? 13 : 11,
-      color: colors.white,
-      opacity: 0.85,
+      color: colors.mutedText,
       fontWeight: "800",
       marginBottom: 4,
     },
@@ -1387,26 +1743,63 @@ const createStyles = (isDesktop: boolean) =>
       maxWidth: "100%",
     },
 
+    heroCardAmount: {
+      color: colors.primaryDark,
+    },
+
     coveredBox: {
       width: isDesktop ? 96 : 76,
       height: isDesktop ? 76 : 66,
-      backgroundColor: "rgba(255,255,255,0.16)",
+      backgroundColor: colors.primarySoft,
       borderRadius: 18,
       alignItems: "center",
       justifyContent: "center",
     },
 
     coveredValue: {
-      color: colors.white,
+      color: colors.primaryDark,
       fontSize: isDesktop ? 23 : 20,
       fontWeight: "900",
     },
 
     coveredLabel: {
-      color: colors.white,
+      color: colors.primaryDark,
       fontSize: isDesktop ? 11 : 9,
       fontWeight: "800",
       opacity: 0.9,
+    },
+
+    purchaseFlowCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: isDesktop ? 8 : 5,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: isDesktop ? 12 : 8,
+    },
+
+    flowStep: {
+      flex: 1,
+      minWidth: 0,
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      paddingVertical: isDesktop ? 10 : 8,
+      paddingHorizontal: isDesktop ? 10 : 7,
+    },
+
+    flowStepLabel: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 11 : 9,
+      fontWeight: "900",
+      marginBottom: 4,
+    },
+
+    flowStepValue: {
+      color: colors.text,
+      fontSize: isDesktop ? 15 : 11,
+      fontWeight: "900",
     },
 
     kpiGrid: {
