@@ -4,6 +4,7 @@ import { Header } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import {
+  createElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -2111,6 +2112,23 @@ export default function TabTwoScreen() {
                 onPress={() => onChange(option)}
               />
             ))}
+            {Platform.OS === "web" &&
+              createElement("input", {
+                type: "color",
+                value: pickerColor,
+                title: "Color personalizado",
+                "aria-label": "Color personalizado",
+                onChange: (event: any) => onChange(event.target.value),
+                style: {
+                  width: isDesktop ? 88 : 54,
+                  height: isDesktop ? 28 : 26,
+                  border: "0",
+                  borderRadius: 999,
+                  padding: 0,
+                  background: "transparent",
+                  cursor: "pointer",
+                },
+              })}
           </View>
         )}
       </View>

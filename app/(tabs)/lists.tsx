@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createElement, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Platform,
@@ -67,7 +67,8 @@ type ListRow = {
 };
 
 const normalizeListColor = (value?: string | null) => {
-  return listColorOptions.includes(value || "") ? value || "" : listColorOptions[0];
+  const raw = (value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(raw) ? raw.toUpperCase() : listColorOptions[0];
 };
 
 const getSoftColor = (value: string) => {
@@ -556,6 +557,24 @@ export default function ListsScreen() {
                         onPress={() => updateListColor(selectedList.id, option)}
                       />
                     ))}
+                    {Platform.OS === "web" &&
+                      createElement("input", {
+                        type: "color",
+                        value: normalizeListColor(selectedList.color),
+                        title: "Color personalizado",
+                        "aria-label": "Color personalizado",
+                        onChange: (event: any) =>
+                          updateListColor(selectedList.id, event.target.value),
+                        style: {
+                          width: isDesktop ? 88 : 54,
+                          height: isDesktop ? 30 : 28,
+                          border: "0",
+                          borderRadius: 999,
+                          padding: 0,
+                          background: "transparent",
+                          cursor: "pointer",
+                        },
+                      })}
                   </View>
                 )}
               </View>
