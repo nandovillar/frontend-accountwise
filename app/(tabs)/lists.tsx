@@ -24,6 +24,7 @@ import { useAppTheme } from "@/src/context/ThemeContext";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
+import { confirmAction } from "@/src/utils/confirmAction";
 
 type ListOption = {
   id: string;
@@ -143,6 +144,9 @@ export default function ListsScreen() {
       return;
     }
 
+    const confirmed = await confirmAction("¿Crear esta lista?");
+    if (!confirmed) return;
+
     const nextList = {
       id: createId(),
       title: cleanTitle,
@@ -165,6 +169,9 @@ export default function ListsScreen() {
       Alert.alert("Falta la opción", "Escribe una opción para añadirla.");
       return;
     }
+
+    const confirmed = await confirmAction("¿Añadir esta opción?");
+    if (!confirmed) return;
 
     const nextLists = lists.map((list) =>
       list.id === selectedList.id

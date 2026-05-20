@@ -4,7 +4,6 @@ import { Header } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
 import { router } from "expo-router";
 import {
-  createElement,
   type ReactNode,
   useCallback,
   useEffect,
@@ -39,6 +38,7 @@ import {
   getCategorySoftColor,
   normalizeColor,
 } from "@/src/utils/categoryColors";
+import { confirmAction } from "@/src/utils/confirmAction";
 import { formatCompactMoney, parseMoneyInput } from "@/src/utils/money";
 import {
   canDeleteExpense,
@@ -824,10 +824,18 @@ export default function TabTwoScreen() {
   }, []);
 
   const runAction = useCallback(
-    async (action: () => Promise<void>) => {
+    async (
+      action: () => Promise<void>,
+      confirmMessage?: string,
+    ) => {
       if (actionBusyRef.current) {
         showActionMessage("Espera a que termine la acción anterior.");
         return;
+      }
+
+      if (confirmMessage) {
+        const confirmed = await confirmAction(confirmMessage);
+        if (!confirmed) return;
       }
 
       actionBusyRef.current = true;
@@ -2060,37 +2068,29 @@ export default function TabTwoScreen() {
   ) => {
     const pickerColor = normalizeColor(value) || colorOptions[0];
 
-    if (Platform.OS === "web") {
-      return createElement("input", {
-        type: "color",
-        value: pickerColor,
-        onChange: (event: { target: { value: string } }) =>
-          onChange(event.target.value),
-        style: {
-          width: "100%",
-          height: 44,
-          border: "none",
-          borderRadius: 12,
-          background: "transparent",
-          padding: 0,
-          cursor: "pointer",
-        },
-      });
-    }
-
     return (
-      <View style={styles.colorSwatchRow}>
-        {colorOptions.map((option) => (
-          <Pressable
-            key={option}
-            style={[
-              styles.colorSwatchButton,
-              { backgroundColor: option },
-              pickerColor === option && styles.colorSwatchButtonActive,
-            ]}
-            onPress={() => onChange(option)}
-          />
-        ))}
+      <View style={styles.colorPickerRow}>
+        <View style={styles.colorSwatchRow}>
+          {colorOptions.map((option) => (
+            <Pressable
+              key={option}
+              style={[
+                styles.colorSwatchButton,
+                { backgroundColor: option },
+                pickerColor === option && styles.colorSwatchButtonActive,
+              ]}
+              onPress={() => onChange(option)}
+            />
+          ))}
+        </View>
+
+        <TextInput
+          style={styles.colorValueInput}
+          value={value}
+          onChangeText={onChange}
+          placeholder="#38BDF8 o rgb(56,189,248)"
+          autoCapitalize="none"
+        />
       </View>
     );
   };
@@ -2536,7 +2536,7 @@ export default function TabTwoScreen() {
                 {renderPaymentModeSelector(fixedAutoPay, setFixedAutoPay)}
                 <Pressable
                   style={styles.primaryButton}
-                  onPress={() => runAction(handleAddFixedExpense)}
+                  onPress={() => runAction(handleAddFixedExpense, "¿Guardar este gasto fijo?")}
                 >
                   <Text style={styles.primaryButtonText}>Guardar fijo</Text>
                 </Pressable>
@@ -2710,7 +2710,7 @@ export default function TabTwoScreen() {
                 {renderCategorySelector(variableCategory, setVariableCategory)}
                 <Pressable
                   style={styles.primaryButton}
-                  onPress={() => runAction(handleAddExpense)}
+                  onPress={() => runAction(handleAddExpense, "¿Guardar este gasto?")}
                 >
                   <Text style={styles.primaryButtonText}>Guardar gasto</Text>
                 </Pressable>
@@ -2788,8 +2788,14 @@ export default function TabTwoScreen() {
         animationType="fade"
         onRequestClose={() => setShowCategoryManager(false)}
       >
-        <View style={commonStyles.modalOverlay}>
-          <View style={commonStyles.modalCard}>
+        <Pressable
+          style={commonStyles.modalOverlay}
+          onPress={() => setShowCategoryManager(false)}
+        >
+          <Pressable
+            style={commonStyles.modalCard}
+            onPress={(event) => event.stopPropagation()}
+          >
             <View style={commonStyles.modalHeader}>
               <View style={commonStyles.modalTitleBlock}>
                 <Text style={commonStyles.modalTitle}>Categorías</Text>
@@ -2810,22 +2816,28 @@ export default function TabTwoScreen() {
               keyboardShouldPersistTaps="handled"
             >
               <View style={styles.categoryManagerCreateBox}>
-                <Text style={styles.categoryColorTitle}>Nueva categoría</Text>
-                <TextInput
-                  style={styles.categoryInput}
-                  placeholder="Nombre"
-                  value={newCategory}
-                  onChangeText={setNewCategory}
-                />
+                <View style={styles.categoryManagerHeader}>
+                  <View style={styles.categoryManagerTextBlock}>
+                    <Text style={styles.categoryColorTitle}>Nueva categoría</Text>
+                    <TextInput
+                      style={styles.categoryInput}
+                      placeholder="Nombre"
+                      value={newCategory}
+                      onChangeText={setNewCategory}
+                    />
+                  </View>
+                  <Pressable
+                    style={styles.saveCategoryButton}
+                    onPress={() =>
+                      runAction(() => createCategory(), "¿Crear esta categoría?")
+                    }
+                  >
+                    <Text style={styles.saveCategoryButtonText}>
+                      Crear categoría
+                    </Text>
+                  </Pressable>
+                </View>
                 {renderColorPicker(newCategoryColor, setNewCategoryColor)}
-                <Pressable
-                  style={styles.saveCategoryButton}
-                  onPress={() => createCategory()}
-                >
-                  <Text style={styles.saveCategoryButtonText}>
-                    Crear categoría
-                  </Text>
-                </Pressable>
               </View>
 
               <View style={styles.categoryManagerList}>
@@ -2842,47 +2854,54 @@ export default function TabTwoScreen() {
                   return (
                     <View key={category} style={styles.categoryManagerItem}>
                       <View style={styles.categoryManagerHeader}>
-                        <View
-                          style={[
-                            styles.categoryBadge,
-                            {
-                              backgroundColor:
-                                getCategorySoftColor(normalizedDraft),
-                              borderColor: normalizedDraft,
-                            },
-                          ]}
-                        >
-                          <Text
+                        <View style={styles.categoryManagerTextBlock}>
+                          <View
                             style={[
-                              styles.categoryBadgeText,
-                              { color: normalizedDraft },
+                              styles.categoryBadge,
+                              {
+                                backgroundColor:
+                                  getCategorySoftColor(normalizedDraft),
+                                borderColor: normalizedDraft,
+                              },
                             ]}
                           >
-                            {category}
-                          </Text>
+                            <Text
+                              style={[
+                                styles.categoryBadgeText,
+                                { color: normalizedDraft },
+                              ]}
+                            >
+                              {category}
+                            </Text>
+                          </View>
+                          {renderColorPicker(draftColor, (nextColor) =>
+                            setCategoryColorDrafts((current) => ({
+                              ...current,
+                              [category]: nextColor,
+                            })),
+                          )}
                         </View>
                         <Pressable
                           style={styles.categoryManagerSaveButton}
-                          onPress={() => saveCategoryColor(category)}
+                          onPress={() =>
+                            runAction(
+                              () => saveCategoryColor(category),
+                              "¿Guardar el color de esta categoría?",
+                            )
+                          }
                         >
                           <Text style={styles.categoryManagerSaveText}>
                             Guardar
                           </Text>
                         </Pressable>
                       </View>
-                      {renderColorPicker(draftColor, (nextColor) =>
-                        setCategoryColorDrafts((current) => ({
-                          ...current,
-                          [category]: nextColor,
-                        })),
-                      )}
                     </View>
                   );
                 })}
               </View>
             </ScrollView>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       <Modal
@@ -2925,7 +2944,7 @@ export default function TabTwoScreen() {
                   commonStyles.modalSaveButton,
                   isActionBusy && { opacity: 0.6 },
                 ]}
-                onPress={() => runAction(saveIncome)}
+                onPress={() => runAction(saveIncome, "¿Guardar estos ingresos?")}
               >
                 <Text style={commonStyles.modalSaveText}>
                   {isActionBusy ? "Guardando..." : "Guardar"}
@@ -2991,7 +3010,7 @@ export default function TabTwoScreen() {
                   commonStyles.modalSaveButton,
                   isActionBusy && { opacity: 0.6 },
                 ]}
-                onPress={() => runAction(handleAddFixedExpense)}
+                onPress={() => runAction(handleAddFixedExpense, "¿Guardar este gasto fijo?")}
               >
                 <Text style={commonStyles.modalSaveText}>
                   {isActionBusy ? "Guardando..." : "Guardar"}
@@ -3056,7 +3075,7 @@ export default function TabTwoScreen() {
                   commonStyles.modalSaveButton,
                   isActionBusy && { opacity: 0.6 },
                 ]}
-                onPress={() => runAction(handleAddExpense)}
+                onPress={() => runAction(handleAddExpense, "¿Guardar este gasto?")}
               >
                 <Text style={commonStyles.modalSaveText}>
                   {isActionBusy ? "Guardando..." : "Guardar"}
@@ -3119,7 +3138,7 @@ export default function TabTwoScreen() {
                   commonStyles.modalSaveButton,
                   isActionBusy && { opacity: 0.6 },
                 ]}
-                onPress={() => runAction(handleAddSpaceIncome)}
+                onPress={() => runAction(handleAddSpaceIncome, "¿Guardar esta aportación?")}
               >
                 <Text style={commonStyles.modalSaveText}>
                   {isActionBusy ? "Guardando..." : "Guardar"}
@@ -3198,7 +3217,7 @@ export default function TabTwoScreen() {
                   commonStyles.modalSaveButton,
                   isActionBusy && { opacity: 0.6 },
                 ]}
-                onPress={() => runAction(handleAddBizum)}
+                onPress={() => runAction(handleAddBizum, "¿Guardar este movimiento?")}
               >
                 <Text style={commonStyles.modalSaveText}>
                   {isActionBusy ? "Guardando..." : "Guardar"}
@@ -3315,7 +3334,7 @@ export default function TabTwoScreen() {
                   commonStyles.modalSaveButton,
                   isActionBusy && { opacity: 0.6 },
                 ]}
-                onPress={() => runAction(saveEdit)}
+                onPress={() => runAction(saveEdit, "¿Aplicar los cambios?")}
               >
                 <Text style={commonStyles.modalSaveText}>
                   {isActionBusy ? "Guardando..." : "Guardar"}
@@ -4037,15 +4056,24 @@ const createStyles = (isDesktop: boolean) =>
       fontWeight: "900",
     },
 
+    colorPickerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      minWidth: 0,
+    },
+
     colorSwatchRow: {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 7,
+      flex: 1,
+      minWidth: 0,
     },
 
     colorSwatchButton: {
-      width: isDesktop ? 26 : 24,
-      height: isDesktop ? 26 : 24,
+      width: isDesktop ? 28 : 26,
+      height: isDesktop ? 28 : 26,
       borderRadius: 999,
       borderWidth: 2,
       borderColor: colors.surface,
@@ -4053,6 +4081,18 @@ const createStyles = (isDesktop: boolean) =>
 
     colorSwatchButtonActive: {
       borderColor: colors.text,
+    },
+
+    colorValueInput: {
+      width: isDesktop ? 210 : 142,
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingVertical: isDesktop ? 9 : 8,
+      paddingHorizontal: 10,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 12 : 10,
+      color: colors.text,
     },
 
     saveCategoryButton: {
@@ -4225,11 +4265,11 @@ const createStyles = (isDesktop: boolean) =>
     categoryManagerCreateBox: {
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 14,
-      padding: 12,
+      borderRadius: 18,
+      padding: isDesktop ? 18 : 14,
       backgroundColor: colors.background,
-      gap: 10,
-      marginBottom: 12,
+      gap: 14,
+      marginBottom: 16,
     },
 
     categoryManagerList: {
@@ -4239,16 +4279,22 @@ const createStyles = (isDesktop: boolean) =>
     categoryManagerItem: {
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 14,
-      padding: 12,
+      borderRadius: 18,
+      padding: isDesktop ? 18 : 14,
       backgroundColor: colors.surface,
-      gap: 10,
+      gap: 12,
     },
 
     categoryManagerHeader: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: isDesktop ? "row" : "column",
+      alignItems: isDesktop ? "center" : "stretch",
       justifyContent: "space-between",
+      gap: 12,
+    },
+
+    categoryManagerTextBlock: {
+      flex: 1,
+      minWidth: 0,
       gap: 10,
     },
 
