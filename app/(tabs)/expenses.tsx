@@ -2793,7 +2793,7 @@ export default function TabTwoScreen() {
           onPress={() => setShowCategoryManager(false)}
         >
           <Pressable
-            style={commonStyles.modalCard}
+            style={styles.categoryModalCard}
             onPress={(event) => event.stopPropagation()}
           >
             <View style={commonStyles.modalHeader}>
@@ -4057,8 +4057,8 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     colorPickerRow: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection: isDesktop ? "row" : "column",
+      alignItems: isDesktop ? "center" : "stretch",
       gap: 10,
       minWidth: 0,
     },
@@ -4069,6 +4069,7 @@ const createStyles = (isDesktop: boolean) =>
       gap: 7,
       flex: 1,
       minWidth: 0,
+      maxWidth: isDesktop ? 390 : "100%",
     },
 
     colorSwatchButton: {
@@ -4084,7 +4085,7 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     colorValueInput: {
-      width: isDesktop ? 210 : 142,
+      width: isDesktop ? 220 : "100%",
       backgroundColor: colors.white,
       borderWidth: 1,
       borderColor: colors.border,
@@ -4152,6 +4153,17 @@ const createStyles = (isDesktop: boolean) =>
       flexDirection: "row",
       justifyContent: "center",
       gap: 8,
+    },
+
+    categoryModalCard: {
+      width: "100%",
+      maxWidth: isDesktop ? 760 : 520,
+      maxHeight: "86%",
+      backgroundColor: colors.surface,
+      borderRadius: 20,
+      padding: isDesktop ? 24 : 16,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
 
     categoryManagerButton: {
@@ -4289,7 +4301,7 @@ const createStyles = (isDesktop: boolean) =>
       flexDirection: isDesktop ? "row" : "column",
       alignItems: isDesktop ? "center" : "stretch",
       justifyContent: "space-between",
-      gap: 12,
+      gap: isDesktop ? 18 : 12,
     },
 
     categoryManagerTextBlock: {
