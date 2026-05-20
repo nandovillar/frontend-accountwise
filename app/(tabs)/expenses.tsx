@@ -168,6 +168,9 @@ export default function TabTwoScreen() {
   const [categoryColorDrafts, setCategoryColorDrafts] = useState<
     Record<string, string>
   >({});
+  const [expandedColorEditors, setExpandedColorEditors] = useState<
+    Record<string, boolean>
+  >({});
 
   const [fixedFilterCategory, setFixedFilterCategory] = useState("Todas");
   const [fixedCategorySearch, setFixedCategorySearch] = useState("");
@@ -2065,42 +2068,61 @@ export default function TabTwoScreen() {
   const renderColorPicker = (
     value: string,
     onChange: (nextColor: string) => void,
+    editorKey: string,
   ) => {
     const pickerColor = normalizeColor(value) || colorOptions[0];
+    const isExpanded = expandedColorEditors[editorKey];
 
     return (
-      <View style={styles.colorPickerRow}>
-        <View style={styles.colorSwatchRow}>
-          {colorOptions.map((option) => (
-            <Pressable
-              key={option}
+      <View style={styles.colorPickerStack}>
+        <View style={styles.colorPickerRow}>
+          <View style={styles.colorSwatchRow}>
+            {colorOptions.map((option) => (
+              <Pressable
+                key={option}
+                style={[
+                  styles.colorSwatchButton,
+                  { backgroundColor: option },
+                  pickerColor === option && styles.colorSwatchButtonActive,
+                ]}
+                onPress={() => onChange(option)}
+              />
+            ))}
+          </View>
+
+          <Pressable
+            style={styles.colorApplyButton}
+            onPress={() =>
+              setExpandedColorEditors((current) => ({
+                ...current,
+                [editorKey]: !current[editorKey],
+              }))
+            }
+          >
+            <View
               style={[
-                styles.colorSwatchButton,
-                { backgroundColor: option },
-                pickerColor === option && styles.colorSwatchButtonActive,
+                styles.colorApplySwatch,
+                { backgroundColor: pickerColor },
               ]}
-              onPress={() => onChange(option)}
             />
-          ))}
+            <Text style={styles.colorApplyText}>Cambiar color</Text>
+          </Pressable>
         </View>
 
-        <Pressable
-          style={styles.colorApplyButton}
-          onPress={() =>
-            Alert.alert(
-              "Aplicar color",
-              "Elige una bolita de color y pulsa Guardar. No hace falta escribir ningún código RGB.",
-            )
-          }
-        >
-          <View
-            style={[
-              styles.colorApplySwatch,
-              { backgroundColor: pickerColor },
-            ]}
-          />
-          <Text style={styles.colorApplyText}>Aplicar color</Text>
-        </Pressable>
+        {isExpanded && (
+          <View style={styles.colorCustomRow}>
+            <TextInput
+              style={styles.colorValueInput}
+              placeholder="#38BDF8 o rgb(56, 189, 248)"
+              value={value}
+              onChangeText={onChange}
+              autoCapitalize="none"
+            />
+            <Text style={styles.colorHelpText}>
+              Puedes escribir HEX o RGB y luego Guardar.
+            </Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -2847,7 +2869,7 @@ export default function TabTwoScreen() {
                     </Text>
                   </Pressable>
                 </View>
-                {renderColorPicker(newCategoryColor, setNewCategoryColor)}
+                {renderColorPicker(newCategoryColor, setNewCategoryColor, "new-category")}
               </View>
 
               <View style={styles.categoryManagerList}>
@@ -2884,11 +2906,14 @@ export default function TabTwoScreen() {
                               {category}
                             </Text>
                           </View>
-                          {renderColorPicker(draftColor, (nextColor) =>
-                            setCategoryColorDrafts((current) => ({
-                              ...current,
-                              [category]: nextColor,
-                            })),
+                          {renderColorPicker(
+                            draftColor,
+                            (nextColor) =>
+                              setCategoryColorDrafts((current) => ({
+                                ...current,
+                                [category]: nextColor,
+                              })),
+                            `category-${category}`,
                           )}
                         </View>
                         <Pressable
@@ -4066,6 +4091,11 @@ const createStyles = (isDesktop: boolean) =>
       fontWeight: "900",
     },
 
+    colorPickerStack: {
+      gap: 8,
+      minWidth: 0,
+    },
+
     colorPickerRow: {
       flexDirection: isDesktop ? "row" : "column",
       alignItems: isDesktop ? "center" : "stretch",
@@ -4121,6 +4151,31 @@ const createStyles = (isDesktop: boolean) =>
       color: colors.primaryDark,
       fontSize: isDesktop ? 12 : 10,
       fontWeight: "900",
+    },
+
+    colorCustomRow: {
+      gap: 6,
+      minWidth: 0,
+    },
+
+    colorValueInput: {
+      width: "100%",
+      minHeight: isDesktop ? 40 : 38,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 11,
+      backgroundColor: colors.white,
+      color: colors.text,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 11,
+      fontWeight: "800",
+    },
+
+    colorHelpText: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 11 : 10,
+      fontWeight: "700",
     },
 
     saveCategoryButton: {

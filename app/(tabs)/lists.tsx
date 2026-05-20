@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "@react-navigation/elements";
 import { useFocusEffect } from "@react-navigation/native";
@@ -21,10 +20,12 @@ import { EmptyState } from "@/src/components/EmptyState";
 import { SpaceMenuButton } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
 import { useAppTheme } from "@/src/context/ThemeContext";
+import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
 import { confirmAction } from "@/src/utils/confirmAction";
+import { applySpaceFilter, getSpacePayload } from "@/src/utils/spaceQueries";
 
 type ListOption = {
   id: string;
@@ -38,22 +39,37 @@ type QuickList = {
   options: ListOption[];
 };
 
-const createId = () =>
-  `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-const getListsStorageKey = (userId: string, spaceId: string | null) => {
-  return `accountwise:lists:${userId}:${spaceId || "personal"}`;
+type ListOptionRow = {
+  id: string;
+  text: string;
+  hidden: boolean;
+  position: number | null;
+  created_at?: string | null;
 };
 
-const parseLists = (value: string | null): QuickList[] => {
-  if (!value) return [];
+type ListRow = {
+  id: string;
+  title: string;
+  created_at?: string | null;
+  user_list_options?: ListOptionRow[] | null;
+};
 
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+const mapListRows = (rows: ListRow[] | null): QuickList[] => {
+  return (rows || []).map((list) => ({
+    id: list.id,
+    title: list.title,
+    options: [...(list.user_list_options || [])]
+      .sort((a, b) => {
+        const positionDiff = (a.position || 0) - (b.position || 0);
+        if (positionDiff !== 0) return positionDiff;
+        return (a.created_at || "").localeCompare(b.created_at || "");
+      })
+      .map((option) => ({
+        id: option.id,
+        text: option.text,
+        hidden: option.hidden,
+      })),
+  }));
 };
 
 export default function ListsScreen() {
@@ -91,20 +107,6 @@ export default function ListsScreen() {
     setTimeout(() => setActionMessage(""), 2600);
   };
 
-  const saveLists = useCallback(
-    async (nextLists: QuickList[]) => {
-      const user = await getCurrentUser();
-      if (!user) return;
-
-      await AsyncStorage.setItem(
-        getListsStorageKey(user.id, activeSpaceId),
-        JSON.stringify(nextLists),
-      );
-      setLists(nextLists);
-    },
-    [activeSpaceId],
-  );
-
   const loadLists = useCallback(async () => {
     const user = await getCurrentUser();
 
@@ -113,10 +115,28 @@ export default function ListsScreen() {
       return;
     }
 
-    const stored = await AsyncStorage.getItem(
-      getListsStorageKey(user.id, activeSpaceId),
+    const query = supabase
+      .from("user_lists")
+      .select(
+        "id,title,created_at,user_list_options(id,text,hidden,position,created_at)",
+      )
+      .order("created_at", { ascending: false });
+
+    const { data, error } = await applySpaceFilter(
+      query,
+      user.id,
+      activeSpaceId,
     );
-    const nextLists = parseLists(stored);
+
+    if (error) {
+      Alert.alert(
+        "No se pudieron cargar las listas",
+        "Revisa que las tablas de listas estén creadas en Supabase.",
+      );
+      return;
+    }
+
+    const nextLists = mapListRows(data as ListRow[] | null);
 
     setLists(nextLists);
     setSelectedListId((current) =>
@@ -147,17 +167,29 @@ export default function ListsScreen() {
     const confirmed = await confirmAction("¿Crear esta lista?");
     if (!confirmed) return;
 
-    const nextList = {
-      id: createId(),
-      title: cleanTitle,
-      options: [],
-    };
-    const nextLists = [nextList, ...lists];
+    const user = await getCurrentUser();
+    if (!user) return;
 
-    await saveLists(nextLists);
+    const { data, error } = await supabase
+      .from("user_lists")
+      .insert({
+        user_id: user.id,
+        title: cleanTitle,
+        ...getSpacePayload(activeSpaceId),
+      })
+      .select("id,title,created_at")
+      .single();
+
+    if (error || !data) {
+      Alert.alert("No se pudo guardar", "La lista no se ha guardado.");
+      return;
+    }
+
+    const nextList = { id: data.id, title: data.title, options: [] };
+    setLists((current) => [nextList, ...current]);
     setSelectedListId(nextList.id);
     setListTitle("");
-    showActionMessage("Lista creada.");
+    showActionMessage("Lista guardada.");
   };
 
   const addOption = async () => {
@@ -173,60 +205,109 @@ export default function ListsScreen() {
     const confirmed = await confirmAction("¿Añadir esta opción?");
     if (!confirmed) return;
 
-    const nextLists = lists.map((list) =>
-      list.id === selectedList.id
-        ? {
-            ...list,
-            options: [
-              ...list.options,
-              { id: createId(), text: cleanText, hidden: false },
-            ],
-          }
-        : list,
-    );
+    const { data, error } = await supabase
+      .from("user_list_options")
+      .insert({
+        list_id: selectedList.id,
+        text: cleanText,
+        hidden: false,
+        position: selectedList.options.length,
+      })
+      .select("id,text,hidden,position")
+      .single();
 
-    await saveLists(nextLists);
+    if (error || !data) {
+      Alert.alert("No se pudo guardar", "La opción no se ha guardado.");
+      return;
+    }
+
+    setLists((current) =>
+      current.map((list) =>
+        list.id === selectedList.id
+          ? {
+              ...list,
+              options: [
+                ...list.options,
+                { id: data.id, text: data.text, hidden: data.hidden },
+              ],
+            }
+          : list,
+      ),
+    );
     setOptionText("");
+    showActionMessage("Opción guardada.");
   };
 
   const toggleOption = async (optionId: string) => {
     if (!selectedList) return;
 
-    const nextLists = lists.map((list) =>
-      list.id === selectedList.id
-        ? {
-            ...list,
-            options: list.options.map((option) =>
-              option.id === optionId
-                ? { ...option, hidden: !option.hidden }
-                : option,
-            ),
-          }
-        : list,
-    );
+    const option = selectedList.options.find((item) => item.id === optionId);
+    if (!option) return;
 
-    await saveLists(nextLists);
+    const nextHidden = !option.hidden;
+    const { error } = await supabase
+      .from("user_list_options")
+      .update({ hidden: nextHidden })
+      .eq("id", optionId);
+
+    if (error) {
+      Alert.alert("No se pudo actualizar", "La opción no se ha actualizado.");
+      return;
+    }
+
+    setLists((current) =>
+      current.map((list) =>
+        list.id === selectedList.id
+          ? {
+              ...list,
+              options: list.options.map((item) =>
+                item.id === optionId ? { ...item, hidden: nextHidden } : item,
+              ),
+            }
+          : list,
+      ),
+    );
   };
 
   const deleteOption = async (optionId: string) => {
     if (!selectedList) return;
 
-    const nextLists = lists.map((list) =>
-      list.id === selectedList.id
-        ? {
-            ...list,
-            options: list.options.filter((option) => option.id !== optionId),
-          }
-        : list,
-    );
+    const { error } = await supabase
+      .from("user_list_options")
+      .delete()
+      .eq("id", optionId);
 
-    await saveLists(nextLists);
+    if (error) {
+      Alert.alert("No se pudo eliminar", "La opción no se ha eliminado.");
+      return;
+    }
+
+    setLists((current) =>
+      current.map((list) =>
+        list.id === selectedList.id
+          ? {
+              ...list,
+              options: list.options.filter((option) => option.id !== optionId),
+            }
+          : list,
+      ),
+    );
   };
 
   const deleteList = async (listId: string) => {
     const executeDelete = async () => {
+      const { error } = await supabase
+        .from("user_lists")
+        .delete()
+        .eq("id", listId);
+
+      if (error) {
+        Alert.alert("No se pudo eliminar", "La lista no se ha eliminado.");
+        return;
+      }
+
       const nextLists = lists.filter((list) => list.id !== listId);
-      await saveLists(nextLists);
+      setLists(nextLists);
       setSelectedListId(nextLists[0]?.id || null);
       showActionMessage("Lista eliminada.");
     };
