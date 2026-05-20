@@ -14,6 +14,7 @@ import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
+import { confirmAction } from "@/src/utils/confirmAction";
 import {
   formatCompactMoney,
   formatMoney,
@@ -426,6 +427,9 @@ export default function HomePurchaseScreen({
 
     if (!payload) return;
 
+    const confirmed = await confirmAction("¿Guardar los cambios de la simulación?");
+    if (!confirmed) return;
+
     const { error } = await supabase
       .from("home_purchase_simulations")
       .update(payload)
@@ -461,6 +465,9 @@ export default function HomePurchaseScreen({
     const payload = await getPayload(finalName);
 
     if (!payload) return;
+
+    const confirmed = await confirmAction("¿Guardar esta simulación?");
+    if (!confirmed) return;
 
     const { data, error } = await supabase
       .from("home_purchase_simulations")
@@ -556,7 +563,10 @@ export default function HomePurchaseScreen({
     setEditMode(null);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
+    const confirmed = await confirmAction("¿Aplicar estos cambios?");
+    if (!confirmed) return;
+
     if (editMode === "main") {
       setName(draftName);
     }
@@ -584,6 +594,7 @@ export default function HomePurchaseScreen({
     }
 
     closeEdit();
+    Alert.alert("Aplicado", "Cambios aplicados correctamente.");
   };
 
   useEffect(() => {

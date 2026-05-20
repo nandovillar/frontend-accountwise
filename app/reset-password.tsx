@@ -1,4 +1,5 @@
 import { supabase } from "@/src/lib/supabase";
+import { confirmAction } from "@/src/utils/confirmAction";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
@@ -18,6 +19,9 @@ export default function ResetPasswordScreen() {
       setMessage("La contraseña debe tener al menos 6 caracteres");
       return;
     }
+
+    const confirmed = await confirmAction("¿Guardar la nueva contraseña?");
+    if (!confirmed) return;
 
     const { error } = await supabase.auth.updateUser({
       password: newPassword,

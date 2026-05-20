@@ -18,6 +18,7 @@ import { supabase } from "@/src/lib/supabase";
 import { colors } from "@/src/theme/colors";
 import { createCommonStyles } from "@/src/theme/commonStyles";
 import { getCurrentUser } from "@/src/utils/auth";
+import { confirmAction } from "@/src/utils/confirmAction";
 import { formatDateText, getNextYearDate, getTodayDate } from "@/src/utils/dates";
 import {
   formatCompactMoney,
@@ -381,6 +382,11 @@ export default function SavingsScreen() {
       Alert.alert("Importe no válido", "El objetivo debe ser mayor que 0.");
       return;
     }
+
+    const confirmed = await confirmAction(
+      editingId ? "¿Guardar los cambios del objetivo?" : "¿Guardar este objetivo?",
+    );
+    if (!confirmed) return;
 
     const payload = {
       user_id: user.id,
@@ -1250,7 +1256,10 @@ export default function SavingsScreen() {
 
               <Pressable
                 style={[commonStyles.primaryButton, styles.ipremSaveButton]}
-                onPress={() => saveIpremDraft(true)}
+                onPress={async () => {
+                  const confirmed = await confirmAction("¿Guardar el IPREM?");
+                  if (confirmed) await saveIpremDraft(true);
+                }}
               >
                 <Ionicons name="save-outline" size={18} color={colors.white} />
                 <Text style={commonStyles.primaryButtonText}>
