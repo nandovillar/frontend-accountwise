@@ -2084,13 +2084,23 @@ export default function TabTwoScreen() {
           ))}
         </View>
 
-        <TextInput
-          style={styles.colorValueInput}
-          value={value}
-          onChangeText={onChange}
-          placeholder="#38BDF8 o rgb(56,189,248)"
-          autoCapitalize="none"
-        />
+        <Pressable
+          style={styles.colorApplyButton}
+          onPress={() =>
+            Alert.alert(
+              "Aplicar color",
+              "Elige una bolita de color y pulsa Guardar. No hace falta escribir ningún código RGB.",
+            )
+          }
+        >
+          <View
+            style={[
+              styles.colorApplySwatch,
+              { backgroundColor: pickerColor },
+            ]}
+          />
+          <Text style={styles.colorApplyText}>Aplicar color</Text>
+        </Pressable>
       </View>
     );
   };
@@ -4084,16 +4094,33 @@ const createStyles = (isDesktop: boolean) =>
       borderColor: colors.text,
     },
 
-    colorValueInput: {
+    colorApplyButton: {
       width: isDesktop ? 220 : "100%",
-      backgroundColor: colors.white,
+      minHeight: isDesktop ? 40 : 38,
+      borderRadius: 11,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 10,
-      paddingVertical: isDesktop ? 9 : 8,
-      paddingHorizontal: 10,
-      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 12 : 10,
-      color: colors.text,
+      backgroundColor: colors.white,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+    },
+
+    colorApplySwatch: {
+      width: 16,
+      height: 16,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    colorApplyText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
     },
 
     saveCategoryButton: {
