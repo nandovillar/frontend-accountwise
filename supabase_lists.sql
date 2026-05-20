@@ -3,6 +3,7 @@ create table if not exists public.user_lists (
   user_id uuid not null references auth.users(id) on delete cascade,
   space_id uuid references public.spaces(id) on delete cascade,
   title text not null,
+  color text not null default '#3B82F6',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -16,6 +17,11 @@ create table if not exists public.user_list_options (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.user_lists add column if not exists color text;
+update public.user_lists set color = '#3B82F6' where color is null;
+alter table public.user_lists alter column color set default '#3B82F6';
+alter table public.user_lists alter column color set not null;
 
 create index if not exists user_lists_user_space_idx
   on public.user_lists(user_id, space_id);

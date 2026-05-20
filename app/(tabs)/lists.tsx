@@ -27,6 +27,16 @@ import { getCurrentUser } from "@/src/utils/auth";
 import { confirmAction } from "@/src/utils/confirmAction";
 import { applySpaceFilter, getSpacePayload } from "@/src/utils/spaceQueries";
 
+const listColorOptions = [
+  "#3B82F6",
+  "#22C55E",
+  "#7C3AED",
+  "#E11D48",
+  "#F97316",
+  "#A16207",
+  "#4338CA",
+];
+
 type ListOption = {
   id: string;
   text: string;
@@ -36,6 +46,7 @@ type ListOption = {
 type QuickList = {
   id: string;
   title: string;
+  color: string;
   options: ListOption[];
 };
 
@@ -50,14 +61,26 @@ type ListOptionRow = {
 type ListRow = {
   id: string;
   title: string;
+  color?: string | null;
   created_at?: string | null;
   user_list_options?: ListOptionRow[] | null;
+};
+
+const normalizeListColor = (value?: string | null) => {
+  return listColorOptions.includes(value || "") ? value || "" : listColorOptions[0];
+};
+
+const getSoftColor = (value: string) => {
+  return value.startsWith("#") && value.length === 7
+    ? `${value}1F`
+    : colors.primarySoft;
 };
 
 const mapListRows = (rows: ListRow[] | null): QuickList[] => {
   return (rows || []).map((list) => ({
     id: list.id,
     title: list.title,
+    color: normalizeListColor(list.color),
     options: [...(list.user_list_options || [])]
       .sort((a, b) => {
         const positionDiff = (a.position || 0) - (b.position || 0);
@@ -93,10 +116,10 @@ export default function ListsScreen() {
   const [listTitle, setListTitle] = useState("");
   const [optionText, setOptionText] = useState("");
   const [showHidden, setShowHidden] = useState(false);
+  const [showListColorPalette, setShowListColorPalette] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
 
-  const selectedList =
-    lists.find((item) => item.id === selectedListId) || lists[0];
+  const selectedList = lists.find((item) => item.id === selectedListId) || null;
   const visibleOptions =
     selectedList?.options.filter((item) => !item.hidden) || [];
   const hiddenOptions =
@@ -118,7 +141,7 @@ export default function ListsScreen() {
     const query = supabase
       .from("user_lists")
       .select(
-        "id,title,created_at,user_list_options(id,text,hidden,position,created_at)",
+        "id,title,color,created_at,user_list_options(id,text,hidden,position,created_at)",
       )
       .order("created_at", { ascending: false });
 
@@ -140,10 +163,9 @@ export default function ListsScreen() {
 
     setLists(nextLists);
     setSelectedListId((current) =>
-      nextLists.some((item) => item.id === current)
-        ? current
-        : nextLists[0]?.id || null,
+      nextLists.some((item) => item.id === current) ? current : null,
     );
+    setShowListColorPalette(false);
   }, [activeSpaceId]);
 
   useEffect(() => {
@@ -170,14 +192,16 @@ export default function ListsScreen() {
     const user = await getCurrentUser();
     if (!user) return;
 
+    const listColor = listColorOptions[0];
     const { data, error } = await supabase
       .from("user_lists")
       .insert({
         user_id: user.id,
         title: cleanTitle,
+        color: listColor,
         ...getSpacePayload(activeSpaceId),
       })
-      .select("id,title,created_at")
+      .select("id,title,color,created_at")
       .single();
 
     if (error || !data) {
@@ -185,11 +209,39 @@ export default function ListsScreen() {
       return;
     }
 
-    const nextList = { id: data.id, title: data.title, options: [] };
+    const nextList = {
+      id: data.id,
+      title: data.title,
+      color: normalizeListColor(data.color),
+      options: [],
+    };
     setLists((current) => [nextList, ...current]);
-    setSelectedListId(nextList.id);
+    setSelectedListId(null);
     setListTitle("");
     showActionMessage("Lista guardada.");
+  };
+
+  const updateListColor = async (listId: string, nextColor: string) => {
+    const confirmed = await confirmAction("¿Guardar este color para la lista?");
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("user_lists")
+      .update({ color: nextColor })
+      .eq("id", listId);
+
+    if (error) {
+      Alert.alert("No se pudo guardar", "El color no se ha guardado.");
+      return;
+    }
+
+    setLists((current) =>
+      current.map((list) =>
+        list.id === listId ? { ...list, color: nextColor } : list,
+      ),
+    );
+    setShowListColorPalette(false);
+    showActionMessage("Color guardado.");
   };
 
   const addOption = async () => {
@@ -308,7 +360,8 @@ export default function ListsScreen() {
 
       const nextLists = lists.filter((list) => list.id !== listId);
       setLists(nextLists);
-      setSelectedListId(nextLists[0]?.id || null);
+      setSelectedListId((current) => (current === listId ? null : current));
+      setShowListColorPalette(false);
       showActionMessage("Lista eliminada.");
     };
 
@@ -369,17 +422,29 @@ export default function ListsScreen() {
                 const pendingCount = list.options.filter(
                   (item) => !item.hidden,
                 ).length;
+                const listColor = normalizeListColor(list.color);
 
                 return (
                   <Pressable
                     key={list.id}
-                    style={[styles.listTab, active && styles.listTabActive]}
-                    onPress={() => setSelectedListId(list.id)}
+                    style={[
+                      styles.listTab,
+                      {
+                        backgroundColor: active
+                          ? listColor
+                          : getSoftColor(listColor),
+                        borderColor: listColor,
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedListId(active ? null : list.id);
+                      setShowListColorPalette(false);
+                    }}
                   >
                     <Text
                       style={[
                         styles.listTabText,
-                        active && styles.listTabTextActive,
+                        { color: active ? colors.white : listColor },
                       ]}
                       numberOfLines={1}
                     >
@@ -388,7 +453,7 @@ export default function ListsScreen() {
                     <Text
                       style={[
                         styles.listTabCount,
-                        active && styles.listTabTextActive,
+                        { color: active ? colors.white : listColor },
                       ]}
                     >
                       {pendingCount}
@@ -399,7 +464,7 @@ export default function ListsScreen() {
             </View>
           )}
 
-          {!selectedList ? (
+          {lists.length === 0 ? (
             <EmptyState
               title="No hay listas"
               text="Crea una lista y añade opciones que desaparecerán al pulsarlas."
@@ -407,13 +472,40 @@ export default function ListsScreen() {
               icon="list-outline"
               onAction={addList}
             />
+          ) : !selectedList ? (
+            <EmptyState
+              title="Listas ocultas"
+              text="Pulsa una lista para abrirla."
+              icon="chevron-down-circle-outline"
+            />
           ) : (
-            <View style={commonStyles.card}>
+            <View
+              style={[
+                commonStyles.card,
+                styles.selectedListCard,
+                { borderColor: normalizeListColor(selectedList.color) },
+              ]}
+            >
               <View style={styles.cardHeader}>
                 <View style={styles.titleBlock}>
-                  <Text style={commonStyles.cardTitle}>
-                    {selectedList.title}
-                  </Text>
+                  <View
+                    style={[
+                      styles.listTitleBadge,
+                      {
+                        backgroundColor: getSoftColor(selectedList.color),
+                        borderColor: selectedList.color,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.listTitleBadgeText,
+                        { color: selectedList.color },
+                      ]}
+                    >
+                      {selectedList.title}
+                    </Text>
+                  </View>
                   <Text style={commonStyles.subtitle}>
                     {visibleOptions.length} visibles · {hiddenOptions.length}{" "}
                     ocultas
@@ -429,6 +521,43 @@ export default function ListsScreen() {
                     color={colors.danger}
                   />
                 </Pressable>
+              </View>
+
+              <View style={styles.colorBlock}>
+                <Pressable
+                  style={styles.changeColorButton}
+                  onPress={() => setShowListColorPalette(!showListColorPalette)}
+                >
+                  <View
+                    style={[
+                      styles.changeColorSwatch,
+                      { backgroundColor: selectedList.color },
+                    ]}
+                  />
+                  <Text style={styles.changeColorText}>Cambiar color</Text>
+                  <Ionicons
+                    name={showListColorPalette ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={colors.primaryDark}
+                  />
+                </Pressable>
+
+                {showListColorPalette && (
+                  <View style={styles.colorSwatchRow}>
+                    {listColorOptions.map((option) => (
+                      <Pressable
+                        key={option}
+                        style={[
+                          styles.colorSwatchButton,
+                          { backgroundColor: option },
+                          selectedList.color === option &&
+                            styles.colorSwatchButtonActive,
+                        ]}
+                        onPress={() => updateListColor(selectedList.id, option)}
+                      />
+                    ))}
+                  </View>
+                )}
               </View>
 
               <View style={styles.createRow}>
@@ -453,7 +582,7 @@ export default function ListsScreen() {
                     <Ionicons
                       name="ellipse-outline"
                       size={20}
-                      color={colors.primaryDark}
+                      color={selectedList.color}
                     />
                     <Text style={styles.optionText}>{option.text}</Text>
                     <Pressable
@@ -475,7 +604,7 @@ export default function ListsScreen() {
                   <Ionicons
                     name="checkmark-circle-outline"
                     size={24}
-                    color={colors.primaryDark}
+                    color={selectedList.color}
                   />
                   <Text style={styles.emptyInlineText}>
                     No hay opciones visibles.
@@ -570,9 +699,7 @@ const createStyles = (isDesktop: boolean) =>
       maxWidth: isDesktop ? 180 : 142,
       minHeight: 38,
       borderWidth: 1,
-      borderColor: colors.border,
       borderRadius: 999,
-      backgroundColor: colors.surface,
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
@@ -580,27 +707,20 @@ const createStyles = (isDesktop: boolean) =>
       paddingHorizontal: 12,
     },
 
-    listTabActive: {
-      backgroundColor: colors.primaryDark,
-      borderColor: colors.primaryDark,
-    },
-
     listTabText: {
       flexShrink: 1,
       minWidth: 0,
-      color: colors.text,
       fontSize: isDesktop ? 13 : 11,
       fontWeight: "900",
     },
 
     listTabCount: {
-      color: colors.mutedText,
       fontSize: isDesktop ? 12 : 10,
       fontWeight: "900",
     },
 
-    listTabTextActive: {
-      color: colors.white,
+    selectedListCard: {
+      borderWidth: 2,
     },
 
     cardHeader: {
@@ -614,6 +734,21 @@ const createStyles = (isDesktop: boolean) =>
     titleBlock: {
       flex: 1,
       minWidth: 0,
+      gap: 8,
+    },
+
+    listTitleBadge: {
+      alignSelf: "flex-start",
+      maxWidth: "100%",
+      borderWidth: 1,
+      borderRadius: 999,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+    },
+
+    listTitleBadgeText: {
+      fontSize: isDesktop ? 16 : 13,
+      fontWeight: "900",
     },
 
     iconButtonDanger: {
@@ -623,6 +758,58 @@ const createStyles = (isDesktop: boolean) =>
       backgroundColor: "#FEF2F2",
       alignItems: "center",
       justifyContent: "center",
+    },
+
+    colorBlock: {
+      gap: 10,
+      marginTop: 12,
+    },
+
+    changeColorButton: {
+      alignSelf: "flex-start",
+      minHeight: 38,
+      borderRadius: 11,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.white,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+    },
+
+    changeColorSwatch: {
+      width: 16,
+      height: 16,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    changeColorText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
+    colorSwatchRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+
+    colorSwatchButton: {
+      width: isDesktop ? 30 : 28,
+      height: isDesktop ? 30 : 28,
+      borderRadius: 999,
+      borderWidth: 2,
+      borderColor: colors.surface,
+    },
+
+    colorSwatchButtonActive: {
+      borderColor: colors.text,
     },
 
     optionsList: {

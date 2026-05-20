@@ -2075,7 +2075,30 @@ export default function TabTwoScreen() {
 
     return (
       <View style={styles.colorPickerStack}>
-        <View style={styles.colorPickerRow}>
+        <Pressable
+          style={styles.colorApplyButton}
+          onPress={() =>
+            setExpandedColorEditors((current) => ({
+              ...current,
+              [editorKey]: !current[editorKey],
+            }))
+          }
+        >
+          <View
+            style={[
+              styles.colorApplySwatch,
+              { backgroundColor: pickerColor },
+            ]}
+          />
+          <Text style={styles.colorApplyText}>Cambiar color</Text>
+          <Ionicons
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={colors.primaryDark}
+          />
+        </Pressable>
+
+        {isExpanded && (
           <View style={styles.colorSwatchRow}>
             {colorOptions.map((option) => (
               <Pressable
@@ -2088,39 +2111,6 @@ export default function TabTwoScreen() {
                 onPress={() => onChange(option)}
               />
             ))}
-          </View>
-
-          <Pressable
-            style={styles.colorApplyButton}
-            onPress={() =>
-              setExpandedColorEditors((current) => ({
-                ...current,
-                [editorKey]: !current[editorKey],
-              }))
-            }
-          >
-            <View
-              style={[
-                styles.colorApplySwatch,
-                { backgroundColor: pickerColor },
-              ]}
-            />
-            <Text style={styles.colorApplyText}>Cambiar color</Text>
-          </Pressable>
-        </View>
-
-        {isExpanded && (
-          <View style={styles.colorCustomRow}>
-            <TextInput
-              style={styles.colorValueInput}
-              placeholder="#38BDF8 o rgb(56, 189, 248)"
-              value={value}
-              onChangeText={onChange}
-              autoCapitalize="none"
-            />
-            <Text style={styles.colorHelpText}>
-              Puedes escribir HEX o RGB y luego Guardar.
-            </Text>
           </View>
         )}
       </View>
@@ -2859,12 +2849,12 @@ export default function TabTwoScreen() {
                     />
                   </View>
                   <Pressable
-                    style={styles.saveCategoryButton}
+                    style={styles.categoryManagerSaveButton}
                     onPress={() =>
                       runAction(() => createCategory(), "¿Crear esta categoría?")
                     }
                   >
-                    <Text style={styles.saveCategoryButtonText}>
+                    <Text style={styles.categoryManagerSaveText}>
                       Crear categoría
                     </Text>
                   </Pressable>
