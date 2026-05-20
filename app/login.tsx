@@ -25,6 +25,10 @@ type AuthErrorLike = {
   status?: number;
 };
 
+const isValidEmail = (value: string) => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+};
+
 const getSignupErrorMessage = (error: AuthErrorLike) => {
   const message = error.message || "Error al crear la cuenta.";
   const normalized = message.toLowerCase();
@@ -182,12 +186,19 @@ export default function LoginScreen() {
   const handleResetPassword = async () => {
     clearMessage();
 
-    if (!email.trim()) {
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail) {
       showMessage("Introduce tu email para recuperar la contraseña");
       return;
     }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    if (!isValidEmail(cleanEmail)) {
+      showMessage("Ese email no parece correcto. Revisa que tenga formato nombre@dominio.com.");
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
       redirectTo: "https://frontend-accountwise.vercel.app/reset-password",
     });
 

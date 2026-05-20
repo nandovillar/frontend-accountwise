@@ -67,6 +67,7 @@ const defaultCategories = [
   "Transporte",
   "Salud",
   "Ocio",
+  "Regalos",
 ];
 
 type EditingType = "fixed" | "variable" | null;
@@ -169,9 +170,11 @@ export default function TabTwoScreen() {
   >({});
 
   const [fixedFilterCategory, setFixedFilterCategory] = useState("Todas");
+  const [fixedCategorySearch, setFixedCategorySearch] = useState("");
   const [fixedPaidFilter, setFixedPaidFilter] =
     useState<FixedPaidFilter>("Todas");
   const [variableFilterCategory, setVariableFilterCategory] = useState("Todas");
+  const [variableCategorySearch, setVariableCategorySearch] = useState("");
   const [showFixedFilter, setShowFixedFilter] = useState(false);
   const [showVariableFilter, setShowVariableFilter] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
@@ -200,6 +203,7 @@ export default function TabTwoScreen() {
   const [editingType, setEditingType] = useState<EditingType>(null);
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [detailExpense, setDetailExpense] = useState<ExpenseDetail>(null);
+  const [editTitle, setEditTitle] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editCategory, setEditCategory] = useState("Otros");
@@ -885,7 +889,9 @@ export default function TabTwoScreen() {
     setExpenses([]);
     setIncomeTransactions([]);
     setFixedFilterCategory("Todas");
+    setFixedCategorySearch("");
     setVariableFilterCategory("Todas");
+    setVariableCategorySearch("");
     forceReloadAll();
   }, [activeSpaceId, selectedMonth, forceReloadAll]);
 
@@ -1219,6 +1225,7 @@ export default function TabTwoScreen() {
   const openEditFixed = (item: any) => {
     setEditingType("fixed");
     setEditingItem(item);
+    setEditTitle(String(item.title || ""));
     setEditAmount(String(item.amount));
     setEditDate(
       getDateFromMonthAndDay(item.month || selectedMonth, item.day_of_month),
@@ -1232,6 +1239,7 @@ export default function TabTwoScreen() {
   const openEditVariable = (item: any) => {
     setEditingType("variable");
     setEditingItem(item);
+    setEditTitle(String(item.title || ""));
     setEditAmount(String(item.amount));
     setEditDate(
       getDateFromMonthAndDay(
@@ -1247,6 +1255,7 @@ export default function TabTwoScreen() {
   const closeEditModal = () => {
     setEditingType(null);
     setEditingItem(null);
+    setEditTitle("");
     setEditAmount("");
     setEditDate("");
     setEditCategory("Otros");
@@ -1263,9 +1272,15 @@ export default function TabTwoScreen() {
   const saveEdit = async () => {
     if (!editingItem || !editingType) return;
 
+    const cleanTitle = editTitle.trim();
     const newAmount = parseMoneyInput(editAmount);
     const newMonth = getMonthFromDate(editDate);
     const newDay = getDayFromDate(editDate);
+
+    if (!cleanTitle) {
+      Alert.alert("Falta el concepto", "Pon un concepto para el gasto.");
+      return;
+    }
 
     if (newAmount <= 0) {
       Alert.alert("Error", "El importe no es válido.");
@@ -1276,6 +1291,7 @@ export default function TabTwoScreen() {
       const { error: fixedUpdateError } = await supabase
         .from("fixed_expenses")
         .update({
+          title: cleanTitle,
           amount: newAmount,
           month: newMonth,
           day_of_month: newDay,
@@ -1291,6 +1307,7 @@ export default function TabTwoScreen() {
         const templateUpdateQuery = supabase
           .from("fixed_templates")
           .update({
+            title: cleanTitle,
             amount: newAmount,
             month: newMonth,
             day_of_month: newDay,
@@ -1315,7 +1332,7 @@ export default function TabTwoScreen() {
         "fixed_expense_updated",
         "fixed_expense",
         editingItem.id,
-        `Se editó el gasto fijo ${editingItem.title}.`,
+        `Se editó el gasto fijo ${cleanTitle}.`,
       );
       return;
     }
@@ -1323,6 +1340,7 @@ export default function TabTwoScreen() {
     const { error: transactionUpdateError } = await supabase
       .from("transactions")
       .update({
+        title: cleanTitle,
         amount: newAmount,
         month: newMonth,
         day_of_month: newDay,
@@ -1338,7 +1356,7 @@ export default function TabTwoScreen() {
       "transaction_updated",
       "transaction",
       editingItem.id,
-      `Se editó el gasto ${editingItem.title}.`,
+      `Se editó el gasto ${cleanTitle}.`,
     );
   };
 
@@ -1819,11 +1837,18 @@ export default function TabTwoScreen() {
     fixedExpenses.length > 0 ||
     expenses.length > 0;
 
+  const categoryMatchesFilter = (category: string, filter: string) => {
+    const cleanFilter = filter.trim().toLowerCase();
+    if (!cleanFilter || cleanFilter === "todas") return true;
+
+    return normalizeCategory(category).toLowerCase().includes(cleanFilter);
+  };
+
   const filteredFixedExpenses =
     (fixedFilterCategory === "Todas"
       ? fixedExpenses
-      : fixedExpenses.filter(
-          (item) => normalizeCategory(item.category) === fixedFilterCategory,
+      : fixedExpenses.filter((item) =>
+          categoryMatchesFilter(item.category, fixedFilterCategory),
         )).filter((item) => {
       if (fixedPaidFilter === "Pagados") return item.is_paid;
       if (fixedPaidFilter === "Pendientes") return !item.is_paid;
@@ -1833,9 +1858,16 @@ export default function TabTwoScreen() {
   const filteredVariableExpenses =
     variableFilterCategory === "Todas"
       ? variableItems
-      : variableItems.filter(
-          (item) => normalizeCategory(item.category) === variableFilterCategory,
+      : variableItems.filter((item) =>
+          categoryMatchesFilter(item.category, variableFilterCategory),
         );
+  const fixedFilterTotal = filteredFixedExpenses.reduce(
+    (sum, item) => sum + Number(item.amount || 0),
+    0,
+  );
+  const variableFilterTotal = filteredVariableExpenses
+    .filter((item) => item.type !== "income" && !item.is_income)
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const variableFilterCategories = variableItems.map((item) =>
     normalizeCategory(item.category),
   );
@@ -1894,12 +1926,17 @@ export default function TabTwoScreen() {
     setIsOpen: (value: boolean) => void,
     extraCategories: string[] = [],
     excludedCategories: string[] = [],
+    searchValue = "",
+    setSearchValue?: (value: string) => void,
   ) => {
     const excluded = new Set(excludedCategories);
+    const cleanSearch = searchValue.trim().toLowerCase();
     const options = [
       "Todas",
       ...sortCategories([...categories, ...extraCategories]).filter(
-        (category) => !excluded.has(category),
+        (category) =>
+          !excluded.has(category) &&
+          (!cleanSearch || category.toLowerCase().includes(cleanSearch)),
       ),
     ];
 
@@ -1919,6 +1956,17 @@ export default function TabTwoScreen() {
 
         {isOpen && (
           <View style={styles.filterDropdownOptions}>
+            {setSearchValue && (
+              <TextInput
+                style={styles.filterSearchInput}
+                placeholder="Buscar categoría"
+                value={searchValue}
+                onChangeText={(text) => {
+                  setSearchValue(text);
+                  onSelect(text.trim() ? text.trim() : "Todas");
+                }}
+              />
+            )}
             {options.map((category) => (
               <Pressable
                 key={category}
@@ -1928,6 +1976,7 @@ export default function TabTwoScreen() {
                 ]}
                 onPress={() => {
                   onSelect(category);
+                  setSearchValue?.(category === "Todas" ? "" : category);
                   setIsOpen(false);
                 }}
               >
@@ -1944,6 +1993,17 @@ export default function TabTwoScreen() {
             ))}
           </View>
         )}
+      </View>
+    );
+  };
+
+  const renderCategoryFilterSummary = (category: string, total: number) => {
+    if (category === "Todas") return null;
+
+    return (
+      <View style={styles.filterSummaryBox}>
+        <Text style={styles.filterSummaryLabel}>Total en {category}</Text>
+        <Text style={styles.filterSummaryAmount}>{formatCompactMoney(total)}</Text>
       </View>
     );
   };
@@ -2427,10 +2487,13 @@ export default function TabTwoScreen() {
                   "Devoluciones",
                   "Pendiente de cobrar",
                 ],
+                fixedCategorySearch,
+                setFixedCategorySearch,
               )
             }
             styles={styles}
           >
+            {renderCategoryFilterSummary(fixedFilterCategory, fixedFilterTotal)}
             <View style={styles.paidFilterRow}>
               {(["Todas", "Pendientes", "Pagados"] as FixedPaidFilter[]).map(
                 (option) => (
@@ -2463,7 +2526,7 @@ export default function TabTwoScreen() {
                   value={fixedTitle}
                   onChangeText={setFixedTitle}
                 />
-                {renderMoneyInput(fixedAmount, setFixedAmount, "Cantidad")}
+                {renderMoneyInput(fixedAmount, setFixedAmount, "Importe")}
                 <Text style={styles.inputLabel}>Fecha</Text>
                 {renderDateButton(fixedDate, () =>
                   openCalendar("fixedCreate", fixedDate),
@@ -2565,10 +2628,17 @@ export default function TabTwoScreen() {
                 showVariableFilter,
                 setShowVariableFilter,
                 variableFilterCategories,
+                [],
+                variableCategorySearch,
+                setVariableCategorySearch,
               )
             }
             styles={styles}
           >
+            {renderCategoryFilterSummary(
+              variableFilterCategory,
+              variableFilterTotal,
+            )}
             <View style={styles.bizumActionRow}>
               <Pressable
                 style={[styles.bizumActionButton, styles.bizumReceivedButton]}
@@ -2631,7 +2701,7 @@ export default function TabTwoScreen() {
                   value={title}
                   onChangeText={setTitle}
                 />
-                {renderMoneyInput(amount, setAmount, "Cantidad")}
+                {renderMoneyInput(amount, setAmount, "Importe")}
                 <Text style={styles.inputLabel}>Fecha</Text>
                 {renderDateButton(variableDate, () =>
                   openCalendar("variableCreate", variableDate),
@@ -2890,19 +2960,21 @@ export default function TabTwoScreen() {
               </Pressable>
             </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Concepto"
-              value={fixedTitle}
-              onChangeText={setFixedTitle}
-            />
-            {renderMoneyInput(fixedAmount, setFixedAmount, "Cantidad")}
             <Text style={styles.inputLabel}>Fecha</Text>
             {renderDateButton(fixedDate, () =>
               openCalendar("fixedCreate", fixedDate),
             )}
             <Text style={styles.categoryTitle}>Categoría</Text>
             {renderCategorySelector(fixedCategory, setFixedCategory)}
+            <Text style={styles.inputLabel}>Concepto</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Concepto"
+              value={fixedTitle}
+              onChangeText={setFixedTitle}
+            />
+            <Text style={styles.inputLabel}>Importe</Text>
+            {renderMoneyInput(fixedAmount, setFixedAmount, "Importe")}
             {renderPaymentModeSelector(fixedAutoPay, setFixedAutoPay)}
 
             <View style={commonStyles.modalActions}>
@@ -2954,19 +3026,21 @@ export default function TabTwoScreen() {
               </Pressable>
             </View>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Concepto"
-              value={title}
-              onChangeText={setTitle}
-            />
-            {renderMoneyInput(amount, setAmount, "Cantidad")}
             <Text style={styles.inputLabel}>Fecha</Text>
             {renderDateButton(variableDate, () =>
               openCalendar("variableCreate", variableDate),
             )}
             <Text style={styles.categoryTitle}>Categoría</Text>
             {renderCategorySelector(variableCategory, setVariableCategory)}
+            <Text style={styles.inputLabel}>Concepto</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Concepto"
+              value={title}
+              onChangeText={setTitle}
+            />
+            <Text style={styles.inputLabel}>Importe</Text>
+            {renderMoneyInput(amount, setAmount, "Importe")}
 
             <View style={commonStyles.modalActions}>
               <Pressable
@@ -3162,6 +3236,14 @@ export default function TabTwoScreen() {
                 <Ionicons name="close" size={22} color={colors.primaryDark} />
               </Pressable>
             </View>
+
+            <Text style={styles.inputLabel}>Concepto</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Concepto"
+              value={editTitle}
+              onChangeText={setEditTitle}
+            />
 
             <Text style={styles.inputLabel}>Importe</Text>
             {renderMoneyInput(editAmount, setEditAmount)}
@@ -3712,6 +3794,45 @@ const createStyles = (isDesktop: boolean) =>
       borderColor: colors.border,
       borderRadius: 10,
       overflow: "hidden",
+    },
+
+    filterSearchInput: {
+      backgroundColor: colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderSoft,
+      paddingVertical: isDesktop ? 10 : 9,
+      paddingHorizontal: 12,
+      fontSize: Platform.OS === "web" ? 16 : isDesktop ? 13 : 12,
+      color: colors.text,
+    },
+
+    filterSummaryBox: {
+      backgroundColor: colors.primarySoft,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      marginBottom: 12,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 10,
+    },
+
+    filterSummaryLabel: {
+      flex: 1,
+      minWidth: 0,
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
+    filterSummaryAmount: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 14 : 12,
+      fontWeight: "900",
+      textAlign: "right",
     },
 
     filterDropdownOption: {

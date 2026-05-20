@@ -25,10 +25,8 @@ export const formatMoney = (value: number) => {
 };
 
 export const formatCompactMoney = (value: number) => {
-  const hasDecimals = Math.abs(value % 1) > 0.004;
-
   return `${value.toLocaleString("es-ES", {
-    minimumFractionDigits: hasDecimals ? 2 : 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} €`;
 };
