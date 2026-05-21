@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppBottomMenu } from "@/src/components/AppBottomMenu";
 import { AppTextInput } from "@/src/components/AppTextInput";
-import { KpiCard } from "@/src/components/KpiCard";
 import { ResultRow } from "@/src/components/ResultRow";
 import { SpaceMenuButton } from "@/src/components/SpaceSwitcher";
 import { useSpaces } from "@/src/context/SpaceContext";
@@ -47,6 +46,7 @@ type Simulation = {
   notary_percent: number;
   down_payment: number;
   pending_notary: number;
+  bank_financing_percent?: number;
   years: number;
   tin: number;
   bonus: number;
@@ -67,12 +67,30 @@ type FormSnapshot = {
   notaryPercent: string;
   downPayment: string;
   pendingNotary: string;
+  bankFinancingPercent: string;
   years: string;
   tin: string;
   bonus: string;
   salaryBonus: string;
   lifeInsurance: string;
   homeInsurance: string;
+};
+
+const calculateMonthlyPayment = (
+  principal: number,
+  annualRate: number,
+  totalMonths: number,
+) => {
+  const monthlyRate = annualRate / 100 / 12;
+
+  if (monthlyRate > 0 && totalMonths > 0) {
+    return (
+      (principal * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths))) /
+      (Math.pow(1 + monthlyRate, totalMonths) - 1)
+    );
+  }
+
+  return totalMonths > 0 ? principal / totalMonths : 0;
 };
 
 const defaultSimulation = {
@@ -84,12 +102,22 @@ const defaultSimulation = {
   notary_percent: 1,
   down_payment: 90000,
   pending_notary: 500,
+  bank_financing_percent: 80,
   years: 30,
   tin: 3.4,
   bonus: 0.85,
   salary_bonus: 0,
   life_insurance: 0,
   home_insurance: 0,
+};
+
+const BANK_FINANCING_OPTIONS = [100, 95, 90, 85, 80];
+
+const normalizeBankFinancingPercent = (value: string | number) => {
+  const parsed = parseMoneyInput(value);
+  return BANK_FINANCING_OPTIONS.some((option) => option === parsed)
+    ? parsed
+    : defaultSimulation.bank_financing_percent;
 };
 
 type HomePurchaseScreenProps = {
@@ -143,6 +171,9 @@ export default function HomePurchaseScreen({
   const [pendingNotary, setPendingNotary] = useState(
     String(defaultSimulation.pending_notary),
   );
+  const [bankFinancingPercent, setBankFinancingPercent] = useState(
+    String(defaultSimulation.bank_financing_percent),
+  );
   const [years, setYears] = useState(String(defaultSimulation.years));
   const [tin, setTin] = useState(String(defaultSimulation.tin));
   const [bonus, setBonus] = useState(String(defaultSimulation.bonus));
@@ -166,6 +197,8 @@ export default function HomePurchaseScreen({
   const [draftNotaryPercent, setDraftNotaryPercent] = useState("");
   const [draftDownPayment, setDraftDownPayment] = useState("");
   const [draftPendingNotary, setDraftPendingNotary] = useState("");
+  const [draftBankFinancingPercent, setDraftBankFinancingPercent] =
+    useState("");
   const [draftYears, setDraftYears] = useState("");
   const [draftTin, setDraftTin] = useState("");
   const [draftBonus, setDraftBonus] = useState("");
@@ -191,6 +224,7 @@ export default function HomePurchaseScreen({
     notaryPercent: String(defaultSimulation.notary_percent),
     downPayment: String(defaultSimulation.down_payment),
     pendingNotary: String(defaultSimulation.pending_notary),
+    bankFinancingPercent: String(defaultSimulation.bank_financing_percent),
     years: String(defaultSimulation.years),
     tin: String(defaultSimulation.tin),
     bonus: String(defaultSimulation.bonus),
@@ -209,6 +243,7 @@ export default function HomePurchaseScreen({
     notaryPercent: "",
     downPayment: "",
     pendingNotary: "",
+    bankFinancingPercent: String(defaultSimulation.bank_financing_percent),
     years: "",
     tin: "",
     bonus: "",
@@ -229,6 +264,10 @@ export default function HomePurchaseScreen({
     notaryPercent: String(simulation.notary_percent ?? 1),
     downPayment: String(simulation.down_payment ?? 90000),
     pendingNotary: String(simulation.pending_notary ?? 500),
+    bankFinancingPercent: String(
+      simulation.bank_financing_percent ??
+        defaultSimulation.bank_financing_percent,
+    ),
     years: String(simulation.years ?? 30),
     tin: String(simulation.tin ?? 3.4),
     bonus: String(simulation.bonus ?? 0.85),
@@ -247,6 +286,7 @@ export default function HomePurchaseScreen({
     setNotaryPercent(snapshot.notaryPercent);
     setDownPayment(snapshot.downPayment);
     setPendingNotary(snapshot.pendingNotary);
+    setBankFinancingPercent(snapshot.bankFinancingPercent);
     setYears(snapshot.years);
     setTin(snapshot.tin);
     setBonus(snapshot.bonus);
@@ -260,12 +300,17 @@ export default function HomePurchaseScreen({
   const tax = (price * toNumber(taxPercent)) / 100;
   const notary = (price * toNumber(notaryPercent)) / 100;
   const financial = toNumber(financialFee);
-  const totalProperty = price + agency + tax + financial + notary;
+  const propertyExpenses = agency + tax + financial + notary;
 
   const down = toNumber(downPayment);
-  const mortgage = Math.max(0, totalProperty - down);
-  const coveredPercent = totalProperty > 0 ? (down / totalProperty) * 100 : 0;
-  const remainingPercent = Math.max(0, 100 - coveredPercent);
+  const bankPercent = normalizeBankFinancingPercent(bankFinancingPercent);
+  const bankMortgageLimit = (price * bankPercent) / 100;
+  const minimumOwnContribution = Math.max(0, price - bankMortgageLimit);
+  const effectiveDown = Math.max(down, minimumOwnContribution);
+  const mortgage = Math.max(0, price - effectiveDown);
+  const savingsNeeded = effectiveDown + propertyExpenses;
+  const savingsGap = Math.max(0, minimumOwnContribution - down);
+  const mortgagePercent = price > 0 ? (mortgage / price) * 100 : 0;
 
   const totalMonths = toNumber(years) * 12;
 
@@ -276,65 +321,20 @@ export default function HomePurchaseScreen({
     toNumber(homeInsurance);
 
   const finalTin = Math.max(0, toNumber(tin) - bonusTotal);
-  const monthlyRate = finalTin / 100 / 12;
-
-  const monthlyPayment =
-    monthlyRate > 0 && totalMonths > 0
-      ? (mortgage * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths))) /
-        (Math.pow(1 + monthlyRate, totalMonths) - 1)
-      : totalMonths > 0
-        ? mortgage / totalMonths
-        : 0;
-
+  const variableTae = finalTin + 0.9;
+  const fixedMonthlyPayment = calculateMonthlyPayment(
+    mortgage,
+    finalTin,
+    totalMonths,
+  );
+  const variableMonthlyPayment = calculateMonthlyPayment(
+    mortgage,
+    variableTae,
+    totalMonths,
+  );
+  const monthlyPayment = fixedMonthlyPayment;
   const totalBankCost = monthlyPayment * totalMonths;
   const totalInterest = Math.max(0, totalBankCost - mortgage);
-
-  const getSimulationSummary = (simulation: Simulation) => {
-    const simulationPrice = Number(simulation.property_price || 0);
-    const simulationAgency =
-      (simulationPrice * Number(simulation.agency_percent || 0)) / 100;
-    const simulationTax =
-      (simulationPrice * Number(simulation.tax_percent || 0)) / 100;
-    const simulationFinancial = Number(simulation.financial_fee || 0);
-    const simulationNotary =
-      (simulationPrice * Number(simulation.notary_percent || 0)) / 100;
-    const simulationTotal =
-      simulationPrice +
-      simulationAgency +
-      simulationTax +
-      simulationFinancial +
-      simulationNotary;
-    const simulationDown = Number(simulation.down_payment || 0);
-    const simulationMortgage = Math.max(0, simulationTotal - simulationDown);
-    const simulationCovered =
-      simulationTotal > 0 ? (simulationDown / simulationTotal) * 100 : 0;
-    const simulationMonths = Number(simulation.years || 0) * 12;
-    const simulationBonus =
-      Number(simulation.bonus || 0) +
-      Number(simulation.salary_bonus || 0) +
-      Number(simulation.life_insurance || 0) +
-      Number(simulation.home_insurance || 0);
-    const simulationTin = Math.max(0, Number(simulation.tin || 0) - simulationBonus);
-    const simulationRate = simulationTin / 100 / 12;
-    const simulationPayment =
-      simulationRate > 0 && simulationMonths > 0
-        ? (simulationMortgage *
-            (simulationRate * Math.pow(1 + simulationRate, simulationMonths))) /
-          (Math.pow(1 + simulationRate, simulationMonths) - 1)
-        : simulationMonths > 0
-          ? simulationMortgage / simulationMonths
-          : 0;
-
-    return {
-      price: simulationPrice,
-      expenses: Math.max(0, simulationTotal - simulationPrice),
-      total: simulationTotal,
-      down: simulationDown,
-      mortgage: simulationMortgage,
-      covered: simulationCovered,
-      monthlyPayment: simulationPayment,
-    };
-  };
 
   const cleanSimulationForm = () => {
     const snapshot = buildEmptySnapshot();
@@ -405,6 +405,7 @@ export default function HomePurchaseScreen({
       notary_percent: toNumber(notaryPercent),
       down_payment: toNumber(downPayment),
       pending_notary: toNumber(pendingNotary),
+      bank_financing_percent: bankPercent,
       years: toNumber(years),
       tin: toNumber(tin),
       bonus: toNumber(bonus),
@@ -414,6 +415,19 @@ export default function HomePurchaseScreen({
       updated_at: new Date().toISOString(),
       ...getSpacePayload(activeSpaceId),
     };
+  };
+
+  const isMissingBankFinancingColumn = (error: unknown) => {
+    return JSON.stringify(error).includes("bank_financing_percent");
+  };
+
+  const getPayloadWithoutBankFinancing = (
+    payload: NonNullable<Awaited<ReturnType<typeof getPayload>>>,
+  ) => {
+    const { bank_financing_percent: _bankFinancingPercent, ...fallbackPayload } =
+      payload;
+    void _bankFinancingPercent;
+    return fallbackPayload;
   };
 
   const saveSimulation = async () => {
@@ -430,11 +444,21 @@ export default function HomePurchaseScreen({
     const confirmed = await confirmAction("¿Guardar los cambios de la simulación?");
     if (!confirmed) return;
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from("home_purchase_simulations")
       .update(payload)
       .eq("id", selectedSimulationId)
       .eq("user_id", payload.user_id);
+
+    if (error && isMissingBankFinancingColumn(error)) {
+      const fallbackPayload = getPayloadWithoutBankFinancing(payload);
+      const fallbackResult = await supabase
+        .from("home_purchase_simulations")
+        .update(fallbackPayload)
+        .eq("id", selectedSimulationId)
+        .eq("user_id", payload.user_id);
+      error = fallbackResult.error;
+    }
 
     if (error) {
       Alert.alert("Error", "No se pudo actualizar la simulación.");
@@ -469,11 +493,22 @@ export default function HomePurchaseScreen({
     const confirmed = await confirmAction("¿Guardar esta simulación?");
     if (!confirmed) return;
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("home_purchase_simulations")
       .insert([payload])
       .select()
       .single();
+
+    if (error && isMissingBankFinancingColumn(error)) {
+      const fallbackPayload = getPayloadWithoutBankFinancing(payload);
+      const fallbackResult = await supabase
+        .from("home_purchase_simulations")
+        .insert([fallbackPayload])
+        .select()
+        .single();
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error) {
       Alert.alert("Error", "No se pudo guardar la simulación.");
@@ -551,6 +586,7 @@ export default function HomePurchaseScreen({
     setDraftNotaryPercent(notaryPercent);
     setDraftDownPayment(downPayment);
     setDraftPendingNotary(pendingNotary);
+    setDraftBankFinancingPercent(String(bankPercent));
     setDraftYears(years);
     setDraftTin(tin);
     setDraftBonus(bonus);
@@ -585,6 +621,9 @@ export default function HomePurchaseScreen({
     }
 
     if (editMode === "bank") {
+      setBankFinancingPercent(
+        String(normalizeBankFinancingPercent(draftBankFinancingPercent)),
+      );
       setYears(draftYears);
       setTin(draftTin);
       setBonus(draftBonus);
@@ -644,8 +683,8 @@ export default function HomePurchaseScreen({
                   Simulaciones guardadas
                 </Text>
                 <Text style={commonStyles.subtitle}>
-                  Abre una simulación propia o usa el ejemplo solo cuando lo
-                  necesites.
+                  Elige una simulación para abrirla y editarla, o empieza una
+                  nueva.
                 </Text>
               </View>
 
@@ -709,74 +748,27 @@ export default function HomePurchaseScreen({
           ) : (
             <View style={styles.savedGrid}>
               {simulations.map((simulation) => {
-                const summary = getSimulationSummary(simulation);
-
                 return (
                   <Pressable
                     key={simulation.id}
-                    style={styles.savedCard}
+                    style={styles.savedListRow}
                     onPress={() => openSavedSimulation(simulation)}
                   >
-                    <View style={styles.savedCardTop}>
+                    <View style={styles.savedListText}>
+                      <Text style={styles.savedCardEyebrow}>
+                        Simulación guardada
+                      </Text>
                       <Text style={styles.savedCardTitle} numberOfLines={1}>
                         {simulation.name}
                       </Text>
-
-                      <View style={styles.savedCardIcon}>
-                        <Ionicons
-                          name="open-outline"
-                          size={17}
-                          color={colors.white}
-                        />
-                      </View>
                     </View>
 
-                    <View style={styles.savedHero}>
-                      <View style={styles.savedHeroText}>
-                        <Text style={styles.savedHeroLabel}>
-                          Precio del inmueble
-                        </Text>
-                        <Text
-                          style={styles.savedHeroAmount}
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.55}
-                        >
-                          {formatMoney(summary.price)}
-                        </Text>
-                        <Text style={styles.savedHeroSubtext}>
-                          Coste total estimado: {formatCompactMoney(summary.total)}
-                        </Text>
-                      </View>
-
-                      <View style={styles.savedCoveredBox}>
-                        <Text style={styles.savedCoveredValue}>
-                          {summary.covered.toFixed(0)}%
-                        </Text>
-                        <Text style={styles.savedCoveredLabel}>cubierto</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.savedKpiGrid}>
-                      <MiniSummaryCard
-                        label="Entrada"
-                        value={formatCompactMoney(summary.down)}
-                        styles={styles}
-                      />
-                      <MiniSummaryCard
-                        label="Gastos"
-                        value={formatCompactMoney(summary.expenses)}
-                        styles={styles}
-                      />
-                      <MiniSummaryCard
-                        label="Préstamo"
-                        value={formatCompactMoney(summary.mortgage)}
-                        styles={styles}
-                      />
-                      <MiniSummaryCard
-                        label="Cuota"
-                        value={formatCompactMoney(summary.monthlyPayment)}
-                        styles={styles}
+                    <View style={styles.savedListAction}>
+                      <Text style={styles.savedListActionText}>Abrir</Text>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={17}
+                        color={colors.primaryDark}
                       />
                     </View>
                   </Pressable>
@@ -825,141 +817,127 @@ export default function HomePurchaseScreen({
                   contentContainerStyle={styles.simulatorModalContent}
                   keyboardShouldPersistTaps="handled"
                 >
-          <View style={[commonStyles.card, styles.titleCard]}>
-            <View style={styles.titleTextBlock}>
-              <Text style={commonStyles.smallText}>
-                {selectedSimulationId
-                  ? "Simulación guardada"
-                  : "Simulación de ejemplo"}
-              </Text>
+          <View style={styles.overviewCard}>
+            <View style={styles.overviewTitleRow}>
+              <View style={styles.overviewTitleBlock}>
+                <Text style={styles.overviewEyebrow}>
+                  {selectedSimulationId
+                    ? "Simulación guardada"
+                    : name === defaultSimulation.name
+                      ? "Simulación de ejemplo"
+                      : "Nueva simulación"}
+                </Text>
+                <Text
+                  style={styles.overviewName}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
+                >
+                  {name}
+                </Text>
+              </View>
 
-              <Text
-                style={[commonStyles.cardTitle, styles.titleText]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
+              <Pressable
+                style={styles.overviewNameButton}
+                onPress={() => openEdit("main")}
               >
-                {name}
-              </Text>
-
-              <Text style={commonStyles.subtitle}>
-                Precio base: {formatMoney(price)}
-              </Text>
+                <Ionicons
+                  name="create-outline"
+                  size={18}
+                  color={colors.primaryDark}
+                />
+              </Pressable>
             </View>
 
-            <Pressable
-              style={styles.iconEditButton}
-              onPress={() => openEdit("main")}
-            >
-              <Ionicons
-                name="create-outline"
-                size={20}
-                color={colors.primaryDark}
-              />
-            </Pressable>
-          </View>
-
-          <View style={styles.propertyPriceCard}>
-            <View style={styles.heroTextBlock}>
-              <Text style={styles.heroLabel}>Precio del piso</Text>
-
-              <Text
-                style={[styles.heroAmount, styles.heroCardAmount]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.45}
-              >
-                {formatMoney(price)}
-              </Text>
-
-              <Text style={styles.propertyPriceHint}>
-                Es el precio que ves anunciado; los gastos se suman aparte.
-              </Text>
-            </View>
-
-            <Pressable
-              style={styles.priceEditButton}
-              onPress={() => openEdit("property")}
-            >
-              <Ionicons
-                name="create-outline"
-                size={18}
-                color={colors.primaryDark}
-              />
-              <Text style={styles.priceEditText}>Editar</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.heroCard}>
-            <View style={styles.heroTextBlock}>
-              <Text style={styles.heroLabel}>Coste total estimado</Text>
-
-              <Text
-                style={styles.heroAmount}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.45}
-              >
-                {formatMoney(totalProperty)}
-              </Text>
-            </View>
-
-            <View style={styles.coveredBox}>
-              <Text style={styles.coveredValue}>
-                {coveredPercent.toFixed(0)}%
-              </Text>
-              <Text style={styles.coveredLabel}>cubierto</Text>
-            </View>
-          </View>
-
-          <View style={styles.purchaseFlowCard}>
-            <FlowStep
+            <OverviewTile
               label="Precio piso"
-              value={formatCompactMoney(price)}
+              value={formatMoney(price)}
+              hint="Pulsa para editar precio y gastos"
+              icon="home-outline"
+              onPress={() => openEdit("property")}
+              variant="price"
               styles={styles}
             />
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={colors.mutedText}
-            />
-            <FlowStep
-              label="Gastos"
-              value={formatCompactMoney(totalProperty - price)}
-              styles={styles}
-            />
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={colors.mutedText}
-            />
-            <FlowStep
-              label="A financiar"
-              value={formatCompactMoney(mortgage)}
-              styles={styles}
-            />
+
+            <View style={styles.overviewTwoGrid}>
+              <OverviewTile
+                label="Ahorro aportado"
+                value={formatCompactMoney(down)}
+                icon="wallet-outline"
+                onPress={() => openEdit("mortgage")}
+                styles={styles}
+              />
+              <OverviewTile
+                label="Banco financia"
+                value={`${bankPercent}%`}
+                hint={`Max. ${formatCompactMoney(bankMortgageLimit)}`}
+                icon="business-outline"
+                onPress={() => openEdit("bank")}
+                styles={styles}
+              />
+            </View>
+
+            <View style={styles.overviewTwoGrid}>
+              <OverviewTile
+                label="Gastos inmobiliaria"
+                value={formatCompactMoney(propertyExpenses)}
+                icon="receipt-outline"
+                onPress={() => openEdit("property")}
+                styles={styles}
+              />
+              <OverviewTile
+                label="Ahorro necesario total"
+                value={formatCompactMoney(savingsNeeded)}
+                hint="Ahorro minimo + gastos"
+                icon="calculator-outline"
+                onPress={() => openEdit("mortgage")}
+                styles={styles}
+              />
+            </View>
+
+            <View style={styles.overviewTwoGrid}>
+              <OverviewTile
+                label="Hipoteca"
+                value={formatCompactMoney(mortgage)}
+                hint={`Banco usado ${mortgagePercent.toFixed(0)}%`}
+                icon="business-outline"
+                onPress={() => openEdit("mortgage")}
+                variant="mortgage"
+                styles={styles}
+              />
+              <OverviewTile
+                label="Cuota fija"
+                value={formatCompactMoney(fixedMonthlyPayment)}
+                hint={`${finalTin.toFixed(2)}% TIN`}
+                icon="lock-closed-outline"
+                onPress={() => openEdit("bank")}
+                styles={styles}
+              />
+            </View>
+
+            <View style={styles.overviewTwoGrid}>
+              <OverviewTile
+                label="Cuota variable"
+                value={formatCompactMoney(variableMonthlyPayment)}
+                hint={`${variableTae.toFixed(2)}% TAE`}
+                icon="trending-up-outline"
+                onPress={() => openEdit("bank")}
+                styles={styles}
+              />
+              <OverviewTile
+                label="Ahorro minimo banco"
+                value={formatCompactMoney(minimumOwnContribution)}
+                hint={
+                  savingsGap > 0
+                    ? `Faltan ${formatCompactMoney(savingsGap)}`
+                    : "Cubierto"
+                }
+                icon="shield-checkmark-outline"
+                onPress={() => openEdit("bank")}
+                styles={styles}
+              />
+            </View>
           </View>
-
-          <View style={styles.kpiGrid}>
-            <KpiCard
-              label="Entrada"
-              value={formatCompactMoney(down)}
-              styles={styles}
-            />
-
-            <KpiCard
-              label="Hipoteca"
-              value={formatCompactMoney(mortgage)}
-              styles={styles}
-            />
-
-            <KpiCard
-              label="Cuota"
-              value={formatCompactMoney(monthlyPayment)}
-              styles={styles}
-            />
-          </View>
-
           <View style={[commonStyles.card, styles.actionsCard]}>
             <Pressable
               style={[commonStyles.primaryButton, styles.fullButton]}
@@ -1017,46 +995,52 @@ export default function HomePurchaseScreen({
           <View style={commonStyles.card}>
             <SectionHeader
               icon="home-outline"
-              title="Costes del inmueble"
-              subtitle="Precio, impuestos y gastos iniciales"
+              title="Gastos de compra"
+              subtitle="Costes que normalmente pagas con tus ahorros"
               onEdit={() => openEdit("property")}
               styles={styles}
             />
 
             <ResultRow
-              label="Precio inmueble"
+              label="Precio del piso"
               value={formatMoney(price)}
+              onPress={() => openEdit("property")}
               styles={styles}
             />
 
             <ResultRow
-              label={`Agencia (${agencyPercent}%)`}
+              label={`Inmobiliaria / agencia (${agencyPercent}%)`}
               value={formatMoney(agency)}
+              onPress={() => openEdit("property")}
               styles={styles}
             />
 
             <ResultRow
               label={`ITP / IVA (${taxPercent}%)`}
               value={formatMoney(tax)}
+              onPress={() => openEdit("property")}
               styles={styles}
             />
 
             <ResultRow
-              label="Comisión financiera"
+              label="Comisión financiera si aplica"
               value={formatMoney(financial)}
+              onPress={() => openEdit("property")}
               styles={styles}
             />
 
             <ResultRow
               label={`Notaría + Registro (${notaryPercent}%)`}
               value={formatMoney(notary)}
+              onPress={() => openEdit("property")}
               styles={styles}
             />
 
             <ResultRow
-              label="Total inmueble"
-              value={formatMoney(totalProperty)}
+              label="Gastos inmobiliarios"
+              value={formatMoney(propertyExpenses)}
               strong
+              onPress={() => openEdit("property")}
               styles={styles}
             />
           </View>
@@ -1064,39 +1048,59 @@ export default function HomePurchaseScreen({
           <View style={commonStyles.card}>
             <SectionHeader
               icon="cash-outline"
-              title="Entrada e hipoteca"
-              subtitle="Qué pagas tú y qué financias"
+              title="Ahorro e hipoteca"
+              subtitle="Qué pagas tú y qué queda para el banco"
               onEdit={() => openEdit("mortgage")}
               styles={styles}
             />
 
             <ResultRow
-              label="Entrada"
+              label="Ahorro aportado"
               value={formatMoney(down)}
+              onPress={() => openEdit("mortgage")}
+              styles={styles}
+            />
+
+            <ResultRow
+              label={`Banco financia hasta (${bankPercent}%)`}
+              value={formatMoney(bankMortgageLimit)}
+              onPress={() => openEdit("bank")}
+              styles={styles}
+            />
+
+            <ResultRow
+              label="Ahorro minimo exigido por el banco"
+              value={formatMoney(minimumOwnContribution)}
+              onPress={() => openEdit("bank")}
+              styles={styles}
+            />
+
+            <ResultRow
+              label="Gastos inmobiliarios"
+              value={formatMoney(propertyExpenses)}
+              onPress={() => openEdit("property")}
+              styles={styles}
+            />
+
+            <ResultRow
+              label="Ahorro necesario total"
+              value={formatMoney(savingsNeeded)}
+              strong
+              onPress={() => openEdit("mortgage")}
               styles={styles}
             />
 
             <ResultRow
               label="Hipoteca"
               value={formatMoney(mortgage)}
+              onPress={() => openEdit("mortgage")}
               styles={styles}
             />
 
             <ResultRow
-              label="% cubierto"
-              value={`${coveredPercent.toFixed(2)}%`}
-              styles={styles}
-            />
-
-            <ResultRow
-              label="% restante"
-              value={`${remainingPercent.toFixed(2)}%`}
-              styles={styles}
-            />
-
-            <ResultRow
-              label="Notaría pendiente"
-              value={formatMoney(toNumber(pendingNotary))}
+              label="% real financiado"
+              value={`${mortgagePercent.toFixed(2)}%`}
+              onPress={() => openEdit("bank")}
               styles={styles}
             />
           </View>
@@ -1105,47 +1109,72 @@ export default function HomePurchaseScreen({
             <SectionHeader
               icon="business-outline"
               title="Banco"
-              subtitle="TIN, bonificaciones y cuota"
+              subtitle="Plazo, tipo fijo y ejemplo variable"
               onEdit={() => openEdit("bank")}
               styles={styles}
             />
 
-            <ResultRow label="Años" value={years} styles={styles} />
+            <ResultRow
+              label="Porcentaje maximo de hipoteca"
+              value={`${bankPercent}%`}
+              onPress={() => openEdit("bank")}
+              styles={styles}
+            />
+
+            <ResultRow
+              label="Plazo"
+              value={`${years || "0"} años`}
+              onPress={() => openEdit("bank")}
+              styles={styles}
+            />
 
             <ResultRow
               label="TIN inicial"
               value={`${toNumber(tin).toFixed(2)}%`}
+              onPress={() => openEdit("bank")}
               styles={styles}
             />
 
             <ResultRow
               label="Bonificación total"
               value={`${bonusTotal.toFixed(2)}%`}
+              onPress={() => openEdit("bank")}
               styles={styles}
             />
 
             <ResultRow
-              label="TIN final"
+              label="TIN final fijo"
               value={`${finalTin.toFixed(2)}%`}
+              onPress={() => openEdit("bank")}
               styles={styles}
             />
 
             <ResultRow
-              label="Cuota mensual"
-              value={formatMoney(monthlyPayment)}
+              label="Cuota fija estimada"
+              value={formatMoney(fixedMonthlyPayment)}
               strong
+              onPress={() => openEdit("bank")}
+              styles={styles}
+            />
+
+            <ResultRow
+              label={`Cuota variable ejemplo (${variableTae.toFixed(2)}% TAE)`}
+              value={formatMoney(variableMonthlyPayment)}
+              onPress={() => openEdit("bank")}
               styles={styles}
             />
 
             <ResultRow
               label="Intereses estimados"
               value={formatMoney(totalInterest)}
+              onPress={() => openEdit("bank")}
               styles={styles}
             />
 
             <ResultRow
               label="Total pagado al banco"
               value={formatMoney(totalBankCost)}
+              onPress={() => openEdit("bank")}
               styles={styles}
             />
           </View>
@@ -1170,8 +1199,8 @@ export default function HomePurchaseScreen({
               <View style={commonStyles.modalTitleBlock}>
                 <Text style={commonStyles.modalTitle}>
                   {editMode === "main" && "Editar simulación"}
-                  {editMode === "property" && "Editar costes"}
-                  {editMode === "mortgage" && "Editar entrada"}
+                  {editMode === "property" && "Editar gastos de compra"}
+                  {editMode === "mortgage" && "Editar ahorro aportado"}
                   {editMode === "bank" && "Editar banco"}
                 </Text>
 
@@ -1202,14 +1231,14 @@ export default function HomePurchaseScreen({
               {editMode === "property" && (
                 <>
                   <AppTextInput
-                    label="Precio del inmueble (€)"
+                    label="Precio del piso (€)"
                     value={draftPropertyPrice}
                     onChange={setDraftPropertyPrice}
                     commonStyles={commonStyles}
                   />
 
                   <AppTextInput
-                    label="Agencia (%)"
+                    label="Inmobiliaria / agencia (%)"
                     value={draftAgencyPercent}
                     onChange={setDraftAgencyPercent}
                     commonStyles={commonStyles}
@@ -1223,7 +1252,7 @@ export default function HomePurchaseScreen({
                   />
 
                   <AppTextInput
-                    label="Comisión financiera (€)"
+                    label="Comisión financiera si aplica (€)"
                     value={draftFinancialFee}
                     onChange={setDraftFinancialFee}
                     commonStyles={commonStyles}
@@ -1241,23 +1270,55 @@ export default function HomePurchaseScreen({
               {editMode === "mortgage" && (
                 <>
                   <AppTextInput
-                    label="Entrada (€)"
+                    label="Ahorro aportado (€)"
                     value={draftDownPayment}
                     onChange={setDraftDownPayment}
                     commonStyles={commonStyles}
                   />
 
-                  <AppTextInput
-                    label="Notaría pendiente (€)"
-                    value={draftPendingNotary}
-                    onChange={setDraftPendingNotary}
-                    commonStyles={commonStyles}
-                  />
                 </>
               )}
 
               {editMode === "bank" && (
                 <>
+                  <View style={styles.bankPercentBlock}>
+                    <Text style={styles.bankPercentLabel}>
+                      Porcentaje maximo de hipoteca
+                    </Text>
+
+                    <View style={styles.bankPercentOptions}>
+                      {BANK_FINANCING_OPTIONS.map((option) => {
+                        const selected =
+                          normalizeBankFinancingPercent(
+                            draftBankFinancingPercent,
+                          ) === option;
+
+                        return (
+                          <Pressable
+                            key={option}
+                            style={[
+                              styles.bankPercentOption,
+                              selected && styles.bankPercentOptionSelected,
+                            ]}
+                            onPress={() =>
+                              setDraftBankFinancingPercent(String(option))
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.bankPercentOptionText,
+                                selected &&
+                                  styles.bankPercentOptionTextSelected,
+                              ]}
+                            >
+                              {option}%
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+
                   <AppTextInput
                     label="Años"
                     value={draftYears}
@@ -1415,51 +1476,69 @@ function SectionHeader({
   );
 }
 
-function MiniSummaryCard({
+function OverviewTile({
   label,
   value,
+  hint,
+  icon,
+  onPress,
+  variant = "default",
   styles,
 }: {
   label: string;
   value: string;
+  hint?: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+  variant?: "default" | "price" | "mortgage";
   styles: ReturnType<typeof createStyles>;
 }) {
-  return (
-    <View style={styles.savedMiniCard}>
-      <Text style={styles.savedMiniLabel}>{label}</Text>
-      <Text
-        style={styles.savedMiniValue}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.65}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
+  const isDark = variant === "price" || variant === "mortgage";
 
-function FlowStep({
-  label,
-  value,
-  styles,
-}: {
-  label: string;
-  value: string;
-  styles: ReturnType<typeof createStyles>;
-}) {
   return (
-    <View style={styles.flowStep}>
-      <Text style={styles.flowStepLabel}>{label}</Text>
+    <Pressable
+      style={[
+        styles.overviewTile,
+        variant === "price" && styles.overviewTilePrice,
+        variant === "mortgage" && styles.overviewTileMortgage,
+      ]}
+      onPress={onPress}
+    >
+      <View style={[styles.overviewTileIcon, isDark && styles.overviewTileIconDark]}>
+        <Ionicons
+          name={icon}
+          size={17}
+          color={isDark ? colors.white : colors.primaryDark}
+        />
+      </View>
       <Text
-        style={styles.flowStepValue}
+        style={[styles.overviewTileLabel, isDark && styles.overviewTileLabelDark]}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
+      <Text
+        style={[
+          styles.overviewTileValue,
+          isDark && styles.overviewTileValueDark,
+          variant === "price" && styles.overviewTilePriceValue,
+          variant === "mortgage" && styles.overviewTileMortgageValue,
+        ]}
         numberOfLines={1}
         adjustsFontSizeToFit
-        minimumFontScale={0.65}
+        minimumFontScale={0.45}
       >
         {value}
       </Text>
-    </View>
+      {hint && (
+        <Text
+          style={[styles.overviewTileHint, isDark && styles.overviewTileHintDark]}
+          numberOfLines={1}
+        >
+          {hint}
+        </Text>
+      )}
+    </Pressable>
   );
 }
 
@@ -1514,13 +1593,43 @@ const createStyles = (isDesktop: boolean) =>
       gap: isDesktop ? 12 : 10,
     },
 
+    savedListRow: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: isDesktop ? 14 : 13,
+      paddingVertical: isDesktop ? 14 : 12,
+      paddingHorizontal: isDesktop ? 16 : 14,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+
+    savedListText: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    savedListAction: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+
+    savedListActionText: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
     savedCard: {
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: isDesktop ? 18 : 16,
-      overflow: "hidden",
-      gap: 0,
+      borderRadius: isDesktop ? 16 : 14,
+      padding: isDesktop ? 16 : 12,
+      gap: 12,
     },
 
     savedCardTop: {
@@ -1528,9 +1637,18 @@ const createStyles = (isDesktop: boolean) =>
       alignItems: "center",
       justifyContent: "space-between",
       gap: 10,
-      paddingHorizontal: isDesktop ? 18 : 14,
-      paddingTop: isDesktop ? 16 : 14,
-      paddingBottom: 10,
+    },
+
+    savedCardTitleBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    savedCardEyebrow: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 11 : 9,
+      fontWeight: "900",
+      marginBottom: 3,
     },
 
     savedCardTitle: {
@@ -1611,21 +1729,20 @@ const createStyles = (isDesktop: boolean) =>
     savedKpiGrid: {
       flexDirection: "row",
       flexWrap: "wrap",
-      gap: isDesktop ? 12 : 7,
-      padding: isDesktop ? 16 : 12,
+      gap: isDesktop ? 8 : 7,
       backgroundColor: colors.surface,
     },
 
     savedMiniCard: {
       flex: 1,
-      flexBasis: isDesktop ? "22%" : "47%",
+      flexBasis: isDesktop ? "18%" : "47%",
       minWidth: 0,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 14,
-      paddingVertical: isDesktop ? 13 : 10,
+      borderRadius: 12,
+      paddingVertical: isDesktop ? 11 : 10,
       paddingHorizontal: isDesktop ? 12 : 8,
-      backgroundColor: colors.white,
+      backgroundColor: colors.background,
     },
 
     savedMiniLabel: {
@@ -1641,10 +1758,208 @@ const createStyles = (isDesktop: boolean) =>
       fontWeight: "900",
     },
 
+    savedCardFooter: {
+      flexDirection: isDesktop ? "row" : "column",
+      justifyContent: "space-between",
+      gap: 6,
+      paddingTop: 2,
+    },
+
+    savedCardHint: {
+      color: colors.primaryDark,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+    },
+
+    savedCardCoverage: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "800",
+      textAlign: isDesktop ? "right" : "left",
+    },
+
+    overviewCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: isDesktop ? 20 : 18,
+      padding: isDesktop ? 16 : 12,
+      gap: isDesktop ? 12 : 10,
+    },
+
+    overviewTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      marginBottom: 2,
+    },
+
+    overviewTitleBlock: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    overviewEyebrow: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+      marginBottom: 2,
+    },
+
+    overviewName: {
+      color: colors.text,
+      fontSize: isDesktop ? 22 : 19,
+      fontWeight: "900",
+    },
+
+    overviewNameButton: {
+      width: isDesktop ? 42 : 38,
+      height: isDesktop ? 42 : 38,
+      borderRadius: 12,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    overviewThreeGrid: {
+      flexDirection: "row",
+      gap: isDesktop ? 10 : 5,
+    },
+
+    overviewTwoGrid: {
+      flexDirection: "row",
+      gap: isDesktop ? 10 : 7,
+    },
+
+    overviewTile: {
+      flex: 1,
+      minWidth: 0,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: isDesktop ? 15 : 13,
+      backgroundColor: colors.background,
+      paddingVertical: isDesktop ? 13 : 10,
+      paddingHorizontal: isDesktop ? 12 : 6,
+      minHeight: isDesktop ? 104 : 92,
+    },
+
+    overviewTilePrice: {
+      backgroundColor: colors.primaryDark,
+      borderColor: colors.primaryDark,
+      minHeight: isDesktop ? 136 : 122,
+      justifyContent: "center",
+      paddingHorizontal: isDesktop ? 18 : 14,
+    },
+
+    overviewTileMortgage: {
+      backgroundColor: colors.primaryDark,
+      borderColor: colors.primaryDark,
+    },
+
+    overviewTileIcon: {
+      width: isDesktop ? 32 : 28,
+      height: isDesktop ? 32 : 28,
+      borderRadius: 10,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: isDesktop ? 9 : 7,
+    },
+
+    overviewTileIconDark: {
+      backgroundColor: "rgba(255,255,255,0.16)",
+    },
+
+    overviewTileLabel: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 9,
+      fontWeight: "900",
+      marginBottom: 5,
+    },
+
+    overviewTileLabelDark: {
+      color: colors.white,
+      opacity: 0.9,
+    },
+
+    overviewTileValue: {
+      color: colors.text,
+      fontSize: isDesktop ? 19 : 11,
+      fontWeight: "900",
+    },
+
+    overviewTileValueDark: {
+      color: colors.white,
+    },
+
+    overviewTilePriceValue: {
+      fontSize: isDesktop ? 30 : 26,
+    },
+
+    overviewTileMortgageValue: {
+      fontSize: isDesktop ? 19 : 11,
+    },
+
+    overviewTileHint: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 11 : 8,
+      fontWeight: "800",
+      marginTop: 6,
+    },
+
+    overviewTileHintDark: {
+      color: colors.white,
+      opacity: 0.86,
+    },
+
+    bankPercentBlock: {
+      gap: 8,
+      marginBottom: 10,
+    },
+
+    bankPercentLabel: {
+      color: colors.mutedText,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    bankPercentOptions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+
+    bankPercentOption: {
+      minWidth: 58,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: colors.surface,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      alignItems: "center",
+    },
+
+    bankPercentOptionSelected: {
+      backgroundColor: colors.primaryDark,
+      borderColor: colors.primaryDark,
+    },
+
+    bankPercentOptionText: {
+      color: colors.primaryDark,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    bankPercentOptionTextSelected: {
+      color: colors.white,
+    },
+
     simulatorModalCard: {
-      width: isDesktop ? "72%" : "92%",
-      maxWidth: 760,
-      maxHeight: "88%",
+      width: isDesktop ? "86%" : "96%",
+      maxWidth: 1040,
+      maxHeight: isDesktop ? "92%" : "94%",
       backgroundColor: colors.background,
       borderRadius: isDesktop ? 22 : 18,
       padding: isDesktop ? 18 : 12,
@@ -1657,11 +1972,12 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     simulatorModalContent: {
-      gap: isDesktop ? 14 : 12,
-      paddingBottom: isDesktop ? 6 : 4,
+      gap: isDesktop ? 14 : 14,
+      paddingBottom: isDesktop ? 6 : 16,
     },
 
     titleCard: {
+      display: isDesktop ? "flex" : "none",
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
@@ -1687,13 +2003,13 @@ const createStyles = (isDesktop: boolean) =>
 
     propertyPriceCard: {
       backgroundColor: colors.primaryDark,
-      borderRadius: isDesktop ? 20 : 18,
-      padding: isDesktop ? 22 : 16,
-      flexDirection: "row",
+      borderRadius: isDesktop ? 20 : 22,
+      padding: isDesktop ? 22 : 18,
+      flexDirection: isDesktop ? "row" : "column",
       justifyContent: "space-between",
-      alignItems: "center",
-      gap: 12,
-      minHeight: isDesktop ? 128 : 112,
+      alignItems: isDesktop ? "center" : "stretch",
+      gap: isDesktop ? 12 : 10,
+      minHeight: isDesktop ? 128 : 136,
     },
 
     propertyPriceHint: {
@@ -1705,8 +2021,10 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     priceEditButton: {
-      minWidth: isDesktop ? 88 : 74,
-      minHeight: isDesktop ? 46 : 42,
+      display: isDesktop ? "flex" : "none",
+      minWidth: isDesktop ? 88 : undefined,
+      width: isDesktop ? undefined : "100%",
+      minHeight: isDesktop ? 46 : 44,
       borderRadius: 14,
       backgroundColor: colors.white,
       flexDirection: "row",
@@ -1741,21 +2059,21 @@ const createStyles = (isDesktop: boolean) =>
     },
 
     heroLabel: {
-      fontSize: isDesktop ? 13 : 11,
-      color: colors.mutedText,
+      fontSize: isDesktop ? 13 : 12,
+      color: colors.white,
       fontWeight: "800",
       marginBottom: 4,
     },
 
     heroAmount: {
-      fontSize: isDesktop ? 34 : 28,
+      fontSize: isDesktop ? 34 : 35,
       color: colors.white,
       fontWeight: "900",
       maxWidth: "100%",
     },
 
     heroCardAmount: {
-      color: colors.primaryDark,
+      color: colors.white,
     },
 
     coveredBox: {
@@ -1780,67 +2098,127 @@ const createStyles = (isDesktop: boolean) =>
       opacity: 0.9,
     },
 
-    purchaseFlowCard: {
+    summaryGrid: {
       flexDirection: "row",
-      alignItems: "center",
-      gap: isDesktop ? 8 : 5,
+      flexWrap: "wrap",
+      gap: isDesktop ? 10 : 10,
+    },
+
+    summaryCard: {
+      flex: 1,
+      flexBasis: isDesktop ? "31%" : "47%",
+      minWidth: 0,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 16,
-      padding: isDesktop ? 12 : 8,
+      borderRadius: isDesktop ? 14 : 16,
+      paddingVertical: isDesktop ? 14 : 13,
+      paddingHorizontal: isDesktop ? 14 : 12,
     },
 
-    flowStep: {
+    summaryIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: isDesktop ? 10 : 8,
+    },
+
+    summaryLabel: {
+      color: colors.mutedText,
+      fontSize: isDesktop ? 12 : 10,
+      fontWeight: "900",
+      marginBottom: 6,
+    },
+
+    summaryValue: {
+      color: colors.text,
+      fontSize: isDesktop ? 18 : 17,
+      fontWeight: "900",
+    },
+
+    mortgageScenarioCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: isDesktop ? 18 : 18,
+      padding: isDesktop ? 14 : 12,
+      flexDirection: isDesktop ? "row" : "column",
+      gap: isDesktop ? 12 : 10,
+      marginBottom: isDesktop ? 14 : 14,
+    },
+
+    mortgagePrincipal: {
+      flex: 1,
+      minWidth: 0,
+      minHeight: isDesktop ? undefined : 106,
+      backgroundColor: colors.primaryDark,
+      borderRadius: isDesktop ? 14 : 16,
+      padding: isDesktop ? 14 : 14,
+      justifyContent: "center",
+    },
+
+    scenarioList: {
+      flex: 2,
+      flexDirection: "row",
+      gap: isDesktop ? 10 : 8,
+      minWidth: 0,
+    },
+
+    scenarioCard: {
       flex: 1,
       minWidth: 0,
       backgroundColor: colors.background,
-      borderRadius: 12,
-      paddingVertical: isDesktop ? 10 : 8,
-      paddingHorizontal: isDesktop ? 10 : 7,
-    },
-
-    flowStepLabel: {
-      color: colors.mutedText,
-      fontSize: isDesktop ? 11 : 9,
-      fontWeight: "900",
-      marginBottom: 4,
-    },
-
-    flowStepValue: {
-      color: colors.text,
-      fontSize: isDesktop ? 15 : 11,
-      fontWeight: "900",
-    },
-
-    kpiGrid: {
-      flexDirection: "row",
-      gap: isDesktop ? 10 : 6,
-      marginBottom: isDesktop ? 14 : 12,
-    },
-
-    kpiCard: {
-      flex: 1,
-      minWidth: 0,
-      backgroundColor: colors.surface,
-      borderRadius: isDesktop ? 16 : 12,
+      borderRadius: isDesktop ? 14 : 16,
       borderWidth: 1,
       borderColor: colors.border,
-      paddingVertical: isDesktop ? 15 : 9,
-      paddingHorizontal: isDesktop ? 15 : 8,
+      padding: isDesktop ? 14 : 11,
     },
 
-    kpiLabel: {
-      fontSize: isDesktop ? 12 : 9,
+    scenarioLabel: {
+      fontSize: isDesktop ? 12 : 10,
       color: colors.mutedText,
-      fontWeight: "800",
+      fontWeight: "900",
       marginBottom: 4,
     },
 
-    kpiValue: {
-      fontSize: isDesktop ? 19 : 14,
+    scenarioPrincipalValue: {
+      fontSize: isDesktop ? 24 : 22,
+      lineHeight: isDesktop ? 30 : 28,
+      color: colors.white,
+      fontWeight: "900",
+    },
+
+    scenarioPrincipalLabel: {
+      color: colors.white,
+      opacity: 0.88,
+    },
+
+    scenarioRate: {
+      fontSize: isDesktop ? 12 : 9,
+      color: colors.primaryDark,
+      fontWeight: "900",
+      marginBottom: 6,
+    },
+
+    scenarioValue: {
+      fontSize: isDesktop ? 19 : 16,
       color: colors.text,
       fontWeight: "900",
+    },
+
+    scenarioHint: {
+      fontSize: isDesktop ? 11 : 9,
+      color: colors.mutedText,
+      fontWeight: "700",
+      marginTop: 5,
+    },
+
+    scenarioPrincipalHint: {
+      color: colors.white,
+      opacity: 0.82,
     },
 
     actionsCard: {

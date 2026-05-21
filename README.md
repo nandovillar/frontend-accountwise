@@ -1,50 +1,50 @@
-# Welcome to your Expo app 👋
+# AccountWise
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicacion Expo/React Native para gestionar finanzas personales, ahorro, gastos y simulaciones relacionadas con vivienda.
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Arranque
 
 ```bash
-npm run reset-project
+npm install
+npm run start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Para web:
 
-## Learn more
+```bash
+npm run web
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Estructura
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- `app/`: rutas y pantallas principales de Expo Router.
+- `app/(tabs)/`: pantallas con navegacion inferior.
+- `app/HomePurchase.tsx`: simulador de compra de vivienda e hipoteca.
+- `src/components/`: componentes reutilizables de UI.
+- `src/context/`: autenticacion, espacios y tema.
+- `src/lib/supabase.ts`: cliente de Supabase.
+- `src/theme/`: colores, tipografia, espaciado y estilos comunes.
+- `src/utils/`: utilidades de dinero, fechas, permisos, confirmaciones y consultas.
+- `docs/`: documentacion tecnica de funcionalidades concretas.
 
-## Join the community
+## Simulador de hipoteca
 
-Join our community of developers creating universal apps.
+La documentacion del simulador esta en `docs/simulador-hipoteca.md`.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Resumen funcional:
+
+- Precio del piso.
+- Ahorro aportado.
+- Gastos inmobiliarios.
+- Ahorro necesario total.
+- Hipoteca.
+- Ejemplos de cuota fija y cuota variable.
+
+## Calidad
+
+Antes de entregar cambios relevantes:
+
+```bash
+npm run lint
+npx tsc --noEmit
+```
