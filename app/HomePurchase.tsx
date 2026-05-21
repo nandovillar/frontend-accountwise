@@ -861,10 +861,10 @@ export default function HomePurchaseScreen({
 
             <View style={styles.overviewTwoGrid}>
               <OverviewTile
-                label="Ahorro aportado"
-                value={formatCompactMoney(down)}
-                icon="wallet-outline"
-                onPress={() => openEdit("mortgage")}
+                label="Gastos inmobiliaria"
+                value={formatCompactMoney(propertyExpenses)}
+                icon="receipt-outline"
+                onPress={() => openEdit("property")}
                 styles={styles}
               />
               <OverviewTile
@@ -873,24 +873,6 @@ export default function HomePurchaseScreen({
                 hint={`Max. ${formatCompactMoney(bankMortgageLimit)}`}
                 icon="business-outline"
                 onPress={() => openEdit("bank")}
-                styles={styles}
-              />
-            </View>
-
-            <View style={styles.overviewTwoGrid}>
-              <OverviewTile
-                label="Gastos inmobiliaria"
-                value={formatCompactMoney(propertyExpenses)}
-                icon="receipt-outline"
-                onPress={() => openEdit("property")}
-                styles={styles}
-              />
-              <OverviewTile
-                label="Ahorro necesario total"
-                value={formatCompactMoney(savingsNeeded)}
-                hint="Ahorro minimo + gastos"
-                icon="calculator-outline"
-                onPress={() => openEdit("mortgage")}
                 styles={styles}
               />
             </View>
@@ -906,25 +888,6 @@ export default function HomePurchaseScreen({
                 styles={styles}
               />
               <OverviewTile
-                label="Cuota fija"
-                value={formatCompactMoney(fixedMonthlyPayment)}
-                hint={`${finalTin.toFixed(2)}% TIN`}
-                icon="lock-closed-outline"
-                onPress={() => openEdit("bank")}
-                styles={styles}
-              />
-            </View>
-
-            <View style={styles.overviewTwoGrid}>
-              <OverviewTile
-                label="Cuota variable"
-                value={formatCompactMoney(variableMonthlyPayment)}
-                hint={`${variableTae.toFixed(2)}% TAE`}
-                icon="trending-up-outline"
-                onPress={() => openEdit("bank")}
-                styles={styles}
-              />
-              <OverviewTile
                 label="Ahorro minimo banco"
                 value={formatCompactMoney(minimumOwnContribution)}
                 hint={
@@ -933,6 +896,43 @@ export default function HomePurchaseScreen({
                     : "Cubierto"
                 }
                 icon="shield-checkmark-outline"
+                onPress={() => openEdit("bank")}
+                styles={styles}
+              />
+            </View>
+
+            <View style={styles.overviewTwoGrid}>
+              <OverviewTile
+                label="Ahorro aportado"
+                value={formatCompactMoney(down)}
+                icon="wallet-outline"
+                onPress={() => openEdit("mortgage")}
+                styles={styles}
+              />
+              <OverviewTile
+                label="Ahorro necesario total"
+                value={formatCompactMoney(savingsNeeded)}
+                hint="Ahorro minimo + gastos"
+                icon="calculator-outline"
+                onPress={() => openEdit("mortgage")}
+                styles={styles}
+              />
+            </View>
+
+            <View style={styles.overviewTwoGrid}>
+              <OverviewTile
+                label="Cuota fija"
+                value={formatCompactMoney(fixedMonthlyPayment)}
+                hint={`${finalTin.toFixed(2)}% TIN`}
+                icon="lock-closed-outline"
+                onPress={() => openEdit("bank")}
+                styles={styles}
+              />
+              <OverviewTile
+                label="Cuota variable"
+                value={formatCompactMoney(variableMonthlyPayment)}
+                hint={`${variableTae.toFixed(2)}% TAE`}
+                icon="trending-up-outline"
                 onPress={() => openEdit("bank")}
                 styles={styles}
               />
